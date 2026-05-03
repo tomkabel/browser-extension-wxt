@@ -75,7 +75,7 @@ func run() error {
 			writer.Write(&nm.Message{Type: nm.MsgUsbConnected})
 		case aoa.HotplugDisconnect:
 			fmt.Fprintf(os.Stderr, "USB device disconnected\n")
-			session.closeLocked()
+			session.Close()
 			writer.Write(&nm.Message{Type: nm.MsgUsbDisconnected})
 		}
 	})
@@ -188,9 +188,9 @@ func registerHandlers(r *nm.Router, session *Session, writer *nm.MessageWriter) 
 		session.connected = true
 		session.connectedAt = time.Now()
 
-		// Perform key exchange
-		// For now, create a placeholder crypto session
-		// TODO: Perform actual ECDH key exchange over control channel
+		// TODO: Perform actual ECDH key exchange over USB control channel.
+		// This placeholder produces an all-zero session key — acceptable for
+		// development/testing but MUST be replaced before production use.
 		cryptoSess := &sidcrypto.Session{
 			Key: make([]byte, sidcrypto.SessionKeySize),
 			Seq: sidcrypto.NewSequenceTracker(),
@@ -268,8 +268,14 @@ func registerHandlers(r *nm.Router, session *Session, writer *nm.MessageWriter) 
 			return &nm.Message{Type: nm.MsgRekeyResult, Success: nm.BoolPtr(false), Error: "no active session"}, nil
 		}
 
-		// TODO: perform actual rekey over control channel
-		session.cryptoSession.Seq.Reset()
-		return &nm.Message{Type: nm.MsgRekeyResult, Success: nm.BoolPtr(true)}, nil
+		// TODO: perform actual rekey over control channel with key rotation.
+		// Resetting sequence counters without rotating the AES-GCM key would
+		// cause nonce reuse — a critical cryptographic break. Return failure
+		// until proper key rotation is implemented.
+		return &nm.Message{
+			Type:    nm.MsgRekeyResult,
+			Success: nm.BoolPtr(false),
+			Error:   "rekey not implemented safely: key rotation required",
+		}, nil
 	})
 }

@@ -21,6 +21,13 @@ func (r *Router) Register(msgType string, handler Handler) {
 }
 
 func (r *Router) Dispatch(msg *Message) (*Message, error) {
+	if msg == nil {
+		return &Message{
+			Type:  MsgError,
+			Error: "nil message",
+		}, nil
+	}
+
 	handler, ok := r.handlers[msg.Type]
 	if !ok {
 		errMsg := &Message{

@@ -29,9 +29,9 @@ func NewReadLoop(session *Session, writer *nm.MessageWriter) *ReadLoop {
 	}
 }
 
-func (rl *ReadLoop) Start(ctx context.Context, cryptoSession *sidcrypto.Session) {
+func (rl *ReadLoop) Start(ctx context.Context) {
 	ctx, rl.cancel = context.WithCancel(ctx)
-	go rl.poll(ctx, cryptoSession)
+	go rl.poll(ctx)
 }
 
 func (rl *ReadLoop) Stop() {
@@ -40,7 +40,7 @@ func (rl *ReadLoop) Stop() {
 	}
 }
 
-func (rl *ReadLoop) poll(ctx context.Context, cryptoSession *sidcrypto.Session) {
+func (rl *ReadLoop) poll(ctx context.Context) {
 	buf := make([]byte, readBufferSize)
 
 	for {
@@ -52,6 +52,7 @@ func (rl *ReadLoop) poll(ctx context.Context, cryptoSession *sidcrypto.Session) 
 
 		rl.session.mu.Lock()
 		dev := rl.session.device
+		cryptoSession := rl.session.cryptoSession
 		rl.session.mu.Unlock()
 
 		if dev == nil {
@@ -70,7 +71,9 @@ func (rl *ReadLoop) poll(ctx context.Context, cryptoSession *sidcrypto.Session) 
 					rl.session.connected = false
 					rl.session.device = nil
 					rl.session.mu.Unlock()
-					rl.writer.Write(&nm.Message{Type: nm.MsgUsbDisconnected})
+					if wErr := rl.writer.Write(&nm.Message{Type: nm.MsgUsbDisconnected}); wErr != nil {
+						return
+					}
 					return
 				}
 			}
@@ -82,10 +85,12 @@ func (rl *ReadLoop) poll(ctx context.Context, cryptoSession *sidcrypto.Session) 
 		}
 
 		if cryptoSession == nil || cryptoSession.Key == nil {
-			rl.writer.Write(&nm.Message{
+			if wErr := rl.writer.Write(&nm.Message{
 				Type:  nm.MsgError,
 				Error: "received data but no session key established",
-			})
+			}); wErr != nil {
+				return
+			}
 			continue
 		}
 
@@ -94,27 +99,33 @@ func (rl *ReadLoop) poll(ctx context.Context, cryptoSession *sidcrypto.Session) 
 		if decryptErr != nil {
 			if rekeyableErr, ok := decryptErr.(*sidcrypto.DecryptError); ok {
 				if rekeyableErr.Kind == sidcrypto.DecryptErrSequenceGap {
-					rl.writer.Write(&nm.Message{
-						Type:  nm.MsgRekeyResult,
+					if wErr := rl.writer.Write(&nm.Message{
+						Type:    nm.MsgRekeyResult,
 						Success: nm.BoolPtr(false),
-						Error: "sequence gap detected, rekey required",
-					})
+						Error:   "sequence gap detected, rekey required",
+					}); wErr != nil {
+						return
+					}
 					continue
 				}
 			}
-			rl.writer.Write(&nm.Message{
+			if wErr := rl.writer.Write(&nm.Message{
 				Type:  nm.MsgError,
 				Error: fmt.Sprintf("decrypt error: %v", decryptErr),
-			})
+			}); wErr != nil {
+				return
+			}
 			continue
 		}
 
 		cryptoSession.Seq.AdvanceInbound()
 
 		encoded := base64.StdEncoding.EncodeToString(plaintext)
-		rl.writer.Write(&nm.Message{
+		if wErr := rl.writer.Write(&nm.Message{
 			Type: nm.MsgPayloadReceived,
 			Data: encoded,
-		})
+		}); wErr != nil {
+			return
+		}
 	}
 }
