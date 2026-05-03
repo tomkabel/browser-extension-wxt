@@ -2,6 +2,7 @@ package aoa
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -34,6 +35,14 @@ func (e *TransferError) Error() string {
 func classifyError(err error) *TransferError {
 	if err == nil {
 		return nil
+	}
+
+	if errors.Is(err, context.DeadlineExceeded) {
+		return &TransferError{
+			Kind:    TransferErrTimeout,
+			Message: "USB transfer timed out",
+			Err:     err,
+		}
 	}
 
 	errStr := err.Error()

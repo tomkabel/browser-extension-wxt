@@ -29,6 +29,7 @@ func OpenAoaDevice(dev *gousb.Device) (*AoaDevice, error) {
 	aoa.cleanups = append(aoa.cleanups, func() { cfg.Close() })
 
 	var ifaceNum int
+	var altNum int
 	var found bool
 	for _, id := range cfg.Desc.Interfaces {
 		for _, alt := range id.AltSettings {
@@ -44,6 +45,7 @@ func OpenAoaDevice(dev *gousb.Device) (*AoaDevice, error) {
 			}
 			if hasOUT && hasIN {
 				ifaceNum = id.Number
+				altNum = alt.Number
 				found = true
 				break
 			}
@@ -54,24 +56,28 @@ func OpenAoaDevice(dev *gousb.Device) (*AoaDevice, error) {
 	}
 
 	if !found {
+		aoa.Close()
 		return nil, fmt.Errorf("accessory interface with endpoints 0x01/0x81 not found")
 	}
 
-	intf, err := cfg.Interface(ifaceNum, 0)
+	intf, err := cfg.Interface(ifaceNum, altNum)
 	if err != nil {
-		return nil, fmt.Errorf("claim interface %d: %w", ifaceNum, err)
+		aoa.Close()
+		return nil, fmt.Errorf("claim interface %d alt %d: %w", ifaceNum, altNum, err)
 	}
 	aoa.iface = intf
 	aoa.cleanups = append(aoa.cleanups, func() { intf.Close() })
 
 	epOut, err := intf.OutEndpoint(EndpointOUTNum)
 	if err != nil {
+		aoa.Close()
 		return nil, fmt.Errorf("open OUT endpoint: %w", err)
 	}
 	aoa.epOut = epOut
 
 	epIn, err := intf.InEndpoint(EndpointINNum)
 	if err != nil {
+		aoa.Close()
 		return nil, fmt.Errorf("open IN endpoint: %w", err)
 	}
 	aoa.epIn = epIn

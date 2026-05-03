@@ -71,12 +71,14 @@ func FindAccessoryDevice(ctx *gousb.Context, serialFilter string) (*DiscoveredDe
 		return nil, err
 	}
 
+	var accessory *DiscoveredDevice
 	for _, d := range devs {
-		if d.IsAccessory {
-			return d, nil
+		if d.IsAccessory && accessory == nil {
+			accessory = d
+			continue
 		}
 		d.Device.Close()
 	}
 
-	return nil, nil
+	return accessory, nil
 }

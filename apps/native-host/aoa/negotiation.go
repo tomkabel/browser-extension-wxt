@@ -105,7 +105,7 @@ func (n *Negotiator) negotiateOnce(dev *gousb.Device) error {
 	if err != nil {
 		return fmt.Errorf("start accessory: %w", err)
 	}
-	n.state = StateAccessoryStarted
+	n.state = StateComplete
 
 	return nil
 }

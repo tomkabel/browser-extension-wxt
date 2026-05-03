@@ -73,6 +73,10 @@ func (hm *HotplugMonitor) poll(ctx context.Context) {
 					Type:   HotplugConnect,
 					Device: dev,
 				})
+				// Close the discovered device handle after the callback
+				// consumed descriptor info. The callback must not retain the
+				// live *gousb.Device handle.
+				dev.Device.Close()
 			} else if !isConnected && wasConnected {
 				hm.callback(HotplugEvent{
 					Type: HotplugDisconnect,
