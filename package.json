@@ -1,11 +1,11 @@
 {
-  "name": "domain-inspector",
+  "name": "smartid2",
   "version": "1.0.0",
-  "description": "WXT Browser Extension for domain inspection",
+  "description": "SmartID2 browser extension for secure transaction verification",
   "type": "module",
   "scripts": {
     "dev": "wxt",
-    "prebuild": "bun -e 'const e=process.env;const m=\"ERROR: VITE_API_ENDPOINT and VITE_SIGNALING_URL must be set. See .env.example\";if(!e.VITE_API_ENDPOINT||!e.VITE_SIGNALING_URL){console.error(m);process.exit(1)}if(!e.VITE_TURN_URL||!e.VITE_TURN_SECRET){console.warn(\"WARNING: VITE_TURN_URL and VITE_TURN_SECRET not set. TURN relay will be disabled.\")}'",
+    "prebuild": "bun run scripts/validate-env.ts",
     "build": "bun run prebuild && wxt build && node fix-manifest.js",
     "preview": "wxt build",
     "test": "vitest run",
@@ -13,7 +13,7 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:coverage": "vitest run --coverage",
-    "ci:check": "bun run tsc --noEmit && bun run test && bun run build",
+    "ci:check": "bun run typecheck && bun run test && bun run build",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
