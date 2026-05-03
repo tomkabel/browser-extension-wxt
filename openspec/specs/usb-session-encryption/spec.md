@@ -7,7 +7,7 @@ All payloads sent over the USB bulk endpoints SHALL be encrypted using AES-256-G
 #### Scenario: Encrypt outbound payload
 
 - **WHEN** a payload is ready to be sent over USB (host → device direction)
-- **THEN** the host SHALL construct a 12-byte IV derived from: first 4 bytes = direction tag `0x00` (host-to-device), next 8 bytes = current sequence number (big-endian)
+- **THEN** the host SHALL construct a 12-byte IV where byte 0 = direction tag (`0x00` for host-to-device, `0x01` for device-to-host), bytes 1–3 = reserved (`0x00`), bytes 4–11 = 8-byte sequence number in big-endian order
 - **AND** encrypt the plaintext with AES-256-GCM using the session key and IV
 - **AND** produce the wire format: `[sequence_number: 8 bytes BE][ciphertext: variable][auth_tag: 16 bytes]`
 - **AND** increment the outbound sequence number by 1
@@ -17,9 +17,8 @@ All payloads sent over the USB bulk endpoints SHALL be encrypted using AES-256-G
 - **WHEN** a payload is read from USB (device → host direction)
 - **THEN** the host SHALL extract the sequence number from the first 8 bytes
 - **AND** verify the sequence number equals the expected inbound sequence number
-- **AND** construct a 12-byte IV: `0x01` (device-to-host) + sequence number (8 bytes BE)
-- **AND** decrypt the ciphertext (bytes 8 through len-16) with AES-256-GCM using session key and IV
-- **AND** verify the authentication tag matches the last 16 bytes
+- **AND** construct a 12-byte IV: byte 0 = `0x01` (device-to-host), bytes 1–3 = reserved (`0x00`), bytes 4–11 = sequence number (8 bytes big-endian)
+- **AND** decrypt-and-authenticate the ciphertext using AES-256-GCM with the session key and IV (the GCM implementation internally verifies the authentication tag appended to the ciphertext; no separate tag verification step is needed)
 - **AND** increment the expected inbound sequence number by 1
 
 #### Scenario: Payload truncation is at most 64KB
@@ -39,10 +38,12 @@ Monotonic, per-direction sequence numbers SHALL prevent replay attacks on the US
 
 #### Scenario: Reject replayed sequence number
 
-- **WHEN** a received sequence number is less than or equal to the expected sequence number (minus a window of 5 for reordering tolerance)
+- **WHEN** a received sequence number is less than the expected sequence number
 - **THEN** the payload SHALL be discarded
 - **AND** a `'replay-detected'` error SHALL be logged
 - **AND** the event SHALL be reported to the extension
+
+> **Note:** USB bulk transfers are ordered, so no reordering tolerance window is needed. The Decrypt function performs a strict `< expectedSeq` check — payloads with `sequence <= expected` are discarded (replayed or already consumed).
 
 #### Scenario: Handle sequence gap (missing sequence)
 

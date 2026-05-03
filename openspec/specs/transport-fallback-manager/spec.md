@@ -112,6 +112,7 @@ The extension SHALL detect whether the native messaging host is installed and fu
 - **AND** if the call succeeds, mark `usbAvailable = true`
 - **AND** if the call fails (host not installed, not registered), mark `usbAvailable = false`
 - **AND** cache the result and re-check at 30-second intervals
+- **AND** note that the TransportManager uses two separate polling mechanisms: a 2-second interval to poll physical USB device presence (hot-plug responsiveness, via `chrome.runtime.sendNativeMessage('org.smartid.aoa_host', { type: 'ping' })` to detect when a device is tethered) and a 30-second interval to check the native host installation/running state (host availability changes infrequently, so the longer interval suffices)
 
 #### Scenario: Handle native host crash/restart
 
