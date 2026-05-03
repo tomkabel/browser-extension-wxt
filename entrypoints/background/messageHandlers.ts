@@ -469,11 +469,11 @@ export function getTransportManager(): TransportManager | null {
 }
 
 export async function initializeTransportManager(): Promise<void> {
-  if (transportManager) return;
   if (transportManagerInitPromise) {
     return transportManagerInitPromise;
   }
-  transportManager ??= new TransportManager();
+  if (transportManager) return;
+  transportManager = new TransportManager();
   transportManagerInitPromise = transportManager.initialize().catch((err) => {
     transportManager = null;
     throw err;
