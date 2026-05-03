@@ -14,3 +14,8 @@ credentials.*
 signaling-server/node_modules/
 signaling-server/mydatabase.db
 *.tsbuildinfo
+
+# Go native host build artifacts
+apps/native-host/build/
+apps/native-host/dist/
+apps/native-host/deps/
