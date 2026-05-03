@@ -445,13 +445,12 @@ export function registerMessageHandlers(): void {
 
 function isValidMessage(
   message: unknown,
-): message is { type: string; payload: unknown } {
+): message is { type: string; payload?: unknown } {
   return (
     typeof message === 'object' &&
     message !== null &&
     'type' in message &&
-    typeof (message as Record<string, unknown>).type === 'string' &&
-    'payload' in message
+    typeof (message as Record<string, unknown>).type === 'string'
   );
 }
 
@@ -463,6 +462,7 @@ const CREDENTIAL_RATE_LIMIT_MS = 30_000;
 const credentialRateLimiter = createDomainRateLimiter(CREDENTIAL_RATE_LIMIT_MS);
 
 let transportManager: TransportManager | null = null;
+let transportManagerInitPromise: Promise<void> | null = null;
 
 export function getTransportManager(): TransportManager | null {
   return transportManager;
@@ -470,6 +470,15 @@ export function getTransportManager(): TransportManager | null {
 
 export async function initializeTransportManager(): Promise<void> {
   if (transportManager) return;
-  transportManager = new TransportManager();
-  await transportManager.initialize();
+  if (transportManagerInitPromise) {
+    return transportManagerInitPromise;
+  }
+  transportManager ??= new TransportManager();
+  transportManagerInitPromise = transportManager.initialize().catch((err) => {
+    transportManager = null;
+    throw err;
+  }).finally(() => {
+    transportManagerInitPromise = null;
+  });
+  return transportManagerInitPromise;
 }
