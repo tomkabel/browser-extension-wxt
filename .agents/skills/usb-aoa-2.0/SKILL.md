@@ -121,39 +121,49 @@ func startAccessoryMode(dev *gousb.Device) error {
 After `AOA_START_ACCESSORY`, the device disconnects and reconnects with the AOA PID. The host must wait and re-open:
 
 ```go
-func claimBulkEndpoints(dev *gousb.Device) (in, out *gousb.InEndpoint, err error) {
+func claimBulkEndpoints(dev *gousb.Device) (in, out *gousb.InEndpoint, close func(), err error) {
 	cfg, err := dev.Config(1)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	defer cfg.Close()
 
 	iface, err := cfg.Interface(0, 0)
 	if err != nil {
-		return nil, nil, err
+		cfg.Close()
+		return nil, nil, nil, err
 	}
-	// iface is kept open for the session lifetime
+	// cfg and iface must stay open for the endpoint session lifetime
 
 	for _, desc := range iface.Setting.Endpoints {
 		if desc.Direction == gousb.EndpointDirectionIn && in == nil {
 			in, err = iface.InEndpoint(desc.Number)
 			if err != nil {
-				return nil, nil, err
+				cfg.Close()
+				return nil, nil, nil, err
 			}
 		}
 		if desc.Direction == gousb.EndpointDirectionOut && out == nil {
 			out, err = iface.OutEndpoint(desc.Number)
 			if err != nil {
-				return nil, nil, err
+				cfg.Close()
+				return nil, nil, nil, err
 			}
 		}
 	}
 
 	if in == nil || out == nil {
-		return nil, nil, fmt.Errorf("missing bulk endpoints")
+		cfg.Close()
+		return nil, nil, nil, fmt.Errorf("missing bulk endpoints")
 	}
-	return in, out, nil
+	return in, out, cfg.Close, nil
 }
+
+// Caller must defer close() to keep the config alive for endpoint I/O.
+// Example:
+//
+//	in, out, closeCfg, err := claimBulkEndpoints(dev)
+//	if err != nil { ... }
+//	defer closeCfg()
 ```
 
 ## AES-256-GCM Tunnel over Bulk Endpoints
@@ -176,10 +186,11 @@ import (
 )
 
 type USBTunnel struct {
-	in     *gousb.InEndpoint
-	out    *gousb.OutEndpoint
-	cipher cipher.AEAD
-	nonce  []byte
+	in      *gousb.InEndpoint
+	out     *gousb.OutEndpoint
+	cipher  cipher.AEAD
+	mu      sync.Mutex
+	seq     uint64
 }
 
 const maxPayload = 4096 // tunneled message max size
@@ -198,7 +209,6 @@ func NewUSBTunnel(in *gousb.InEndpoint, out *gousb.OutEndpoint, key []byte) (*US
 		in:     in,
 		out:    out,
 		cipher: aead,
-		nonce:  make([]byte, aead.NonceSize()),
 	}, nil
 }
 
@@ -208,13 +218,19 @@ func (t *USBTunnel) WriteMessage(data []byte) error {
 		return fmt.Errorf("payload too large")
 	}
 
-	rand.Read(t.nonce)
-	ciphertext := t.cipher.Seal(nil, t.nonce, data, nil)
+	t.mu.Lock()
+	nonce := make([]byte, t.cipher.NonceSize())
+	rand.Read(nonce)
+	aad := make([]byte, 12)
+	binary.BigEndian.PutUint64(aad[4:], t.seq)
+	t.seq++
+	ciphertext := t.cipher.Seal(nil, nonce, data, aad)
+	t.mu.Unlock()
 
-	frame := make([]byte, 4+len(t.nonce)+len(ciphertext))
-	binary.BigEndian.PutUint32(frame[0:4], uint32(len(t.nonce)+len(ciphertext)))
-	copy(frame[4:], t.nonce)
-	copy(frame[4+len(t.nonce):], ciphertext)
+	frame := make([]byte, 4+len(nonce)+len(ciphertext))
+	binary.BigEndian.PutUint32(frame[0:4], uint32(len(nonce)+len(ciphertext)))
+	copy(frame[4:], nonce)
+	copy(frame[4+len(nonce):], ciphertext)
 
 	_, err := t.out.Write(frame)
 	return err
@@ -343,4 +359,5 @@ On Windows, the WinUSB driver may be required (use Zadig for generic devices).
 
 - [Android Open Accessory Protocol 2.0](https://source.android.com/docs/core/interaction/accessories/aoa2)
 - `lib/transport/UsbTransport.ts`
-- `openspec/changes/usb-aoa-transport-proxy/`
+- `openspec/specs/aoa-2.0-transport/spec.md`
+- `openspec/specs/aoa-key-exchange/spec.md`
