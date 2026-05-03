@@ -30,7 +30,7 @@ export interface NativeHostMessage {
 
 export interface NativeHostStatusResponse {
   connected: boolean;
-  transport: string;
+  transport: TransportType;
   latencyMs: number;
   deviceSerial?: string;
 }
