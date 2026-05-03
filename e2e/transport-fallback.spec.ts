@@ -33,13 +33,14 @@ test.describe('Transport Fallback — E2E', () => {
     await page.goto(`chrome-extension://${extId}/popup.html`, {
       waitUntil: 'domcontentloaded',
       timeout: 15000,
-    }).catch(() => {});
+    });
     await page.waitForTimeout(3000);
 
     const transportState = await page.evaluate(async () => {
       try {
         const response = await chrome.runtime.sendMessage({
           type: 'transport-changed',
+          payload: null,
         });
         return response;
       } catch {
@@ -48,9 +49,7 @@ test.describe('Transport Fallback — E2E', () => {
     });
 
     expect(transportState).toBeDefined();
-    if (transportState?.success) {
-      expect(transportState.data.usbAvailable).toBe(false);
-    }
+    expect(transportState.data.usbAvailable).toBe(false);
 
     await page.close();
   });
@@ -65,7 +64,7 @@ test.describe('Transport Fallback — E2E', () => {
     await page.goto(`chrome-extension://${extId}/popup.html`, {
       waitUntil: 'domcontentloaded',
       timeout: 15000,
-    }).catch(() => {});
+    });
     await page.waitForTimeout(2000);
 
     const bodyText = await page.textContent('body').catch(() => '');
@@ -86,13 +85,14 @@ test.describe('Transport Fallback — E2E', () => {
     await page.goto(`chrome-extension://${extId}/popup.html`, {
       waitUntil: 'domcontentloaded',
       timeout: 15000,
-    }).catch(() => {});
+    });
     await page.waitForTimeout(3000);
 
     const result = await page.evaluate(async () => {
       try {
         const response = await chrome.runtime.sendMessage({
           type: 'get-connection-state',
+          payload: null,
         });
         return response;
       } catch {
@@ -101,10 +101,9 @@ test.describe('Transport Fallback — E2E', () => {
     });
 
     expect(result).toBeDefined();
-    if (result?.success) {
-      expect(result.data).toBeDefined();
-      expect(typeof result.data.connectionState).toBe('string');
-    }
+    expect(result.success).toBe(true);
+    expect(result.data).toBeDefined();
+    expect(typeof result.data.connectionState).toBe('string');
 
     await page.close();
   });
@@ -119,12 +118,15 @@ test.describe('Transport Fallback — E2E', () => {
     await page.goto(`chrome-extension://${extId}/popup.html`, {
       waitUntil: 'domcontentloaded',
       timeout: 15000,
-    }).catch(() => {});
+    });
     await page.waitForTimeout(2000);
 
     await page.evaluate(async () => {
       try {
-        await chrome.runtime.sendMessage({ type: 'usb-disconnected' });
+        await chrome.runtime.sendMessage({
+          type: 'transport-changed',
+          payload: { current: 'webrtc', reason: 'USB disconnected' },
+        });
       } catch {
         // message may not have a handler
       }

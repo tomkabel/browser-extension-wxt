@@ -33,7 +33,7 @@ test.describe('Native Messaging Host — E2E', () => {
     await page.goto(`chrome-extension://${extId}/popup.html`, {
       waitUntil: 'domcontentloaded',
       timeout: 15000,
-    }).catch(() => {});
+    });
     await page.waitForTimeout(2000);
 
     const result = await page.evaluate(async () => {
@@ -74,13 +74,14 @@ test.describe('Native Messaging Host — E2E', () => {
     await page.goto(`chrome-extension://${extId}/popup.html`, {
       waitUntil: 'domcontentloaded',
       timeout: 15000,
-    }).catch(() => {});
+    });
     await page.waitForTimeout(2000);
 
     const result = await page.evaluate(async () => {
       try {
         const response = await chrome.runtime.sendMessage({
           type: 'transport-changed',
+          payload: null,
         });
         return response;
       } catch (err) {
@@ -89,10 +90,9 @@ test.describe('Native Messaging Host — E2E', () => {
     });
 
     expect(result).toBeDefined();
-    if (result?.success) {
-      expect(result.data).toBeDefined();
-      expect(typeof result.data.usbAvailable).toBe('boolean');
-    }
+    expect(result.success).toBe(true);
+    expect(result.data).toBeDefined();
+    expect(typeof result.data.usbAvailable).toBe('boolean');
 
     await page.close();
   });
@@ -107,7 +107,7 @@ test.describe('Native Messaging Host — E2E', () => {
     await page.goto(`chrome-extension://${extId}/popup.html`, {
       waitUntil: 'domcontentloaded',
       timeout: 15000,
-    }).catch(() => {});
+    });
     await page.waitForTimeout(3000);
 
     const bodyText = await page.textContent('body').catch(() => '');
