@@ -96,7 +96,7 @@ async function verifyAttestation(
     const [, payloadB64, sigB64, keyId] = parts;
     const sig = base64urlDecode(sigB64);
     const payloadBytes = encoder.encode(payloadB64);
-    const payload = JSON.parse(atob(payloadB64));
+    const payload = JSON.parse(new TextDecoder().decode(base64urlDecode(payloadB64)));
 
     const pubKey = TRUSTED_RP_KEYS[rpDomain]?.[keyId];
     if (!pubKey) {
