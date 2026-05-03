@@ -72,7 +72,14 @@ export type MessageType =
   | 'webrtc-connection-state'
   | 'webrtc-connection-timeout'
   | 'get-connection-state'
-  | 'webrtc-metrics';
+  | 'webrtc-metrics'
+  | 'webrtc-create-offscreen'
+  | 'webrtc-close-offscreen'
+  | 'webrtc-keepalive-status'
+  | 'webrtc-send'
+  | 'webrtc-data-received'
+  | 'webrtc-start-pairing'
+  | 'webrtc-disconnect';
 
 export interface ExtensionMessage<T = unknown> {
   type: MessageType;
