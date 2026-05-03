@@ -41,7 +41,6 @@ export class UsbTransport implements Transport {
       }
     } catch (err) {
       this.cleanup();
-      this.connected = false;
       throw err;
     }
   }
@@ -182,7 +181,24 @@ export class UsbTransport implements Transport {
 
   async getStatus(): Promise<NativeHostStatusResponse> {
     const response = await this.sendViaPort({ type: 'get-status' });
-    return response.payload as NativeHostStatusResponse;
+    const payload = response.payload as Record<string, unknown> | undefined;
+    if (
+      !payload ||
+      typeof payload.connected !== 'boolean' ||
+      typeof payload.transport !== 'string' ||
+      typeof payload.latencyMs !== 'number'
+    ) {
+      throw new Error('Invalid status response from native host');
+    }
+    return {
+      connected: payload.connected,
+      transport: payload.transport as TransportType,
+      latencyMs: payload.latencyMs,
+      deviceSerial:
+        typeof payload.deviceSerial === 'string'
+          ? payload.deviceSerial
+          : undefined,
+    };
   }
 
   private arrayBufferToBase64(buffer: Uint8Array): string {
