@@ -60,7 +60,7 @@ func (rl *ReadLoop) poll(ctx context.Context) {
 				sessionKey = make([]byte, len(cs.Key))
 				copy(sessionKey, cs.Key)
 			}
-			seq = cs.Seq
+			seq = cs.Seq.Clone()
 		}
 		rl.session.mu.Unlock()
 

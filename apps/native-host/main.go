@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"sync"
 	"syscall"
 	"time"
@@ -72,11 +73,15 @@ func run() error {
 		switch event.Type {
 		case aoa.HotplugConnect:
 			fmt.Fprintf(os.Stderr, "USB device connected: %04x:%04x\n", event.Device.Desc.Vendor, event.Device.Desc.Product)
-			writer.Write(&nm.Message{Type: nm.MsgUsbConnected})
+			if err := writer.Write(&nm.Message{Type: nm.MsgUsbConnected}); err != nil {
+				fmt.Fprintf(os.Stderr, "failed to write usb-connected message: %v\n", err)
+			}
 		case aoa.HotplugDisconnect:
 			fmt.Fprintf(os.Stderr, "USB device disconnected\n")
 			session.Close()
-			writer.Write(&nm.Message{Type: nm.MsgUsbDisconnected})
+			if err := writer.Write(&nm.Message{Type: nm.MsgUsbDisconnected}); err != nil {
+				fmt.Fprintf(os.Stderr, "failed to write usb-disconnected message: %v\n", err)
+			}
 		}
 	})
 	monitor.Start(ctx)
@@ -85,6 +90,12 @@ func run() error {
 	reader := nm.NewMessageReader(os.Stdin)
 	errCh := make(chan error, 1)
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Fprintf(os.Stderr, "PANIC in stdin goroutine: %v\n%s\n", r, debug.Stack())
+				errCh <- fmt.Errorf("panic in stdin goroutine: %v", r)
+			}
+		}()
 		for {
 			msg, err := reader.Read()
 			if err != nil {
@@ -202,7 +213,9 @@ func registerHandlers(r *nm.Router, session *Session, writer *nm.MessageWriter) 
 		session.readLoop = readLoop
 		readLoop.Start(context.Background())
 
-		writer.Write(&nm.Message{Type: nm.MsgUsbConnected})
+		if err := writer.Write(&nm.Message{Type: nm.MsgUsbConnected}); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to write usb-connected message: %v\n", err)
+		}
 		return &nm.Message{Type: nm.MsgConnectResult, Success: nm.BoolPtr(true)}, nil
 	})
 
