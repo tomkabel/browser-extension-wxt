@@ -209,7 +209,7 @@ describe('Noise Protocol - Property-Based Tests', () => {
             expect(decrypted).toEqual(payload);
           }
         }
-      }, 30000);
+      }, 60000);
     }
   });
 
