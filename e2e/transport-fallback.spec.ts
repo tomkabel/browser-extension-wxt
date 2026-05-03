@@ -49,7 +49,7 @@ test.describe('Transport Fallback — E2E', () => {
     });
 
     expect(transportState).toBeDefined();
-    expect(transportState.data.usbAvailable).toBe(false);
+    expect(transportState?.data?.usbAvailable).toBe(false);
 
     await page.close();
   });
