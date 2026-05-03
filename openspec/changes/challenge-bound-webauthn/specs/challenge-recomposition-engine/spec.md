@@ -8,7 +8,7 @@ The Android Vault SHALL recompute the expected SHA-256 challenge after zkTLS pro
 
 - **GIVEN** the Android Vault has received the zkTLS proof, assertion data, and session nonce from the extension
 - **WHEN** the `ChallengeVerifier` verifies the zkTLS proof and extracts the attested control code and origin
-- **THEN** the verifier SHALL recompute: `expected = SHA-256(TLV_serialize(proof, origin, code, nonce))`
+- **THEN** the verifier SHALL recompute: `expected_challenge = SHA-256(TLV_serialize(proof, origin, code, nonce))`
 - **AND** decode the assertion's `clientDataJSON.challenge` from base64url
 - **AND** assert that `actual_challenge === expected_challenge`
 
@@ -33,7 +33,7 @@ The Android Vault SHALL verify the WebAuthn assertion signature using the stored
 
 - **WHEN** signature verification fails
 - **THEN** the session SHALL be rejected
-- **AND** a security audit event SHALL be logged with the assertion details
+- **AND** a security audit event SHALL be logged with minimal fields only: `hash(credentialId)`, `failureReason`, `timestamp`, and `requestOrSessionId` — raw attestation or assertion material SHALL NOT be included in logs or audit events
 
 ### Requirement: Nonce replay prevention
 

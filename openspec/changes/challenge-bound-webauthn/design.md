@@ -118,11 +118,11 @@ The Java `ChallengeVerifier` performs these steps in order:
 
 ```
 1. Verify zkTLS proof → extract attested control code + origin
-2. Recompute: expected_challenge = SHA-256(zkTLS_Proof || extracted_origin || attested_code || session_nonce)
+2. Recompute: expected_challenge = SHA-256(TLV_serialize(zkTLS_Proof, extracted_origin, attested_code, session_nonce))
 3. Decode: actual_challenge = base64url_decode(assertion.response.clientDataJSON.challenge)
 4. Assert: actual_challenge === expected_challenge
 5. Retrieve: passkey_pk = trust_store.lookup(credential_id = assertion.rawId)
-6. Verify: ECDSA(passkey_pk, assertion.response.signature, actual_challenge || ...)
+6. Verify: ECDSA(passkey_pk, assertion.response.signature, authenticatorData || SHA-256(clientDataJSON))
 7. If all pass: session is authorized
 ```
 

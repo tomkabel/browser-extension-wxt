@@ -15,7 +15,7 @@ Without this binding, the WebAuthn assertion proves only that a human touched th
 
 - **Challenge Derivation**: `Challenge = SHA-256(zkTLS_Proof || Origin || Control_Code || Session_Nonce)`. Implemented in the extension's background service worker.
 - **WebAuthn Assertion with Custom Challenge**: Call `navigator.credentials.get({ publicKey: { challenge: derivedChallenge, rpId, ... } })`. The Host OS prompts with the computed challenge (user sees the transaction context via the OS biometric dialog where supported).
-- **Challenge Recomposition on Android**: The Android Vault (Java Orchestrator) recomputes `SHA-256(zkTLS_Proof || Origin || Code || Nonce)` after verifying the zkTLS proof. It compares this with the challenge in the WebAuthn assertion.
+- **Challenge Recomposition on Android**: The Android Vault (Java Orchestrator) recomputes `SHA-256(zkTLS_Proof || Origin || Control_Code || Session_Nonce)` after verifying the zkTLS proof. It compares this with the challenge in the WebAuthn assertion.
 - **Passkey Provisioning**: During Phase 0 pairing, the extension creates a Passkey bound to `chrome-extension://<id>`. The public key is stored in the Android trust-store.
 - **Assertion Verification**: Android Vault verifies the WebAuthn assertion signature against the stored Passkey public key, using the recomputed challenge.
 
@@ -25,7 +25,7 @@ Without this binding, the WebAuthn assertion proves only that a human touched th
 
 - `challenge-derivation`: `SHA-256(zkProof || origin || code || nonce)` challenge computation with canonical serialization to prevent hash length extension or ambiguity attacks
 - `webauthn-assertion-binding`: Invocation of `navigator.credentials.get()` with the derived challenge; extraction of authenticator data, signature, and client data JSON
-- `challenge-recomputation-engine`: Android-side recomputation of the challenge after zkTLS verification, with strict comparison against the assertion's `response.clientDataJSON.challenge`
+- `challenge-recomposition-engine`: Android-side recomputation of the challenge after zkTLS verification, with strict comparison against the assertion's `response.clientDataJSON.challenge`
 - `passkey-provisioning`: Phase 0 WebAuthn credential creation bound to the extension origin; public key storage in Android trust-store
 
 ### Modified Capabilities
