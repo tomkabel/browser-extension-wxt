@@ -141,15 +141,15 @@ class HardwareInterruptGate(private val context: Context) {
   // Requires API 26+ (Android 8) for VibrationEffect.
   // Pre-API 26 devices fall back to vibrator.vibrate(pattern, repeat) via compat.
   if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-    vibrator.vibrate(VibrationEffect.createWaveform(sosPattern, -1)) // -1 = play once
+    vibrator.vibrate(VibrationEffect.createWaveform(sosPattern, 0)) // 0 = repeat continuously
   } else {
     @Suppress("DEPRECATION")
-    vibrator.vibrate(sosPattern, -1)
+    vibrator.vibrate(sosPattern, 0)
   }
 }
 ```
 
-The SOS pattern is designed to be distinguishable from normal notifications even when the phone is face-down on a desk.
+The SOS pattern repeats continuously (repeat index 0) so it persists until `stopSosHaptic()` is called. The pattern is designed to be distinguishable from normal notifications even when the phone is face-down on a desk.
 
 ### 4. QES Overlay
 
@@ -209,7 +209,7 @@ To provide a cancel option without needing the touchscreen (which may be display
 
 ## Risks / Trade-offs
 
-- [Risk] API level requirements: `FLAG_APPLICATION_OVERLAY` requires API 26+ (app min is 33, acceptable). `VibratorManager` requires API 31+; design includes API 26+ fallback to `Vibrator`. `VibrationEffect.createWaveform()` requires API 26+; design includes pre-26 fallback
+- [Risk] API level requirements: `TYPE_APPLICATION_OVERLAY` requires API 26+ (app min is 33, acceptable). `VibratorManager` requires API 31+; design includes API 26+ fallback to `Vibrator`. `VibrationEffect.createWaveform()` requires API 26+; design includes pre-26 fallback
 - [Risk] Volume button may be physically broken or inaccessible — Provide a "Cancel QES" button in the overlay that requires fingerprint authentication as alternative
 - [Risk] Smart-ID app may not show the full transaction context for all RPs — The legal requirement is that the user MUST be able to view the transaction; skip hardware gate for transactions that the Smart-ID app does display
 - [Risk] User might press Volume Down reflexively without reading the Smart-ID screen — The SOS haptic and overlay text are designed to alert the user to LOOK at the phone; the 30-second window provides time to verify

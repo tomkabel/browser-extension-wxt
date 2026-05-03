@@ -2,7 +2,7 @@
 
 ### Requirement: Non-obscuring QES overlay
 
-The Android Vault SHALL display a transparent, non-clickable system overlay during the QES waiting period.
+The Android Vault SHALL display a semi-transparent, non-clickable system overlay during the QES waiting period.
 
 #### Scenario: Overlay displayed
 

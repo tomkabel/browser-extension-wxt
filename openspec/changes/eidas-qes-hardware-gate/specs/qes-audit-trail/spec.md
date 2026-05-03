@@ -8,7 +8,7 @@ The Android Vault SHALL generate a signed audit log entry for every QES session.
 
 - **GIVEN** a QES session completes (EXECUTED → COMPLETED)
 - **WHEN** the HIG transitions to COMPLETED
-- **THEN** an audit entry SHALL be created containing: sessionId, timestamp, transactionHash, zkTlsProofHash, webauthnAssertionHash, armTimestamp, interruptType ("VOLUME_DOWN"), interruptTimestamp, actuationTimestamp, result ("COMPLETED")
+- **THEN** an audit entry SHALL be created containing: sessionId, timestamp, transactionHash, zkTlsProofHash (SHA-256 of the serialized zkTLS proof, computed by the challenge-recomposition-engine), webauthnAssertionHash (SHA-256 of the serialized WebAuthn assertion response, computed by the webauthn-assertion-binding flow), armTimestamp, interruptType ("VOLUME_DOWN"), interruptTimestamp, actuationTimestamp, result ("COMPLETED")
 - **AND** the entry SHALL be signed with a device-local attestation key (Android Keystore, hardware-backed)
 - **AND** stored in encrypted storage
 

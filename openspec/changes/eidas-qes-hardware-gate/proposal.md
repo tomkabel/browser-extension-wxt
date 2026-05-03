@@ -47,7 +47,7 @@ This makes repudiation claims ("I did not authorize this") legally unsustainable
 - **Android Vault app**: `HardwareInterruptGate.kt` — state machine. `QesOverlayService.kt` — system overlay. `AuditLogger.kt` — cryptographic audit trail. `HapticNotifier.kt` — vibrator patterns.
 - **AndroidManifest.xml**: `SYSTEM_ALERT_WINDOW` permission for overlay. `FOREGROUND_SERVICE` for the gate service. `VIBRATE` permission.
 - **Browser Extension**: Popup shows "QES ARMED — verify on phone" status during the waiting period. After completion, shows attested audit trail.
-- **Smart-ID app interaction**: User sees the exact transaction details (amount, beneficiary) on the Smart-ID app screen (which appeared from the SmartID Vault's push). This is the certified eIDAS display.
+- **Smart-ID app interaction**: User sees the exact transaction details (amount, beneficiary) on the Smart-ID app screen (which appeared from the Smart-ID Vault's push). This is the certified eIDAS display.
 - **Legal compliance**: The combination of zkTLS (network truth) + WebAuthn (PC biometric) + Volume Down (hardware interrupt) creates an audit trail exceeding current eIDAS requirements for remote QES.
 
 ## V6 Alignment

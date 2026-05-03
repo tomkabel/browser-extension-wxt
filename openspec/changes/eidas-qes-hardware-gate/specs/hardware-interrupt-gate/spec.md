@@ -39,7 +39,7 @@ The Android Vault SHALL implement a Hardware Interrupt Gate (HIG) state machine 
 - **AND** dismiss the overlay
 - **AND** generate a timeout audit log entry
 
-#### Scenario: Non-ARMED keys ignored
+#### Scenario: IDLE and COMPLETED keys ignored
 
 - **WHEN** the HIG is in IDLE or COMPLETED state
 - **AND** any key event is received
