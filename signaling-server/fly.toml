@@ -2,7 +2,7 @@ app = "smartid2-signaling"
 primary_region = "ams"
 
 [build]
-  dockerfile = "Dockerfile.signaling"
+  dockerfile = "Dockerfile"
 
 [[services]]
   internal_port = 7333
