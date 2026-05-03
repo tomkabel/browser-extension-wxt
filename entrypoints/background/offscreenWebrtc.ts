@@ -1,4 +1,5 @@
 import { log } from '~/lib/errors';
+import { getTransportManager } from './messageHandlers';
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
 
@@ -47,6 +48,12 @@ export async function createOffscreenDocument(): Promise<boolean> {
 }
 
 export async function closeOffscreenDocument(): Promise<void> {
+  const transportManager = getTransportManager();
+  if (transportManager?.getActiveTransportType() === 'usb') {
+    log.info('[OffscreenWebRTC] USB session active, keeping offscreen document alive');
+    return;
+  }
+
   if (keepalivePort) {
     keepalivePort.disconnect();
     keepalivePort = null;

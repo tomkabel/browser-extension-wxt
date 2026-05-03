@@ -1,5 +1,8 @@
 import { create } from 'zustand';
 import type { CredentialState, PairingState, SessionState, TransactionData, TransactionState } from '~/types';
+import type { TransportType } from '~/lib/transport/types';
+
+export type TransportStatusType = TransportType | null;
 
 export interface TabState {
   domain: string;
@@ -59,6 +62,14 @@ export interface AppStore {
   setCredentialState: (state: CredentialState) => void;
   setCredentialDomain: (domain: string | null) => void;
   setCredentialStatus: (status: string | null) => void;
+
+  activeTransport: TransportStatusType;
+  usbAvailable: boolean;
+  transportChangeMessage: string | null;
+
+  setActiveTransport: (transport: TransportStatusType) => void;
+  setUsbAvailable: (available: boolean) => void;
+  setTransportChangeMessage: (message: string | null) => void;
 }
 
 export const useAppStore = create<AppStore>((set) => ({
@@ -112,4 +123,12 @@ export const useAppStore = create<AppStore>((set) => ({
   setCredentialState: (state) => set({ credentialState: state }),
   setCredentialDomain: (domain) => set({ credentialDomain: domain }),
   setCredentialStatus: (status) => set({ credentialStatus: status }),
+
+  activeTransport: null,
+  usbAvailable: false,
+  transportChangeMessage: null,
+
+  setActiveTransport: (transport) => set({ activeTransport: transport }),
+  setUsbAvailable: (available) => set({ usbAvailable: available }),
+  setTransportChangeMessage: (message) => set({ transportChangeMessage: message }),
 }));

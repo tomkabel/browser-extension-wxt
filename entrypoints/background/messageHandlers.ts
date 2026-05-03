@@ -22,6 +22,7 @@ import { cachePrfCredentialId } from '~/lib/crypto/fallbackAuth';
 import { withTimeout } from '~/lib/asyncUtils';
 import { createSlidingWindowLimiter, createDomainRateLimiter } from '~/lib/rateLimit/slidingWindow';
 import { isReplayAssertion, recordAssertion } from '~/lib/replayProtection';
+import { TransportManager } from '~/lib/transport';
 import type {
   CredentialRequestPayload,
   LoginFormDetection,
@@ -395,6 +396,19 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       };
     }
   },
+
+  'transport-changed': async () => {
+    if (!transportManager) {
+      return { success: true, data: { activeTransport: null, usbAvailable: false } };
+    }
+    return {
+      success: true,
+      data: {
+        activeTransport: transportManager.getActiveTransportType(),
+        usbAvailable: transportManager.isUsbAvailable(),
+      },
+    };
+  },
 };
 
 async function getTabIdFromSender(sender: chrome.runtime.MessageSender): Promise<number | null> {
@@ -431,13 +445,12 @@ export function registerMessageHandlers(): void {
 
 function isValidMessage(
   message: unknown,
-): message is { type: string; payload: unknown } {
+): message is { type: string; payload?: unknown } {
   return (
     typeof message === 'object' &&
     message !== null &&
     'type' in message &&
-    typeof (message as Record<string, unknown>).type === 'string' &&
-    'payload' in message
+    typeof (message as Record<string, unknown>).type === 'string'
   );
 }
 
@@ -447,3 +460,25 @@ const mfaRateLimiter = createSlidingWindowLimiter(MFA_RATE_LIMIT_WINDOW_MS, MFA_
 
 const CREDENTIAL_RATE_LIMIT_MS = 30_000;
 const credentialRateLimiter = createDomainRateLimiter(CREDENTIAL_RATE_LIMIT_MS);
+
+let transportManager: TransportManager | null = null;
+let transportManagerInitPromise: Promise<void> | null = null;
+
+export function getTransportManager(): TransportManager | null {
+  return transportManager;
+}
+
+export async function initializeTransportManager(): Promise<void> {
+  if (transportManagerInitPromise) {
+    return transportManagerInitPromise;
+  }
+  if (transportManager) return;
+  transportManager = new TransportManager();
+  transportManagerInitPromise = transportManager.initialize().catch((err) => {
+    transportManager = null;
+    throw err;
+  }).finally(() => {
+    transportManagerInitPromise = null;
+  });
+  return transportManagerInitPromise;
+}
