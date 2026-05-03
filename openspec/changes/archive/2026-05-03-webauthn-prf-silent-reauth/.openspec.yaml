@@ -1,0 +1,13 @@
+schema: spec-driven
+created: 2026-05-01
+specs:
+  - specs/webauthn-prf-derivation
+  - specs/silent-reauth-flow
+  - specs/session-persistence
+  - specs/webauthn-auth-page
+  - specs/zero-persistent-crypto
+context: |
+  Phase 3 — Dumb Terminal Architecture: WebAuthn PRF silent re-authentication.
+  Zero persistent cryptographic state on SSD. PRF credential creation during
+  pairing, silent assertion on browser restart, IK handshake with PRF-derived key.
+  PIN fallback for devices without platform authenticator.

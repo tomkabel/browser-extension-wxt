@@ -1,0 +1,19 @@
+schema: spec-driven
+created: 2026-05-01
+specs:
+  - specs/login-field-detection
+  - specs/credential-request-protocol
+  - specs/context-aware-approval
+  - specs/micro-payload-injection
+  - specs/extension-messaging
+  - specs/transaction-flow
+context: |
+  Phase 4 — JIT Authentication & UX: Phone acts as vault, delivers single-site
+  credentials on demand. Laptop is a "dumb terminal" — zero persistent crypto.
+  Context-aware biometric prompt (auto-approve when unlocked, notification when locked).
+  V6 Alignment: The "credential" concept in V6 shifts from website passwords to
+    Smart-ID PIN1/PIN2. The JIT delivery mechanism is refactored: instead of
+    delivering decrypted passwords to the extension for DOM injection, it delivers
+    PIN decryption authorization to the NDK enclave for coordinate mapping. The
+    context-aware approval logic (auto-approve vs biometric prompt) is retained
+    and extended with the eIDAS QES hardware gate for PIN2 requests.

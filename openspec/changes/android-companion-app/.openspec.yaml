@@ -1,0 +1,19 @@
+schema: spec-driven
+created: 2026-05-01
+specs:
+  - specs/android-connectivity
+  - openspec/specs/transaction-flow
+  - openspec/specs/qr-sas-pairing
+  - openspec/specs/signaling-e2ee
+context: |
+  Android companion app updates to align with ARCHITECTURE.md phases:
+  Phase 1 — 3-emoji SAS display + Match/No Match confirmation (replaces numeric-only)
+  Phase 2 — TURN-capable WebRTC client with ICE waterfall
+  Phase 3 — PRF credential storage + IK reconnection with PRF-derived keys
+  Phase 4 — Context-aware biometric prompt, credential vault, JIT micro-payload delivery,
+            smartwatch approval, credential-request command handling
+  V6 Alignment: This app evolves into the Android Vault in V6. The credential vault
+    refocuses from website passwords to Smart-ID PIN1/PIN2 storage. WebRTC becomes
+    fallback transport; USB AOA becomes primary. The a11y bridge is superseded by
+    the Ghost Actuator (dispatchGesture) for Smart-ID interaction. The emoji SAS
+    flow is replaced by AOA ECDH handshake + WebAuthn passkey provisioning.

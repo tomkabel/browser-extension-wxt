@@ -1,0 +1,17 @@
+.output/
+.wxt/
+.agents/
+.kilocode/
+.openspec/
+node_modules/
+dist/
+coverage/
+research/
+openspec/
+bun.lock
+package-lock.json
+*.md
+*.pem
+*.db
+*.apk
+*.key

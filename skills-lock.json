@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "skills": {
+    "e2e-testing": {
+      "source": "affaan-m/everything-claude-code",
+      "sourceType": "github",
+      "skillPath": "skills/e2e-testing/SKILL.md",
+      "computedHash": "b66c5a5415f07b48472049d5301e8327fe39cb23b706f7969668a2d823f62d11"
+    },
+    "playwright-generate-test": {
+      "source": "github/awesome-copilot",
+      "sourceType": "github",
+      "skillPath": "skills/playwright-generate-test/SKILL.md",
+      "computedHash": "8f963da3e25f705ff39755b8b990f20da0c0320cb86ac83fcc4d2d4eca91f6e4"
+    },
+    "wxt": {
+      "source": "timeraa/skills",
+      "sourceType": "github",
+      "skillPath": "skills/wxt/SKILL.md",
+      "computedHash": "af1574a7278f8e19086520e96e7354b113ffff29773dd68031bfc3699854b713"
+    },
+    "wxt-browser-extensions": {
+      "source": "pproenca/dot-skills",
+      "sourceType": "github",
+      "skillPath": "skills/.experimental/wxt-browser-extensions/SKILL.md",
+      "computedHash": "b0ca41608b74d1892af14be425fdfacaec777ea8b7090b7ebd615b80d6816a28"
+    },
+    "wxt-framework-patterns": {
+      "source": "arustydev/ai",
+      "sourceType": "github",
+      "skillPath": "content/plugins/web/browser-extension-dev/skills/wxt-framework-patterns/SKILL.md",
+      "computedHash": "a7fc00ec8b08f0c431de761d79d90656c3473e55ca9841e38001f2b3d2bf1fde"
+    }
+  }
+}

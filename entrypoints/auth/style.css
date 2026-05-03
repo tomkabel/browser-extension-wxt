@@ -1,0 +1,84 @@
+body {
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
+  max-width: 420px;
+  margin: 4rem auto;
+  padding: 2rem;
+  text-align: center;
+  color: #1a1a2e;
+  background: #f8f9fa;
+  min-height: 100vh;
+}
+
+h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+  color: #1a1a2e;
+}
+
+.subtitle {
+  color: #6b7280;
+  font-size: 0.875rem;
+  margin-bottom: 2rem;
+}
+
+.status {
+  background: #1a1a2e;
+  color: #e0e0e0;
+  padding: 1.25rem;
+  border-radius: 12px;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  white-space: pre-wrap;
+  min-height: 60px;
+  margin-bottom: 1.5rem;
+  text-align: left;
+  line-height: 1.5;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.btn-primary {
+  width: 100%;
+  padding: 0.875rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  background: #2563eb;
+  color: white;
+  transition: background 0.15s ease;
+}
+
+.btn-primary:hover {
+  background: #1d4ed8;
+}
+
+.btn-primary:disabled {
+  background: #93c5fd;
+  cursor: not-allowed;
+}
+
+#log {
+  background: #f1f5f9;
+  color: #334155;
+  padding: 1rem;
+  border-radius: 8px;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  text-align: left;
+  min-height: 40px;
+  max-height: 200px;
+  overflow-y: auto;
+  margin-top: 1.5rem;
+  line-height: 1.5;
+}

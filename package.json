@@ -1,0 +1,73 @@
+{
+  "name": "domain-inspector",
+  "version": "1.0.0",
+  "description": "WXT Browser Extension for domain inspection",
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "prebuild": "bun -e 'const e=process.env;const m=\"ERROR: VITE_API_ENDPOINT and VITE_SIGNALING_URL must be set. See .env.example\";if(!e.VITE_API_ENDPOINT||!e.VITE_SIGNALING_URL){console.error(m);process.exit(1)}if(!e.VITE_TURN_URL||!e.VITE_TURN_SECRET){console.warn(\"WARNING: VITE_TURN_URL and VITE_TURN_SECRET not set. TURN relay will be disabled.\")}'",
+    "build": "bun run prebuild && wxt build && node fix-manifest.js",
+    "preview": "wxt build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:coverage": "vitest run --coverage",
+    "ci:check": "bun run tsc --noEmit && bun run test && bun run build",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
+    "prepare": "husky"
+  },
+  "dependencies": {
+    "@noble/ciphers": "^2.2.0",
+    "@noble/curves": "^2.2.0",
+    "@noble/hashes": "^2.2.0",
+    "@tailwindcss/vite": "^4.0.0",
+    "@vitejs/plugin-react": "^6.0.1",
+    "@wxt-dev/module-react": "^1.2.2",
+    "qrcode": "^1.5.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "salty-crypto": "^1.0.0-rc.4",
+    "socket.io-client": "^4.8.3",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@playwright/test": "^1.59.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/chrome": "^0.0.260",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitest/coverage-v8": "^4.1.5",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^10.0.0",
+    "eslint-plugin-react": "^7.37.0",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "happy-dom": "^20.9.0",
+    "husky": "^9.0.0",
+    "jsdom": "^29.1.1",
+    "lint-staged": "^15.0.0",
+    "prettier": "^3.0.0",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^4.1.5",
+    "wxt": "^0.20.22"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{css,json,md}": [
+      "prettier --write"
+    ]
+  }
+}

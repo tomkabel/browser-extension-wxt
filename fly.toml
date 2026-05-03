@@ -1,0 +1,17 @@
+app = "smartid2-signaling"
+primary_region = "ams"
+
+[build]
+  dockerfile = "Dockerfile.signaling"
+
+[[services]]
+  internal_port = 7333
+  protocol = "tcp"
+
+  [[services.ports]]
+    port = 7333
+    handlers = ["tls", "http"]
+
+  [[services.tcp_checks]]
+    interval = "15s"
+    timeout = "2s"

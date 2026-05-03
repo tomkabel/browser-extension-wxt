@@ -1,0 +1,57 @@
+schema: spec-driven
+
+# Project context — SmartID2 Vault v6 Ultimate Vision
+# This project evolves through phases: WebRTC phone-as-vault (current) →
+# USB AOA tethered HSM proxy (v6 end goal).
+context: |
+  ## Ultimate Architecture: SMART-ID Vault v6 ("Quantum-Resilient Enclave")
+  
+  The final end-goal architecture transforms a consumer Android smartphone into an
+  uncompromisable, eIDAS-compliant Hardware Security Module tethered via USB.
+  
+  ### Four Layers of Defense:
+  1. **zkTLS Context Engine (Browser Extension WASM):** MPC-based TLS attestation
+     (TLSNotary/DECO) proves transaction data at the network socket layer, defeating RATs
+     and DOM manipulation. Generates zero-knowledge proof that the server's TLS certificate
+     transmitted a specific control code.
+  2. **Challenge-Bound WebAuthn:** SHA256(zkTLS_Proof || Origin || Code || Nonce) is the
+     WebAuthn challenge. PC biometric (Windows Hello/TouchID) is cryptographically fused to
+     the transaction. Origin spoofing is mathematically impossible.
+  3. **Go Native Messaging Host + USB AOA 2.0 Transport:** Statically compiled Go binary
+     uses libusb-1.0 for raw USB bulk endpoint communication. No TCP, no ADB, no Binder.
+     AES-256-GCM encrypted tunnel over hardware USB bus.
+  4. **Android NDK Memory-Locked Enclave:** C++ library (libvault_enclave.so) uses mlock()
+     and explicit_bzero() to process PINs entirely outside JVM heap. PINs become anonymous
+     X/Y float coordinates for Ghost Actuator.
+  
+  ### Progression Path:
+  - **Phase 1 (Current):** WebRTC-based phone-as-vault with cloud signaling. Builds the
+    browser extension foundation, WebAuthn/PRF patterns, Android companion app scaffolding.
+  - **Phase 1.5 (Bridge):** Go native host scaffold + Android AOA handshake. Still uses
+    WebRTC as fallback when USB unavailable.
+  - **Phase 2 (V6):** Full USB AOA transport + zkTLS + NDK enclave + Ghost Actuator.
+    WebRTC becomes the fallback, USB is primary.
+  
+  ### Tech Stack:
+  - Browser Extension: TypeScript 5.6 strict, WXT 0.20, React 19, Tailwind CSS 4, Zustand
+  - Native Host: Go 1.22+, libusb-1.0, statically compiled, cross-platform (Windows/macOS/Linux)
+  - Android Vault: Kotlin, C++ NDK (libvault_enclave.so), Android Keystore, AccessibilityService
+  - Protocols: Curve25519 ECDH, AES-256-GCM, Noise XX, WebAuthn/FIDO2, TLSNotary/DECO
+  
+  ### Key Architectural Decisions:
+  - PC is treated as hostile I/O: zero persistent crypto state on SSD
+  - Phone is the root of trust: all secrets in Android Keystore/TEE
+  - USB AOA is air-gap equivalent: no network attack surface on the transport
+  - PINs never enter JVM heap: processed entirely in mlocked C++ memory
+  - eIDAS QES requires hardware interrupt: Volume Down button for Sole Control
+
+# Per-artifact rules
+rules:
+  proposal:
+    - Must reference SMARTID_VAULT_v6.md as the ultimate architectural goal
+    - Must specify which Phase (1/1.5/2) the change belongs to
+    - Must identify dependencies on other changes
+    - Must include V6 alignment assessment
+  tasks:
+    - Break tasks into chunks of max 4 hours
+    - Each task must reference relevant source files

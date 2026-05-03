@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="description" content="A test page for E2E scraping tests" />
+    <title>E2E Test Page</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        max-width: 800px;
+        margin: 2rem auto;
+        padding: 0 1rem;
+      }
+      form {
+        margin: 1rem 0;
+        padding: 1rem;
+        border: 1px solid #ccc;
+      }
+      label {
+        display: block;
+        margin: 0.5rem 0 0.25rem;
+      }
+      input {
+        padding: 0.5rem;
+        width: 100%;
+        box-sizing: border-box;
+      }
+      button {
+        margin-top: 0.5rem;
+        padding: 0.5rem 1rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Welcome to the Test Page</h1>
+    <h2>Section One</h2>
+    <p>
+      This is the first paragraph of the test page. It contains some text for DOM scraping tests to
+      extract.
+    </p>
+    <p>
+      This is the second paragraph. It provides additional content for testing extraction accuracy.
+    </p>
+
+    <h2>Login</h2>
+    <form id="login-form" action="/login" method="POST">
+      <label for="username">Username</label>
+      <input type="text" id="username" name="username" placeholder="Enter your username" />
+
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" placeholder="Enter your password" />
+
+      <button type="submit">Sign In</button>
+    </form>
+
+    <h2>More Content</h2>
+    <p>Some more text content after the form.</p>
+
+    <a href="https://example.com/page1">Example Link 1</a>
+    <a href="https://example.com/page2">Example Link 2</a>
+    <a href="https://example.com/page3">Example Link 3</a>
+
+    <img src="/images/photo1.jpg" alt="Photo 1" />
+    <img src="/images/photo2.jpg" alt="Photo 2" />
+
+    <script src="https://example.com/analytics.js" data-analytics="true">
+      // Analytics script
+    </script>
+  </body>
+</html>

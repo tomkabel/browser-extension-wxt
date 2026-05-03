@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.output/
+.wxt/
+coverage/
+.open-next/
+*.pem
+*.db
+*.apk
+*.key
+credentials.*
+.env.local
+.env.production

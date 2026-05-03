@@ -1,0 +1,17 @@
+schema: spec-driven
+created: 2026-05-01
+specs:
+  - specs/emoji-sas-display
+  - specs/emoji-sas-fallback
+  - specs/qr-sas-pairing
+  - openspec/specs/signaling-e2ee
+context: |
+  Phase 1 — Pragmatic Pairing: Replace 6-digit numeric SAS with 3-emoji SAS.
+  SAS is derived from Noise XX session key via SHA-256, not transmitted.
+  E2EE cloud signaling ensures the server is a "dumb pipe" for opaque ciphertext.
+  Accessibility fallback to numeric for screen reader users.
+  V6 Alignment: Emoji SAS is a Phase 1 convenience mechanism. In Phase 2 (V6),
+    pairing is established via USB AOA physical connection + ECDH key exchange +
+    WebAuthn passkey provisioning. The 3-emoji SAS is no longer needed because
+    the physical USB tether provides implicit proximity verification. This
+    change should be treated as Phase 1-only, with no V6 evolution path.

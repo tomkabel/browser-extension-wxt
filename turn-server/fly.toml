@@ -1,0 +1,37 @@
+# Fly.io deployment config for SmartID2 TURN server
+# Deployed as a separate Fly app from the signaling server.
+# UDP 3478 for TURN/UDP, TCP 443 for TURN/TCP firewall traversal.
+
+app = "smartid2-turn"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  EXTERNAL_IP = "fly-global"  # Replaced at runtime by Fly.io's anycast IP
+
+[[services]]
+  protocol = "udp"
+  internal_port = 3478
+
+  [[services.ports]]
+    port = 3478
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 3478
+
+  [[services.ports]]
+    port = 3478
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 443
+
+  [[services.ports]]
+    port = 443
+
+[[vm]]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1

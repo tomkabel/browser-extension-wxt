@@ -1,0 +1,13 @@
+schema_version: 1.0.0-rc1
+change_id: 2026-05-01-architectural-security-audit
+title: 'Architectural & Security Audit: Remediation Proposal'
+author: 'Senior Systems Architect / Lead Security Engineer'
+status: draft
+created: '2026-05-01'
+updated: '2026-05-01'
+tags:
+  - security
+  - architecture
+  - audit
+  - remediation
+  - crypto

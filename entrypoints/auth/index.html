@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SmartID2 MFA</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <h1>SmartID2 Authentication</h1>
+    <p class="subtitle">Verify your identity to enable transaction signing</p>
+
+    <div id="status" class="status">Initializing...</div>
+    <div id="actions" class="actions">
+      <button id="btn-register" class="btn-primary">Register Credential</button>
+      <button id="btn-authenticate" class="btn-primary">Authenticate</button>
+    </div>
+    <div id="log"></div>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
