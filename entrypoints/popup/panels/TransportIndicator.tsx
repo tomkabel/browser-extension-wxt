@@ -39,12 +39,6 @@ export function TransportIndicator() {
             setTransportChangeMessage(null);
           }
         }, 3000);
-      } else if (message.type === 'usb-connected') {
-        setActiveTransport('usb');
-        setUsbAvailable(true);
-      } else if (message.type === 'usb-disconnected') {
-        setUsbAvailable(false);
-        setActiveTransport('webrtc');
       }
     };
 
