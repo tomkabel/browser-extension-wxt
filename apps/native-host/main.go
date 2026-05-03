@@ -224,7 +224,9 @@ func registerHandlers(r *nm.Router, session *Session, writer *nm.MessageWriter) 
 			}
 			discovered.Device.Close()
 
+			session.mu.Unlock()
 			time.Sleep(2 * time.Second)
+			session.mu.Lock()
 
 			discovered, err = aoa.FindAccessoryDevice(session.usbCtx, "")
 			if err != nil || discovered == nil {
