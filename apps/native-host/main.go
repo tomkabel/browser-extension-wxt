@@ -200,7 +200,7 @@ func registerHandlers(r *nm.Router, session *Session, writer *nm.MessageWriter) 
 
 		readLoop := NewReadLoop(session, writer)
 		session.readLoop = readLoop
-		readLoop.Start(context.Background(), cryptoSess)
+		readLoop.Start(context.Background())
 
 		writer.Write(&nm.Message{Type: nm.MsgUsbConnected})
 		return &nm.Message{Type: nm.MsgConnectResult, Success: nm.BoolPtr(true)}, nil

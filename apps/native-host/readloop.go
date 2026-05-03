@@ -52,7 +52,16 @@ func (rl *ReadLoop) poll(ctx context.Context) {
 
 		rl.session.mu.Lock()
 		dev := rl.session.device
-		cryptoSession := rl.session.cryptoSession
+		cs := rl.session.cryptoSession
+		var sessionKey []byte
+		var seq *sidcrypto.SequenceTracker
+		if cs != nil {
+			if cs.Key != nil {
+				sessionKey = make([]byte, len(cs.Key))
+				copy(sessionKey, cs.Key)
+			}
+			seq = cs.Seq
+		}
 		rl.session.mu.Unlock()
 
 		if dev == nil {
@@ -84,7 +93,7 @@ func (rl *ReadLoop) poll(ctx context.Context) {
 			continue
 		}
 
-		if cryptoSession == nil || cryptoSession.Key == nil {
+		if sessionKey == nil || seq == nil {
 			if wErr := rl.writer.Write(&nm.Message{
 				Type:  nm.MsgError,
 				Error: "received data but no session key established",
@@ -94,8 +103,8 @@ func (rl *ReadLoop) poll(ctx context.Context) {
 			continue
 		}
 
-		expectedSeq := cryptoSession.Seq.ExpectedInbound()
-		plaintext, _, decryptErr := sidcrypto.Decrypt(cryptoSession.Key, buf[:n], expectedSeq)
+		expectedSeq := seq.ExpectedInbound()
+		plaintext, _, decryptErr := sidcrypto.Decrypt(sessionKey, buf[:n], expectedSeq)
 		if decryptErr != nil {
 			if rekeyableErr, ok := decryptErr.(*sidcrypto.DecryptError); ok {
 				if rekeyableErr.Kind == sidcrypto.DecryptErrSequenceGap {
@@ -118,7 +127,7 @@ func (rl *ReadLoop) poll(ctx context.Context) {
 			continue
 		}
 
-		cryptoSession.Seq.AdvanceInbound()
+		seq.AdvanceInbound()
 
 		encoded := base64.StdEncoding.EncodeToString(plaintext)
 		if wErr := rl.writer.Write(&nm.Message{
