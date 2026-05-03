@@ -1,6 +1,6 @@
 import { browser } from 'wxt/browser';
 import { TRANSPORT_CONFIG } from './config';
-import type { Transport, TransportStatus, TransportType } from './types';
+import type { Transport, TransportType } from './types';
 import { UsbTransport } from './UsbTransport';
 import { WebRtcTransport } from './WebRtcTransport';
 
@@ -98,22 +98,6 @@ export class TransportManager {
 
   isUsbAvailable(): boolean {
     return this.usbAvailable;
-  }
-
-  async getStatus(): Promise<TransportStatus> {
-    let latencyMs = 0;
-    if (this.activeTransport) {
-      try {
-        latencyMs = await this.activeTransport.getLatency();
-      } catch {
-        latencyMs = -1;
-      }
-    }
-    return {
-      type: this.activeTransport?.type ?? 'webrtc',
-      connected: this.activeTransport?.isAvailable() ?? false,
-      latencyMs,
-    };
   }
 
   async destroy(): Promise<void> {
