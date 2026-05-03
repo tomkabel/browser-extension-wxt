@@ -12,7 +12,7 @@ This project uses **Bun exclusively** as its package manager and runtime. Do not
 - **Always use `bun install`**, not `npm install`.
 - The lockfile is `bun.lock` (text-based) in recent Bun versions. Earlier versions used `bun.lockb` (binary). Both are valid; commit whichever is present.
 - **Commit the lockfile** for reproducible CI builds.
-- To regenerate: `rm -rf node_modules bun.lock && bun install`.
+- To regenerate: `rm -rf node_modules bun.lock bun.lockb && bun install`.
 - Use `bun install --frozen-lockfile` in CI for strict reproducibility.
 
 ### Checking for Outdated Packages
