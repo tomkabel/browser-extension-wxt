@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/smartid/vault6-native-host/aoa"
@@ -84,7 +85,11 @@ func (rl *ReadLoop) poll(ctx context.Context) {
 						return
 					}
 					return
+				default:
+					fmt.Fprintf(os.Stderr, "readloop: unexpected transfer error kind=%v: %v\n", transferErr.Kind, transferErr)
 				}
+			} else {
+				fmt.Fprintf(os.Stderr, "readloop: ReadBulk error: %v\n", err)
 			}
 			continue
 		}
@@ -127,7 +132,7 @@ func (rl *ReadLoop) poll(ctx context.Context) {
 			continue
 		}
 
-		seq.AdvanceInbound()
+		cs.Seq.AdvanceInbound()
 
 		encoded := base64.StdEncoding.EncodeToString(plaintext)
 		if wErr := rl.writer.Write(&nm.Message{
