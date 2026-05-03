@@ -17,16 +17,17 @@
 - [ ] 2.7 Unit test: guard page access triggers SIGSEGV (verified in test harness)
 - [ ] 2.8 Unit test: `mlock`-ed memory is not swappable (verify via `/proc/self/status VmSwap`)
 
-## 3. Keystore NDK Bridge
+## 3. Keystore JNI Bridge — Direct ByteBuffer Cipher
 
-- [ ] 3.1 Implement `decryptPin()`: `AKeyStore_getKeyStore()` → `AKeyStore_getBlob()` to retrieve encrypted PIN blob
-- [ ] 3.2 Implement JNI fallback path: if NDK `AKeyStore` API is unavailable, decrypt in Java but zero Kotlin variable immediately after JNI `GetByteArrayElements()` copies data to C++ buffer
-- [ ] 3.3 Decrypt directly into mlocked buffer (never into a temporary Java `ByteArray`)
-- [ ] 3.4 Verify key characteristics: ensure `KM_TAG_USER_AUTHENTICATION_REQUIRED` is set on the retrieved key
-- [ ] 3.5 Handle decryption failure: zero any partial output, return error code, do NOT throw exception through JNI
+- [ ] 3.1 Implement `decryptPin()` in C++: obtain Android Keystore key via JNI (`KeyStore.getInstance("AndroidKeyStore").getKey(alias, null)`)
+- [ ] 3.2 Implement `Cipher` initialization via JNI: `Cipher.getInstance("AES/GCM/NoPadding")`, `cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv))`
+- [ ] 3.3 Create direct ByteBuffer wrapping the mlock'd native buffer via `NewDirectByteBuffer(pinBuffer, MAX_PIN_SIZE)`
+- [ ] 3.4 Call `Cipher.doFinal(ByteBuffer ciphertextInput, ByteBuffer directOutput)` — plaintext lands in mlock'd native buffer (off Java heap)
+- [ ] 3.5 Handle decryption failure (`AEADBadTagException`): zero the native buffer, return error code, do NOT throw exception through JNI
 - [ ] 3.6 Unit test: decryption with valid key alias returns correct PIN
-- [ ] 3.7 Unit test: decryption with invalid key alias returns error
-- [ ] 3.8 Integration test: Java `Cipher` encrypt → NDK `AKeyStore_getBlob` decrypt produces same plaintext
+- [ ] 3.7 Unit test: decryption with invalid key alias / tampered ciphertext returns error
+- [ ] 3.8 Integration test: Java `Cipher` encrypt → JNI `Cipher.doFinal(ByteBuffer, ByteBuffer)` decrypt produces same plaintext
+- [ ] 3.9 Integration test: verify decrypted plaintext never appears in Java heap dump (scan with jmap or Android Studio Memory Profiler)
 
 ## 4. PIN-to-Coordinate Mapper
 

@@ -13,7 +13,7 @@ This transforms the PIN from a cryptographic secret into an anonymous spatial ge
 **Goals:**
 - C++ shared library (`libvault_enclave.so`) compiled with Android NDK r26+
 - `mlock()`-based allocator for PIN buffer (locked, non-swappable memory)
-- Android Keystore NDK API caller for direct PIN decryption into locked buffer
+- Android Keystore Cipher decryption via JNI into a direct ByteBuffer (native memory, off Java heap)
 - PIN-to-coordinate mapper: decrypted digits → X/Y float pairs using Java-provided layout bounds
 - `explicit_bzero()` on all memory release paths including signal handlers and exceptions
 - JNI interface: Java passes `float[] layoutBounds`, receives `float[] coordinates`
@@ -36,16 +36,18 @@ This transforms the PIN from a cryptographic secret into an anonymous spatial ge
 │  AndroidKeystore.decrypt() → Ciphertext              │
 │  PinGridAnalyzer.analyze() → float[] layoutBounds    │
 │                                                       │
-│  JNI call: decryptAndMap(ciphertext, layoutBounds)   │
+│  JNI call: decryptAndMap(ciphertext, iv, layoutBounds)│
 │       │                                               │
 │       ▼                                               │
 ├─────────────────────────────────────────────────────┤
 │  C++ NDK ENCLAVE (libvault_enclave.so)                │
 │                                                       │
 │  1. mlock(pinBuffer, page_size)                       │
-│  2. JNI call to Java AndroidKeyStore Cipher.decrypt() │
-│     → plaintext PIN into pinBuffer                    │
-│  3. For each digit in pinBuffer:                      │
+│  2. NewDirectByteBuffer(pinBuffer) → directOut        │
+│  3. JNI: Cipher.doFinal(ciphertextBB, directOut)      │
+│     → Conscrypt/BoringSSL writes plaintext directly   │
+│       into mlock'd native buffer (off Java heap)      │
+│  4. For each digit in pinBuffer:                      │
 │       idx = digit - '0'                               │
 │       x = layoutBounds[idx * 2]                       │
 │       y = layoutBounds[idx * 2 + 1]                   │
@@ -94,48 +96,45 @@ class MlockAllocator {
 };
 ```
 
-### 3. Keystore JNI Bridge (Primary)
+### 3. Keystore JNI Bridge — Direct ByteBuffer Cipher
 
-The primary PIN decryption path uses JNI to call documented Java AndroidKeyStore APIs. The NDK `AKeyStore` API is unsupported and used only as an internal fallback.
+The PIN decryption path uses a single, stable approach: JNI-call to Java's standard `Cipher.doFinal(ByteBuffer, ByteBuffer)` API with a **direct ByteBuffer** as the output. A direct ByteBuffer is backed by native memory (off the Java heap). Android's Conscrypt provider delegates directly to BoringSSL's `EVP_DecryptUpdate`, which writes the plaintext to the native buffer address — the plaintext **never touches the Java heap**.
+
+This replaces the unstable NDK `AKeyStore` API (not in the NDK stable surface, can break at any Android release). No fallback is needed.
 
 ```cpp
-// JNI call into Java Cipher API for AndroidKeyStore decryption.
-// Java side: Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-//            cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv));
-//            byte[] plaintext = cipher.doFinal(ciphertext);
-//
-// After GetByteArrayElements() copies the decrypted bytes to C++,
-// the Java byte[] is zeroed and released immediately.
-
 status_t decryptPin(JNIEnv* env, const char* keyAlias,
                     const uint8_t* ciphertext, size_t ctLen,
+                    const uint8_t* iv, size_t ivLen,
                     uint8_t* plaintext, size_t* ptLen) {
-  // 1. Look up Java class and method IDs for the AndroidKeyStore Cipher wrapper
-  // 2. Call Java method that performs Cipher decryption in AndroidKeystore
-  // 3. Use GetByteArrayElements() to copy decrypted bytes into mlocked buffer
-  // 4. Call ReleaseByteArrayElements(..., JNI_ABORT) to discard JNI copy
-  //    without copying back
-  // 5. Zero the Java byte[] immediately via SetByteArrayRegion() with zeros
-  // 6. Return status
-}
-```
+  // 1. Obtain Android Keystore key via JNI:
+  //    KeyStore ks = KeyStore.getInstance("AndroidKeyStore");
+  //    ks.load(null);
+  //    Key key = ks.getKey(alias, null);
 
-**NDK AKeyStore fallback (unsupported, may be removed):**
+  // 2. Initialize Cipher:
+  //    Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+  //    cipher.init(DECRYPT_MODE, key, new GCMParameterSpec(128, iv));
 
-```cpp
-#include <android/keystore.h>
+  // 3. Allocate direct ByteBuffer wrapping the mlock'd native buffer
+  //    jobject directOut = env->NewDirectByteBuffer(plaintext, *ptLen);
+  //    (plaintext pointer is MlockAllocator::allocate()-ed memory)
 
-status_t decryptPin_fallback(const char* keyAlias,
-                             const uint8_t* ciphertext, size_t ctLen,
-                             uint8_t* plaintext, size_t* ptLen) {
-  // AKeyStore_getKeyStore, AKeyStore_getBlob are NOT stable NDK APIs.
-  // This path is provided as an unsupported fallback only.
-  // See https://issuetracker.google.com for Android Keystore NDK stability.
-  // ... implementation ...
+  // 4. Decrypt directly into the mlock'd native buffer:
+  //    jobject inputBB = env->NewDirectByteBuffer(ciphertext, ctLen);
+  //    int outLen = cipher.doFinal(inputBB, directOut);
+  //    → plaintext written directly to mlock'd native memory
+  //    → NEVER enters Java heap
+
+  // 5. On AEADBadTagException: zero the native buffer, return error
+
+  // 6. Return success; C++ proceeds with coordinate mapping on nativeBuf
 }
 ```
 
 The key alias is the PIN identifier (e.g., `"smartid_pin1"` or `"smartid_pin2"`). The key was created during Phase 0 provisioning with `setUserAuthenticationRequired(true)`.
+
+**Why this works**: `Cipher.doFinal(ByteBuffer, ByteBuffer)` is part of the stable `javax.crypto` API since Java 1.4 / Android API 1. When the output is a direct ByteBuffer, Android's Conscrypt provider (which wraps BoringSSL) writes plaintext to the buffer's native address via `EVP_DecryptUpdate`. The Java heap is never involved for the plaintext.
 
 ### 4. PIN-to-Coordinate Mapping
 
@@ -189,6 +188,6 @@ The sanitizer is called on all code paths:
 
 - [Risk] `mlock()` requires `CAP_IPC_LOCK` which is unavailable to unprivileged Android apps — The NDK library uses `mlock()` via the system call directly (available to any process that has `mlockall(MCL_CURRENT)` or sufficient RLIMIT_MEMLOCK). Android does not expose a specific permission for `mlock()`; verify `getrlimit(RLIMIT_MEMLOCK)` has sufficient budget. If `mlock()` fails (EFAULT/ENOMEM), fall back to two sequential madvise calls: `madvise(..., MADV_WILLNEED)` then `madvise(..., MADV_DONTDUMP)` with explicit page locking via `mincore()` polling loop
 - [Risk] Smart-ID app grid layout changes between versions — PinGridAnalyzer must detect layout version and adjust; use resource ID matching to find the grid container
-- [Risk] `AKeyStore` NDK API is not a stable NDK API — The primary path uses documented Java AndroidKeyStore APIs via JNI. The NDK `AKeyStore_*` paths are an unsupported fallback only and may be removed if undocumented behavior changes
+- [Risk] ~~`AKeyStore` NDK API is not a stable NDK API~~ — **RESOLVED**: The design no longer uses `AKeyStore`. The `Cipher.doFinal(ByteBuffer, ByteBuffer)` path uses only stable, documented javax.crypto APIs. The NDK `AKeyStore_*` path has been removed entirely.
 - [Risk] Memory dumps via /proc/pid/mem or LiME — `mlock()` prevents swap but not in-process memory dumping; assume process memory is adversary-controlled, which is why we never store PINs in Java heap
 - [Trade-off] JNI overhead of passing layout bounds each session vs caching — Layout bounds change only when Smart-ID app updates; cache them keyed by Smart-ID app version hash
