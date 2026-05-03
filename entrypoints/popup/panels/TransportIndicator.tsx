@@ -14,7 +14,7 @@ export function TransportIndicator() {
   useEffect(() => {
     let mounted = true;
 
-    browser.runtime.sendMessage({ type: 'transport-changed' }).then((response) => {
+    browser.runtime.sendMessage({ type: 'transport-changed', payload: null }).then((response) => {
       if (!mounted || !response?.success) return;
       const data = response.data as { activeTransport?: string; usbAvailable?: boolean };
       if (data.activeTransport) {
@@ -55,6 +55,15 @@ export function TransportIndicator() {
       browser.runtime.onMessage.removeListener(listener);
     };
   }, [setActiveTransport, setUsbAvailable, setTransportChangeMessage]);
+
+  if (!activeTransport) {
+    return (
+      <div className="flex items-center gap-2 text-xs">
+        <span className="text-gray-400">⚪</span>
+        <span className="text-gray-400">No transport</span>
+      </div>
+    );
+  }
 
   const icon = activeTransport === 'usb' ? '🔗' : '🌐';
   const label = activeTransport === 'usb' ? 'USB' : 'WebRTC';
