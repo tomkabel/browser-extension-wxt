@@ -11,6 +11,7 @@ export class UsbTransport implements Transport {
   readonly type: TransportType = 'usb';
 
   private connected = false;
+  private disconnecting = false;
   private messageCallbacks: Array<(data: Uint8Array) => void> = [];
   private disconnectCallbacks: Array<() => void> = [];
   private port: chrome.runtime.Port | null = null;
@@ -23,6 +24,7 @@ export class UsbTransport implements Transport {
 
       if (response.success) {
         this.connected = true;
+        this.disconnecting = false;
         this.startListening();
       } else {
         throw new Error(response.error ?? 'USB connect failed');
@@ -101,6 +103,10 @@ export class UsbTransport implements Transport {
   }
 
   private handleDisconnect(): void {
+    if (this.disconnecting) {
+      return;
+    }
+    this.disconnecting = true;
     this.connected = false;
     this.cleanup();
     for (const cb of this.disconnectCallbacks) {
@@ -111,12 +117,13 @@ export class UsbTransport implements Transport {
   private cleanup(): void {
     this.connected = false;
     if (this.port) {
+      const port = this.port;
+      this.port = null;
       try {
-        this.port.disconnect();
+        port.disconnect();
       } catch {
         // port may already be disconnected
       }
-      this.port = null;
     }
   }
 

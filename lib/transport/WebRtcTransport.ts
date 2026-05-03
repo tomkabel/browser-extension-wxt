@@ -5,26 +5,29 @@ export class WebRtcTransport implements Transport {
   readonly type: TransportType = 'webrtc';
 
   private connected = false;
+  private listenerAttached = false;
   private messageCallbacks: Array<(data: Uint8Array) => void> = [];
   private disconnectCallbacks: Array<() => void> = [];
   private latencyMs = 0;
 
   async connect(): Promise<void> {
-    try {
-      const response = await browser.runtime.sendMessage({
-        type: 'webrtc-connection-state',
-      });
-
-      if (response?.state === 'connected') {
-        this.connected = true;
-      } else {
-        this.connected = true;
-      }
-    } catch {
-      this.connected = true;
+    const response = await browser.runtime.sendMessage({
+      type: 'get-connection-state',
+      payload: null,
+    });
+    const state = (response?.data as { connectionState?: string } | undefined)
+      ?.connectionState;
+    this.connected = state === 'connected';
+    if (!this.connected) {
+      throw new Error(
+        `WebRTC is not connected (state: ${state ?? 'unknown'})`,
+      );
     }
 
-    browser.runtime.onMessage.addListener(this.handleMessage);
+    if (!this.listenerAttached) {
+      browser.runtime.onMessage.addListener(this.handleMessage);
+      this.listenerAttached = true;
+    }
   }
 
   async disconnect(): Promise<void> {
@@ -97,7 +100,10 @@ export class WebRtcTransport implements Transport {
 
   private cleanup(): void {
     this.connected = false;
-    browser.runtime.onMessage.removeListener(this.handleMessage);
+    if (this.listenerAttached) {
+      browser.runtime.onMessage.removeListener(this.handleMessage);
+      this.listenerAttached = false;
+    }
   }
 
   private arrayBufferToBase64(buffer: Uint8Array): string {

@@ -17,9 +17,11 @@ export class TransportManager {
   private webrtcTransport: WebRtcTransport;
   private activeTransport: Transport | null = null;
   private usbAvailable = false;
+  private connecting = false;
   private usbPollTimer: ReturnType<typeof setInterval> | null = null;
   private hostCheckTimer: ReturnType<typeof setInterval> | null = null;
   private listeners: Map<string, Array<(data: unknown) => void>> = new Map();
+  private messageCallback: ((data: Uint8Array) => void) | null = null;
 
   constructor() {
     this.usbTransport = new UsbTransport();
@@ -27,7 +29,9 @@ export class TransportManager {
 
     this.usbTransport.onDisconnect(() => {
       if (this.activeTransport?.type === 'usb') {
-        this.switchTransport('webrtc', 'USB disconnected');
+        this.switchTransport('webrtc', 'USB disconnected').catch(() => {
+          // fallback failed — no active transport
+        });
       }
     });
 
@@ -39,22 +43,28 @@ export class TransportManager {
   }
 
   async initialize(): Promise<void> {
-    this.usbAvailable = await this.checkUsbAvailability();
+    if (this.connecting) return;
+    this.connecting = true;
+    try {
+      this.usbAvailable = await this.checkUsbAvailability();
 
-    if (this.usbAvailable) {
-      try {
-        await this.usbTransport.connect();
-        this.activeTransport = this.usbTransport;
-        this.emitChange(null, 'usb', 'USB available on init');
-      } catch {
+      if (this.usbAvailable) {
+        try {
+          await this.usbTransport.connect();
+          this.activeTransport = this.usbTransport;
+          this.emitChange(null, 'usb', 'USB available on init');
+        } catch {
+          await this.connectWebRtc();
+        }
+      } else {
         await this.connectWebRtc();
       }
-    } else {
-      await this.connectWebRtc();
-    }
 
-    this.startUsbPolling();
-    this.startHostAvailabilityCheck();
+      this.startUsbPolling();
+      this.startHostAvailabilityCheck();
+    } finally {
+      this.connecting = false;
+    }
   }
 
   async send(payload: Uint8Array): Promise<void> {
@@ -65,8 +75,10 @@ export class TransportManager {
   }
 
   onMessage(callback: (data: Uint8Array) => void): void {
-    this.usbTransport.onMessage(callback);
-    this.webrtcTransport.onMessage(callback);
+    this.messageCallback = callback;
+    if (this.activeTransport) {
+      this.activeTransport.onMessage(callback);
+    }
   }
 
   on(event: TransportManagerEventType, callback: (data: unknown) => void): void {
@@ -88,11 +100,19 @@ export class TransportManager {
     return this.usbAvailable;
   }
 
-  getStatus(): TransportStatus {
+  async getStatus(): Promise<TransportStatus> {
+    let latencyMs = 0;
+    if (this.activeTransport) {
+      try {
+        latencyMs = await this.activeTransport.getLatency();
+      } catch {
+        latencyMs = -1;
+      }
+    }
     return {
       type: this.activeTransport?.type ?? 'webrtc',
       connected: this.activeTransport?.isAvailable() ?? false,
-      latencyMs: 0,
+      latencyMs,
     };
   }
 
@@ -116,11 +136,18 @@ export class TransportManager {
     reason: string,
   ): Promise<void> {
     const previous = this.activeTransport?.type ?? null;
+    const current = this.activeTransport;
 
     if (target === 'usb' && this.usbAvailable) {
       try {
+        if (current && current.type !== 'usb') {
+          await current.disconnect();
+        }
         await this.usbTransport.connect();
         this.activeTransport = this.usbTransport;
+        if (this.messageCallback) {
+          this.usbTransport.onMessage(this.messageCallback);
+        }
         this.emitChange(previous, 'usb', reason);
         return;
       } catch {
@@ -129,8 +156,15 @@ export class TransportManager {
     }
 
     if (target === 'webrtc') {
+      if (current && current.type !== 'webrtc') {
+        await current.disconnect();
+      }
       await this.connectWebRtc();
-      this.emitChange(previous, 'webrtc', reason);
+      if (this.activeTransport?.type === 'webrtc') {
+        this.emitChange(previous, 'webrtc', reason);
+      } else {
+        this.emit('status-change', { connected: false, reason });
+      }
     }
   }
 
@@ -138,6 +172,9 @@ export class TransportManager {
     try {
       await this.webrtcTransport.connect();
       this.activeTransport = this.webrtcTransport;
+      if (this.messageCallback) {
+        this.webrtcTransport.onMessage(this.messageCallback);
+      }
     } catch {
       this.activeTransport = null;
     }
