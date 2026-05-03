@@ -17,6 +17,19 @@ import (
 	nm "github.com/smartid/vault6-native-host/native_messaging"
 )
 
+type usbReadWriter struct {
+	out *gousb.OutEndpoint
+	in  *gousb.InEndpoint
+}
+
+func (rw *usbReadWriter) Write(p []byte) (int, error) {
+	return aoa.WriteBulk(rw.out, p, aoa.DefaultTransferTimeout)
+}
+
+func (rw *usbReadWriter) Read(p []byte) (int, error) {
+	return aoa.ReadBulk(rw.in, p, aoa.DefaultTransferTimeout)
+}
+
 const (
 	version = "0.1.0"
 	appName = "smartid-aoa-host"
@@ -26,6 +39,7 @@ type Session struct {
 	mu            sync.Mutex
 	device        *aoa.AoaDevice
 	usbCtx        *gousb.Context
+	usbRW         *usbReadWriter
 	connected     bool
 	cryptoSession *sidcrypto.Session
 	readLoop      *ReadLoop
@@ -148,6 +162,7 @@ func (s *Session) closeLocked() {
 		s.device.Close()
 		s.device = nil
 	}
+	s.usbRW = nil
 	s.connected = false
 }
 
@@ -195,16 +210,26 @@ func registerHandlers(r *nm.Router, session *Session, writer *nm.MessageWriter) 
 			return &nm.Message{Type: nm.MsgConnectResult, Success: nm.BoolPtr(false), Error: fmt.Sprintf("open accessory device: %v", err)}, nil
 		}
 
+		usbRW := &usbReadWriter{
+			out: aoaDev.OutEndpoint(),
+			in:  aoaDev.InEndpoint(),
+		}
+		session.usbRW = usbRW
 		session.device = aoaDev
 		session.connected = true
 		session.connectedAt = time.Now()
 
-		// TODO: Perform actual ECDH key exchange over USB control channel.
-		// This placeholder produces an all-zero session key — acceptable for
-		// development/testing but MUST be replaced before production use.
-		cryptoSess := &sidcrypto.Session{
-			Key: make([]byte, sidcrypto.SessionKeySize),
-			Seq: sidcrypto.NewSequenceTracker(),
+		cryptoSess, err := sidcrypto.PerformHostKeyExchange(usbRW)
+		if err != nil {
+			session.device = nil
+			session.connected = false
+			session.connectedAt = time.Time{}
+			_ = aoaDev.Close()
+			return &nm.Message{
+				Type:    nm.MsgConnectResult,
+				Success: nm.BoolPtr(false),
+				Error:   fmt.Sprintf("key exchange failed: %v", err),
+			}, nil
 		}
 
 		session.cryptoSession = cryptoSess
@@ -281,14 +306,44 @@ func registerHandlers(r *nm.Router, session *Session, writer *nm.MessageWriter) 
 			return &nm.Message{Type: nm.MsgRekeyResult, Success: nm.BoolPtr(false), Error: "no active session"}, nil
 		}
 
-		// TODO: perform actual rekey over control channel with key rotation.
-		// Resetting sequence counters without rotating the AES-GCM key would
-		// cause nonce reuse — a critical cryptographic break. Return failure
-		// until proper key rotation is implemented.
-		return &nm.Message{
-			Type:    nm.MsgRekeyResult,
-			Success: nm.BoolPtr(false),
-			Error:   "rekey not implemented safely: key rotation required",
-		}, nil
+		if session.device == nil || session.usbRW == nil {
+			return &nm.Message{Type: nm.MsgRekeyResult, Success: nm.BoolPtr(false), Error: "device not available"}, nil
+		}
+
+		if session.readLoop != nil {
+			session.readLoop.Stop()
+			session.readLoop = nil
+		}
+
+		// Perform fresh X25519 key exchange over the raw USB bulk endpoints.
+		// The exchange runs on its own wire protocol rather than through the
+		// encrypted channel, so it acts as its own control channel and provides
+		// proper key rotation — the new AES-GCM key is derived from a fresh
+		// ECDH negotiation, eliminating nonce reuse concerns.
+		oldKey := session.cryptoSession.Key
+		oldSeq := session.cryptoSession.Seq
+
+		newSession, err := sidcrypto.PerformHostKeyExchange(session.usbRW)
+		if err != nil {
+			readLoop := NewReadLoop(session, writer)
+			session.readLoop = readLoop
+			readLoop.Start(context.Background())
+			return &nm.Message{
+				Type:    nm.MsgRekeyResult,
+				Success: nm.BoolPtr(false),
+				Error:   fmt.Sprintf("rekey failed: %v", err),
+			}, nil
+		}
+
+		session.cryptoSession = newSession
+
+		sidcrypto.ZeroSessionKey(&oldKey)
+		oldSeq.Reset()
+
+		readLoop := NewReadLoop(session, writer)
+		session.readLoop = readLoop
+		readLoop.Start(context.Background())
+
+		return &nm.Message{Type: nm.MsgRekeyResult, Success: nm.BoolPtr(true)}, nil
 	})
 }
