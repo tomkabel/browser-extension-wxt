@@ -1,6 +1,20 @@
 import { defineConfig, devices } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const CI = !!process.env.CI;
+
+const manifestPath = join(process.cwd(), '.output/chrome-mv3/manifest.json');
+
+let extensionPath: string | undefined;
+try {
+  JSON.parse(readFileSync(manifestPath, 'utf-8'));
+  extensionPath = join(process.cwd(), '.output/chrome-mv3');
+} catch {
+  console.warn(
+    'Extension manifest not found at .output/chrome-mv3/. Run `bun run build` before E2E tests.',
+  );
+}
 
 export default defineConfig({
   testDir: './e2e',
@@ -24,16 +38,14 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         launchOptions: {
-          args: ['--headless=new', '--disable-gpu', '--no-sandbox'],
+          args: [
+            '--headless=new',
+            '--disable-gpu',
+            '--no-sandbox',
+            ...(extensionPath ? [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`] : []),
+          ],
         },
       },
     },
   ],
-
-  webServer: {
-    command: 'bun run dev',
-    url: 'http://localhost:5173',
-    reuseExistingServer: !CI,
-    timeout: 120000,
-  },
 });

@@ -11,3 +11,6 @@ coverage/
 credentials.*
 .env.local
 .env.production
+signaling-server/node_modules/
+signaling-server/mydatabase.db
+*.tsbuildinfo
