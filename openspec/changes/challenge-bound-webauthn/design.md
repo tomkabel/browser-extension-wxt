@@ -3,7 +3,7 @@
 Challenge-Bound WebAuthn is the cryptographic mechanism that fuses network truth (zkTLS), human intent (PC biometric), and transaction context (control code) into a single unforgeable assertion. The WebAuthn challenge parameter — normally a random server-generated nonce — becomes a deterministic hash of all three sources:
 
 ```
-Challenge = SHA256(zkTLS_Proof || Origin || Control_Code || Session_Nonce)
+Challenge = SHA-256(zkTLS_Proof || Origin || Control_Code || Session_Nonce)
 ```
 
 This ensures:
@@ -52,7 +52,7 @@ To prevent ambiguity attacks (e.g., hash length extension, delimiter injection),
 ├───────────────────────────────────────────────┤
 │ Padding (variable, to next 32-byte boundary)   │
 └───────────────────────────────────────────────┘
-Challenge = SHA256(serialized_bytes)
+Challenge = SHA-256(serialized_bytes)
 ```
 
 ### 2. WebAuthn Assertion Invocation
@@ -90,7 +90,7 @@ During initial device pairing, the extension creates a WebAuthn credential bound
 
 ```typescript
 const publicKey: PublicKeyCredentialCreationOptions = {
-  rp: { id: chrome.runtime.id, name: 'SmartID Vault' },
+  rp: { id: new URL(chrome.runtime.getURL('/')).hostname, name: 'SmartID Vault' },
   user: {
     id: crypto.getRandomValues(new Uint8Array(32)),
     name: 'SmartID Vault User',
@@ -118,15 +118,15 @@ The Java `ChallengeVerifier` performs these steps in order:
 
 ```
 1. Verify zkTLS proof → extract attested control code + origin
-2. Recompute: expected_challenge = SHA256(zkTLS_Proof || extracted_origin || attested_code || session_nonce)
+2. Recompute: expected_challenge = SHA-256(TLV_serialize(zkTLS_Proof, extracted_origin, attested_code, session_nonce))
 3. Decode: actual_challenge = base64url_decode(assertion.response.clientDataJSON.challenge)
 4. Assert: actual_challenge === expected_challenge
 5. Retrieve: passkey_pk = trust_store.lookup(credential_id = assertion.rawId)
-6. Verify: ECDSA(passkey_pk, assertion.response.signature, actual_challenge || ...)
+6. Verify: ECDSA(passkey_pk, assertion.response.signature, authenticatorData || SHA-256(clientDataJSON))
 7. If all pass: session is authorized
 ```
 
-Step 6 uses the standard WebAuthn signature verification (signature covers `authenticatorData || SHA256(clientDataJSON)`).
+Step 6 uses the standard WebAuthn signature verification (signature covers `authenticatorData || SHA-256(clientDataJSON)`).
 
 ### 5. Session Nonce Management
 

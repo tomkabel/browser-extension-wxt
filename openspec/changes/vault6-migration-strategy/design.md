@@ -88,25 +88,25 @@ PHASE 1 (Current)            PHASE 1.5 (Bridge)           PHASE 2 (V6 Ultimate)
 ```
 vault6-migration-strategy (this change)
   │
-  ├── usb-aoa-transport-proxy ──────────────┐
-  │    (Go Host + AOA 2.0)                   │
-  │                                          │
-  ├── ndk-enclave-pin-vault ─────────────┐   │
-  │    (C++ mlock + coordinate mapper)    │   │
-  │                                       │   │
-  │    └── ghost-actuator-gesture-injection  │
-  │         (dispatchGesture execution)      │
-  │                                       │   │
-  │         └── eidas-qes-hardware-gate   │   │
-  │              (Volume Down QES gate)   │   │
-  │                                       │   │
-  ├── zktls-context-engine ───────────────┤   │
-  │    (WASM TLSNotary prover)            │   │
-  │                                       │   │
-  │    └── challenge-bound-webauthn ──────┘   │
-  │         (SHA256 binding)                  │
-  │                                           │
-  └───────────────────────────────────────────┘
+  ├── usb-aoa-transport-proxy ──────────────────┐
+  │    (Go Host + AOA 2.0)                      │
+  │                                              │
+  ├── ndk-enclave-pin-vault ───────────────┐    │
+  │    (C++ mlock + coordinate mapper)      │    │
+  │                                         │    │
+  │    └── ghost-actuator-gesture-injection │    │
+  │         (dispatchGesture execution)     │    │
+  │                                         │    │
+  │         └── eidas-qes-hardware-gate     │    │
+  │              (Volume Down QES gate)     │    │
+  │                                         │    │
+  ├── zktls-context-engine ─────────────────┤    │
+  │    (WASM TLSNotary prover)              │    │
+  │                                         │    │
+  │    └── challenge-bound-webauthn ────────┘    │
+  │         (SHA-256 binding)                    │
+  │                                              │
+  └──────────────────────────────────────────────┘
                          │
                          ▼
                   FULL V6 INTEGRATION

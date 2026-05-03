@@ -13,7 +13,7 @@ The JVM never possesses the plaintext PIN string. It only receives anonymous `fl
 
 - **`libvault_enclave.so`**: C++ shared library compiled with the Android NDK. Contains:
   - `mlock` memory allocator for PIN buffer
-  - Keystore NDK API caller for PIN decryption
+  - Keystore JNI bridge using Cipher.doFinal with direct ByteBuffer for PIN decryption (off-heap)
   - PIN-to-coordinate mapper (receives Java layout bounds, maps decrypted digits to X/Y)
   - `explicit_bzero` memory sanitizer
 - **JNI Bridge**: Java/Kotlin layer that:
@@ -32,7 +32,7 @@ The JVM never possesses the plaintext PIN string. It only receives anonymous `fl
 ### New Capabilities
 
 - `ndk-mlock-allocator`: C++ memory allocator that uses `mlock()` for physical RAM locking, preventing swap-based PIN leakage
-- `keystore-ndk-bridge`: Direct NDK API call to Android Keystore for PIN decryption, bypassing JVM
+- `keystore-ndk-bridge`: JNI-call to Java Cipher.doFinal(ByteBuffer, ByteBuffer) with direct ByteBuffer output — decrypted plaintext written directly to mlock'd native memory, never touches Java heap
 - `pin-to-coordinate-mapper`: Algorithm that maps decrypted PIN digit string to X/Y float coordinates based on Java-provided grid layout bounds
 - `explicit-bzero-sanitizer`: Memory zeroing on all exit paths including信号 handlers, exceptions, and JNI crashes
 - `jni-pin-bridge`: Java ↔ C++ JNI interface that passes layout bounds in, receives float coordinates out
@@ -58,4 +58,4 @@ PHASE 2 — Critical V6 capability. This is the Layer 3 defense that eliminates 
 
 - Blocked on: [`ghost-actuator-gesture-injection`](#) (enclave produces input for the actuator)
 - Blocking: `eidas-qes-hardware-gate` (needs enclave for PIN2 handling)
-- Related: `usb-aoa-transport-proxy` (transport for the verified payload that authorizes PIN decryption)
+- Builds on: `usb-aoa-transport-proxy` (completed — transport for the verified payload that authorizes PIN decryption)

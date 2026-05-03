@@ -54,10 +54,10 @@
 
 ## 8. Testing & Polish
 
-- [x] 7.1 Unit test: login form detection on various DOM structures (standard, SPA, password-only, no form)
-- [ ] 7.2 Unit test: credential request rate limiting (same domain within 30s)
-- [ ] 7.3 Unit test: credential injection and buffer zeroing
-- [ ] 7.4 E2E test: full credential request flow (detect → request → inject)
-- [ ] 7.5 Manual QA: test on real login page (e.g., GitHub)
-- [ ] 7.6 Manual QA: test with phone locked vs unlocked
-- [x] 7.7 Run `bun run lint && bun run typecheck` and fix all issues
+- [x] 8.1 Unit test: login form detection on various DOM structures (standard, SPA, password-only, no form)
+- [ ] 8.2 Unit test: credential request rate limiting (same domain within 30s)
+- [ ] 8.3 Unit test: credential injection and buffer zeroing
+- [ ] 8.4 E2E test: full credential request flow (detect → request → inject)
+- [ ] 8.5 Manual QA: test on real login page (e.g., GitHub)
+- [ ] 8.6 Manual QA: test with phone locked vs unlocked
+- [x] 8.7 Run `bun run lint && bun run typecheck` and fix all issues
