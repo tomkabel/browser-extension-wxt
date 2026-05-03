@@ -3,6 +3,7 @@ set -euo pipefail
 
 LIBUSB_VERSION="${LIBUSB_VERSION:-1.0.27}"
 LIBUSB_URL="https://github.com/libusb/libusb/releases/download/v${LIBUSB_VERSION}/libusb-${LIBUSB_VERSION}.tar.bz2"
+LIBUSB_SHA256="${LIBUSB_SHA256:-}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEPS_DIR="$SCRIPT_DIR/../deps"
 SRC_DIR="/tmp/libusb-${LIBUSB_VERSION}"
@@ -13,7 +14,14 @@ download_libusb() {
     return
   fi
   echo "Downloading libusb ${LIBUSB_VERSION}..."
-  curl -sL "$LIBUSB_URL" | tar xj -C /tmp
+  local archive="/tmp/libusb-${LIBUSB_VERSION}.tar.bz2"
+  curl -fsSL "$LIBUSB_URL" -o "$archive"
+  if [ -n "$LIBUSB_SHA256" ]; then
+    echo "${LIBUSB_SHA256}  ${archive}" | sha256sum -c -
+  else
+    echo "WARNING: LIBUSB_SHA256 not set; skipping integrity verification" >&2
+  fi
+  tar xjf "$archive" -C /tmp
 }
 
 generate_config_h() {

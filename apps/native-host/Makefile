@@ -10,6 +10,7 @@ PROJECT_ROOT := $(shell pwd)
 all: build
 
 build:
+	mkdir -p $(BUILD_DIR)
 	CGO_ENABLED=1 go build -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(APP_NAME) .
 
 build-deps:
