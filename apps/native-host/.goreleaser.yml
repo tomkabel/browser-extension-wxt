@@ -1,0 +1,71 @@
+version: 2
+
+project_name: smartid-aoa-host
+
+before:
+  hooks:
+    - go mod tidy
+    - ./scripts/build-libusb.sh
+
+builds:
+  - id: linux-amd64
+    main: .
+    binary: smartid-aoa-host
+    goos: [linux]
+    goarch: [amd64]
+    env:
+      - CGO_ENABLED=1
+      - CC={{ .Env.GORELEASER_PROJECT_ROOT }}/scripts/zig-cc.sh x86_64-linux-gnu
+      - CGO_CFLAGS=-I{{ .Env.GORELEASER_PROJECT_ROOT }}/deps/x86_64-linux-gnu/include/libusb-1.0
+      - CGO_LDFLAGS=-L{{ .Env.GORELEASER_PROJECT_ROOT }}/deps/x86_64-linux-gnu/lib -lusb-1.0
+    ldflags:
+      - -s -w
+      - -X main.version={{ .Version }}
+
+  - id: linux-arm64
+    main: .
+    binary: smartid-aoa-host
+    goos: [linux]
+    goarch: [arm64]
+    env:
+      - CGO_ENABLED=1
+      - CC={{ .Env.GORELEASER_PROJECT_ROOT }}/scripts/zig-cc.sh aarch64-linux-gnu
+      - CGO_CFLAGS=-I{{ .Env.GORELEASER_PROJECT_ROOT }}/deps/aarch64-linux-gnu/include/libusb-1.0
+      - CGO_LDFLAGS=-L{{ .Env.GORELEASER_PROJECT_ROOT }}/deps/aarch64-linux-gnu/lib -lusb-1.0
+    ldflags:
+      - -s -w
+      - -X main.version={{ .Version }}
+
+  - id: windows-amd64
+    main: .
+    binary: smartid-aoa-host
+    goos: [windows]
+    goarch: [amd64]
+    env:
+      - CGO_ENABLED=1
+      - CC={{ .Env.GORELEASER_PROJECT_ROOT }}/scripts/zig-cc.sh x86_64-windows-gnu
+      - CGO_CFLAGS=-I{{ .Env.GORELEASER_PROJECT_ROOT }}/deps/x86_64-windows-gnu/include/libusb-1.0
+      - CGO_LDFLAGS=-L{{ .Env.GORELEASER_PROJECT_ROOT }}/deps/x86_64-windows-gnu/lib -lusb-1.0 -lsetupapi -lkernel32
+    ldflags:
+      - -s -w
+      - -X main.version={{ .Version }}
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"

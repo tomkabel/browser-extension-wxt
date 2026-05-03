@@ -13,9 +13,9 @@ Without this binding, the WebAuthn assertion proves only that a human touched th
 
 ## What Changes
 
-- **Challenge Derivation**: `Challenge = SHA256(zkTLS_Proof || Origin || Control_Code || Session_Nonce)`. Implemented in the extension's background service worker.
+- **Challenge Derivation**: `Challenge = SHA-256(zkTLS_Proof || Origin || Control_Code || Session_Nonce)`. Implemented in the extension's background service worker.
 - **WebAuthn Assertion with Custom Challenge**: Call `navigator.credentials.get({ publicKey: { challenge: derivedChallenge, rpId, ... } })`. The Host OS prompts with the computed challenge (user sees the transaction context via the OS biometric dialog where supported).
-- **Challenge Recomposition on Android**: The Android Vault (Java Orchestrator) recomputes `SHA256(zkTLS_Proof || Origin || Code || Nonce)` after verifying the zkTLS proof. It compares this with the challenge in the WebAuthn assertion.
+- **Challenge Recomposition on Android**: The Android Vault (Java Orchestrator) recomputes `SHA-256(zkTLS_Proof || Origin || Control_Code || Session_Nonce)` after verifying the zkTLS proof. It compares this with the challenge in the WebAuthn assertion.
 - **Passkey Provisioning**: During Phase 0 pairing, the extension creates a Passkey bound to `chrome-extension://<id>`. The public key is stored in the Android trust-store.
 - **Assertion Verification**: Android Vault verifies the WebAuthn assertion signature against the stored Passkey public key, using the recomputed challenge.
 
@@ -23,9 +23,9 @@ Without this binding, the WebAuthn assertion proves only that a human touched th
 
 ### New Capabilities
 
-- `challenge-derivation`: `SHA256(zkProof || origin || code || nonce)` challenge computation with canonical serialization to prevent hash length extension or ambiguity attacks
+- `challenge-derivation`: `SHA-256(zkProof || origin || code || nonce)` challenge computation with canonical serialization to prevent hash length extension or ambiguity attacks
 - `webauthn-assertion-binding`: Invocation of `navigator.credentials.get()` with the derived challenge; extraction of authenticator data, signature, and client data JSON
-- `challenge-recomputation-engine`: Android-side recomputation of the challenge after zkTLS verification, with strict comparison against the assertion's `response.clientDataJSON.challenge`
+- `challenge-recomposition-engine`: Android-side recomputation of the challenge after zkTLS verification, with strict comparison against the assertion's `response.clientDataJSON.challenge`
 - `passkey-provisioning`: Phase 0 WebAuthn credential creation bound to the extension origin; public key storage in Android trust-store
 
 ### Modified Capabilities
@@ -47,6 +47,7 @@ PHASE 2 — Core V6 capability. Implements the cryptographic binding between net
 
 ## Dependencies
 
-- Blocked on: `zktls-context-engine` (needs the zkTLS proof as challenge input), `usb-aoa-transport-proxy` (for Android-side verification, though can be tested locally with WebRTC fallback)
+- Blocked on: `zktls-context-engine` (needs the zkTLS proof as challenge input)
+- Builds on: `usb-aoa-transport-proxy` (completed — Go Native Messaging Host + AOA 2.0 available for Android-side verification; WebRTC fallback also available for local testing)
 - Blocking: `ndk-enclave-pin-vault`, `ghost-actuator-gesture-injection`, `eidas-qes-hardware-gate` (all depend on the verified user intent from this layer)
 - Related: `vault6-migration-strategy` for overall sequence

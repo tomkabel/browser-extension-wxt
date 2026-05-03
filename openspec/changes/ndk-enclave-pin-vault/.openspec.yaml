@@ -1,2 +1,19 @@
 schema: spec-driven
 created: 2026-05-03
+specs:
+  - specs/ndk-mlock-allocator
+  - specs/keystore-ndk-bridge
+  - specs/pin-to-coordinate-mapper
+  - specs/explicit-bzero-sanitizer
+  - specs/jni-pin-bridge
+context: |
+  Phase 2 — C++ NDK memory-locked enclave (libvault_enclave.so) using mlock(),
+  Java Cipher.doFinal(ByteBuffer,ByteBuffer) with direct ByteBuffer for PIN
+  decryption into mlock'd native memory (off Java heap), PIN-to-coordinate
+  mapper, and explicit_bzero() memory sanitization.
+  The JVM never possesses the plaintext PIN string — only anonymous float[x,y]
+  coordinate pairs cross the JNI boundary. Guard pages detect buffer overflows.
+  V6 Alignment: Critical V6 defense eliminating PIN extraction via memory dump.
+    Enables Ghost Actuator's blind gesture injection. Blocking eidas-qes-hardware-gate
+    which needs enclave for PIN2 handling. Builds on completed usb-aoa-transport-proxy
+    for command delivery that authorizes PIN decryption.

@@ -1,2 +1,18 @@
 schema: spec-driven
 created: 2026-05-03
+specs:
+  - specs/gesture-sequence-builder
+  - specs/pin-grid-analyzer
+  - specs/blind-actuation-engine
+  - specs/execution-confirmation
+context: |
+  Phase 2 — Android AccessibilityService using dispatchGesture() for fully
+  automated Smart-ID PIN entry on FLAG_SECURE windows. Blind actuation: the NDK
+  enclave provides anonymous X/Y float coordinates; the actuator has no knowledge
+  of which digit corresponds to which coordinate. Includes PIN Grid Analyzer
+  (extracts Smart-ID app button positions), Gesture Sequence Builder, execution
+  confirmation via Accessibility event stream monitoring, and error recovery.
+  V6 Alignment: Core V6 execution layer. Transforms mathematically verified
+    intent (zkTLS + WebAuthn) into physical action on Smart-ID app without ever
+    handling plaintext secrets. Blocked on ndk-enclave-pin-vault for coordinate
+    inputs. Builds on completed usb-aoa-transport-proxy for command delivery.

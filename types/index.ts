@@ -79,7 +79,10 @@ export type MessageType =
   | 'webrtc-send'
   | 'webrtc-data-received'
   | 'webrtc-start-pairing'
-  | 'webrtc-disconnect';
+  | 'webrtc-disconnect'
+  | 'usb-connected'
+  | 'usb-disconnected'
+  | 'transport-changed';
 
 export interface ExtensionMessage<T = unknown> {
   type: MessageType;
