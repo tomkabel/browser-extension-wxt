@@ -28,7 +28,7 @@ func (rs *RekeyableSession) GetSession() SessionSnapshot {
 	copy(keyCopy, rs.session.Key)
 	return SessionSnapshot{
 		Key: keyCopy,
-		Seq: rs.session.Seq,
+		Seq: rs.session.Seq.Clone(),
 	}
 }
 

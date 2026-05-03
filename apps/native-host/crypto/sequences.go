@@ -62,3 +62,12 @@ func (st *SequenceTracker) Reset() {
 	st.outbound = 0
 	st.inbound = 0
 }
+
+func (st *SequenceTracker) Clone() *SequenceTracker {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return &SequenceTracker{
+		outbound: st.outbound,
+		inbound:  st.inbound,
+	}
+}
