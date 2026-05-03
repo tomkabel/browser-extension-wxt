@@ -15,7 +15,10 @@ signaling-server/node_modules/
 signaling-server/mydatabase.db
 *.tsbuildinfo
 
-# Go native host build artifacts
+# Native host build outputs and cross-compilation dependencies
 apps/native-host/build/
-apps/native-host/dist/
 apps/native-host/deps/
+apps/native-host/dist/
+
+# Kilo AI agent local configuration
+.kilo/

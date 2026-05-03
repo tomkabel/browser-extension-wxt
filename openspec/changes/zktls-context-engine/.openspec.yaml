@@ -1,7 +1,7 @@
 schema: spec-driven
 created: 2026-05-03
 specs:
-  - specs/tlsnotary-wasm-prover
+  - specs/signed-header-attestation
   - specs/control-code-verification
   - specs/zkp-key-management
 context: |

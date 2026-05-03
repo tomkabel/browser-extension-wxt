@@ -56,7 +56,7 @@ The proving operates as follows:
 │                                                              │
 │  ANDROID VAULT (Java Orchestrator)                           │
 │                                                              │
-│  9. AttestationVerifier receives {code, signature, keyId}    │
+│  9. AttestationVerifier receives {controlCode, signature, keyId} │
 │  10. Verifies ECDSA P-256 signature with local public key    │
 │  11. Extracts attested control code for ChallengeVerifier    │
 └─────────────────────────────────────────────────────────────┘
@@ -68,6 +68,8 @@ The proving operates as follows:
 SmartID-Attestation: v1;<base64url(json-payload)>;<base64url(ecdsa-signature)>;<key-id>
 
 Where json-payload = {"code":"4892","session":"abc123","ts":1715000000}
+
+Note: the header JSON uses the compact field name `code`, while the internal transport representation uses `controlCode` for clarity.
 ```
 
 The header format uses base64url (RFC 4648 §5, no padding) for safe HTTP transport:
@@ -95,8 +97,10 @@ async function verifyAttestation(
 
     const [, payloadB64, sigB64, keyId] = parts;
     const sig = base64urlDecode(sigB64);
-    const payloadBytes = encoder.encode(payloadB64);
     const payload = JSON.parse(new TextDecoder().decode(base64urlDecode(payloadB64)));
+    // Sign canonical raw UTF-8 JSON bytes (deterministic serialization with sorted keys)
+    // for cross-layer compatibility with Android java.security.Signature
+    const payloadBytes = new TextEncoder().encode(canonicalJsonStringify(payload));
 
     const pubKey = TRUSTED_RP_KEYS[rpDomain]?.[keyId];
     if (!pubKey) {
@@ -116,9 +120,18 @@ async function verifyAttestation(
         return null;
     }
 
-    return { code: payload.code, keyId, signature: sigB64 };
+    // Timestamp validation: reject if |now - ts| > 30 seconds (clock skew tolerance)
+    const now = Math.floor(Date.now() / 1000);
+    if (Math.abs(now - payload.ts) > 30) {
+        log.warn(`Attestation timestamp skew too large for ${rpDomain}`);
+        return null; // graceful fallback to DOM-only mode
+    }
+
+    return { controlCode: payload.code, keyId, signature: sigB64 };
 }
 ```
+
+> **Decision note:** The signature is computed over the canonical raw UTF-8 JSON bytes (deterministic serialization with sorted keys), NOT over the base64url-encoded string. This ensures cross-layer compatibility with Android's `java.security.Signature`, which operates on raw byte arrays. Using base64url-encoded strings would introduce an unnecessary encoding layer and risk subtle incompatibilities between TypeScript `TextEncoder` and Java `String.getBytes(UTF_8)`.
 
 ### 4. RP Signing Key Management
 
@@ -128,10 +141,12 @@ Bank/RP signing keys are ECDSA P-256 keys dedicated to this purpose (NOT the ban
 interface TrustedRpSigningKey {
   domain: string          // e.g. "lhv.ee"
   keyId: string           // e.g. "lhv-2026q2" — used for rotation
-  publicKey: CryptoKey    // ECDSA P-256, imported via crypto.subtle.importKey()
+  publicKeyBytes: ArrayBuffer  // raw ECDSA P-256 public key, uncompressed point format, 65 bytes
   notBefore: string       // ISO 8601
   notAfter: string        // ISO 8601
 }
+
+Note: `publicKeyBytes` is stored as raw bytes in the manifest. At runtime, the extension imports it via `crypto.subtle.importKey('raw', publicKeyBytes, { name: 'ECDSA', namedCurve: 'P-256' }, true, ['verify'])` to obtain a `CryptoKey`.
 ```
 
 Keys are updated via:
@@ -140,6 +155,8 @@ Keys are updated via:
 - User can manually trigger an update in the popup
 
 Key rotation is handled by pre-distributing the new key before the old key expires (overlap window). Multiple active keys per domain are supported.
+
+Rollback protection is enforced per-key: the manifest contains a monotonic version for each `TrustedRpSigningKey`, and the extension rejects updates with version <= last-seen for that specific key.
 
 ### 5. Performance Budget
 
@@ -155,6 +172,17 @@ Key rotation is handled by pre-distributing the new key before the old key expir
 
 Compare with the prior TLSNotary approach: 2MB WASM module, 1-2s ZKP generation, Notary server RTT.
 
+### 6. Manifest Signing Key Bootstrap
+
+The manifest of `TrustedRpSigningKey` entries is itself signed to prevent tampering. The initial manifest signing public key is **hardcoded/bundled with the extension at build time** (key pinning). This key is an ECDSA P-256 public key stored as raw uncompressed bytes (`ArrayBuffer`, 65 bytes), identical in format to `TrustedRpSigningKey.publicKeyBytes`.
+
+Trust chain:
+1. **Initial trust**: The build-time pinned public key verifies the first signed manifest.
+2. **Manifest updates**: Every manifest update is signed by the corresponding private key. The extension verifies the manifest signature before applying any key additions or rotations.
+3. **Key rotation for the manifest signing key itself**: If the manifest signing key must be rotated, a signed revocation + replacement message is issued by the **previous** key. The message contains the new public key and a monotonic version number. The extension verifies this message with the old key, then trusts the new key for subsequent manifest updates. The old key is retained in a small revocation history to prevent rollback to a compromised key.
+
+This bootstrap model avoids any external trust anchor (no CA, no DNSSEC) and ensures the extension only accepts manifest updates signed by a key it already trusts.
+
 ## Risks / Trade-offs
 
 - [Risk] Bank must add a response header — This requires coordination with each of the 4 whitelisted RPs. However, the implementation cost per bank is trivial: add one response header on the Smart-ID login endpoint. This is substantially simpler than deploying a Notary server or modifying TLS behavior.
@@ -162,4 +190,4 @@ Compare with the prior TLSNotary approach: 2MB WASM module, 1-2s ZKP generation,
 - [Risk] Key rotation synchronization — If the bank rotates their signing key and the extension's manifest is outdated, verification fails until the manifest refreshes. Mitigated by: bundling keys with overlap windows, background manifest refresh, and graceful degradation to DOM-only.
 - [Trade-off] No TLSNotary, no witness of the TLS transcript — This approach proves "the bank's signing key committed to this control code" rather than "the bank's TLS session contained this string." The security level is equivalent for the threat model: a RAT cannot forge either, and both degrade to DOM-only on failure. The operational complexity is drastically lower.
 - [Trade-off] No WASM, no Offscreen Document — Attestation runs entirely in the service worker. The existing Offscreen Document is preserved for WebRTC only. No `SharedArrayBuffer` or `COOP/COEP` headers needed anywhere.
-- [Risk] Replay of old attestation headers — Mitigated by including a session identifier and timestamp in the signed payload. The Android Vault checks that the session matches the current WebAuthn transaction.
+- [Risk] Replay of old attestation headers — Mitigated by including a session identifier and timestamp in the signed payload. The Android Vault checks that the session matches the current WebAuthn transaction. The extension also validates the timestamp: attestation is rejected if `|now - ts| > 30 seconds`, with graceful fallback to DOM-only mode.

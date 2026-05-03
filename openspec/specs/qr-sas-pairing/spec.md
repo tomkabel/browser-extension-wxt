@@ -1,3 +1,5 @@
+version: 1.1.0
+
 ## MODIFIED Requirements
 
 ### Requirement: QR displays SAS code (both numeric and emoji modes)
@@ -41,3 +43,10 @@ The Android app SHALL scan the QR with CameraX, extract the SAS code, display it
 - **AND** display "Do these match your laptop screen?"
 - **AND** wait for the user to tap "Yes, Match" or "No, Cancel"
 - **AND** only complete pairing AFTER user confirms match
+
+## Changelog
+
+| Version | Date | Change | Source |
+|---------|------|--------|--------|
+| 1.0.0 | 2026-05-01 | Initial spec — QR display with 6-digit numeric SAS, phone scan and confirm | `secure-pairing` |
+| 1.1.0 | 2026-05-01 | Added emoji SAS support (both numeric and emoji modes) | `emoji-sas-verification` |

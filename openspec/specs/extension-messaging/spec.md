@@ -1,5 +1,7 @@
 ## Purpose
 
+version: 1.1.0
+
 Define the message protocol and data flows between the content script, background service worker, and popup components.
 ## Requirements
 ### Requirement: Content script to background messaging (Domain Tracking)
@@ -135,3 +137,11 @@ Background (after zkTLS proof + WebAuthn assertion obtained)
 - **THEN** it SHALL dispatch via the active transport (AOA primary, WebRTC fallback)
 - **AND** the Android Vault SHALL NOT return PIN digits — only verification status + execution outcome
 - **AND** SHALL return `{ success: false, error: 'Phone not connected' }` if no transport is available
+
+## Changelog
+
+| Version | Date | Change | Source |
+|---------|------|--------|--------|
+| 1.0.0 | 2026-05-01 | Initial spec — popup/content/background messaging, domain tracking, message registry | `fix-tab-domain-detection` |
+| 1.0.1 | 2026-05-01 | Fixed initial domain load detection; updated health endpoint and API fallback | `fix-domain-detection` |
+| 1.1.0 | 2026-05-01 | Added Flow 4 (real transaction dispatch), Flow 5 (credential request), Flow 6 (V6 PIN authorization) | `architectural-security-remediation` |

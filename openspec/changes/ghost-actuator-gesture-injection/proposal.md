@@ -30,7 +30,7 @@ V6's Ghost Actuator solves this with "Blind Actuation": instead of interacting w
 - `gesture-sequence-builder`: Converts float coordinate arrays to `GestureDescription.StrokeDescription` sequences with configurable timing
 - `pin-grid-analyzer`: Accessibility tree walking to extract Smart-ID app PIN grid layout, button positions, and dimensions
 - `blind-actuation-engine`: `dispatchGesture()` invocation with execution monitoring, retry logic, and error recovery
-- `fl Secure-bypass-monitor`: Detection of gesture injection success/failure on FLAG_SECURE windows
+- `flag-secure-bypass-detection`: Detection of gesture injection success/failure on FLAG_SECURE windows, verifying the target app package and checking screen state before injection (covered by `blind-actuation-engine` target verification and `execution-confirmation` screen state checks)
 
 ### Modified Capabilities
 

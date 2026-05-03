@@ -8,7 +8,7 @@ The extension SHALL maintain a set of trusted RP signing public keys (ECDSA P-25
 
 - **WHEN** the extension is installed
 - **THEN** it SHALL include a `TrustedRpSigningKey` manifest for whitelisted RPs (lhv.ee, swedbank.ee, seb.ee, tara.ria.ee)
-- **AND** each entry SHALL contain: `domain`, `publicKey` (raw ECDSA P-256 public key bytes, uncompressed point format), `keyId` (key identifier for rotation, e.g. `"lhv-2026q2"`), `notBefore` (ISO 8601), `notAfter` (ISO 8601)
+- **AND** each entry SHALL contain: `domain`, `publicKeyBytes` (raw ECDSA P-256 public key bytes, uncompressed point format, 65 bytes), `keyId` (key identifier for rotation, e.g. `"lhv-2026q2"`), `notBefore` (ISO 8601), `notAfter` (ISO 8601)
 - **AND** each key SHALL be a dedicated ECDSA P-256 signing key — NOT the bank's TLS certificate key (TLS keys rotate on different schedules and may be managed by different teams)
 
 #### Scenario: Key refresh from update server

@@ -101,7 +101,7 @@ vault6-migration-strategy (this change)
   │              (Volume Down QES gate)     │    │
   │                                         │    │
   ├── zktls-context-engine ─────────────────┤    │
-  │    (WASM TLSNotary prover)              │    │
+  │    (Signed-Header Attestation Engine)   │    │
   │                                         │    │
   │    └── challenge-bound-webauthn ────────┘    │
   │         (SHA-256 binding)                    │
@@ -173,6 +173,38 @@ When V6 capabilities reach parity with Phase 1:
 3. Keep Phase 1 code for one release cycle after V6 launch
 4. Archive Phase 1 OpenSpec changes after the deprecation period
 5. Remove Phase 1 code in the release following archive
+
+## Regression Testing Plan
+
+Before any V6 change is merged, the following regression testing gates MUST pass:
+
+### Archived Change Test Suite
+All 10 archived OpenSpec changes MUST have their test suites executed and passing. This ensures no V6 modification regresses previously delivered Phase 1 capabilities.
+
+### Critical Regression Paths
+The following end-to-end flows MUST be verified on every V6-bound pull request:
+
+1. **Pairing** — QR code generation → WebRTC + E2EE signaling → Noise XX handshake → 3-emoji SAS human verification → paired state persisted in `chrome.storage.session`
+2. **Transaction Detection** — Content script on `lhv.ee` detects Smart-ID payment buttons, extracts amount/recipient/reference, and dispatches `detect-transaction` to the background service worker
+3. **WebRTC Signaling** — Offscreen document creates offer/answer via cloud signaling server; TURN credentials fetched from `/turn-credentials`; data channel established within 5 seconds
+4. **WebAuthn PRF Re-authentication** — Silent session resumption using PRF-derived keypair; no user interaction required; falls back to `chrome.storage.local` when PRF is unavailable
+5. **Content Script Domain Detection** — Correct domain parsing for multi-level TLDs (`co.uk`, `com.au`); injection only on `lhv.ee` and `youtube.tomabel.ee`; MutationObserver debounce handles SPA navigation
+
+### Automated Regression Suite
+The following command MUST pass in CI before merge:
+
+```bash
+bun run ci:check
+```
+
+This runs `typecheck → test → build` and validates that no TypeScript, unit/integration, or build errors are introduced.
+
+### Manual Regression Checklist
+- [ ] **Transport Abstraction — WebRTC Fallback** — Verify that when the USB AOA native host is unavailable (not installed, no Android device connected, or user disabled USB mode), the extension transparently falls back to WebRTC transport without user-visible error. Confirm this via:
+  - Disabling the native host binary (rename or remove from `NativeMessagingHosts` manifest)
+  - Attempting a pairing flow from a clean session
+  - Confirming the popup shows "Wireless mode" and the WebRTC data channel is established
+  - Confirming transaction signing completes successfully over WebRTC
 
 ## Risks / Trade-offs
 

@@ -1,5 +1,7 @@
 ## Purpose
 
+version: 1.2.0
+
 Define the transaction detection, command protocol, credential detection, and key rotation mechanisms used to securely verify banking transactions and deliver login credentials between the browser and phone.
 
 ## Requirements
@@ -68,3 +70,11 @@ The extension and phone SHALL rotate encryption keys after 1000 messages to prev
 - **WHEN** the cipher state message counter reaches 1000
 - **THEN** both sides SHALL derive new encryption keys via `HKDF(current_key, salt=current_nonce, info="smartid2-noise-rotate")`
 - **AND** the message counter SHALL reset to 0
+
+## Changelog
+
+| Version | Date | Change | Source |
+|---------|------|--------|--------|
+| 1.0.0 | 2026-05-01 | Initial spec — transaction detection, command protocol, key rotation | `transaction-protocol` |
+| 1.1.0 | 2026-05-01 | Added login field detection complementing transaction detection | `jit-credential-delivery` |
+| 1.2.0 | 2026-05-01 | Wired `handleIncomingResponse()` into data channel handler; specified key rotation algorithm | `architectural-security-remediation` |
