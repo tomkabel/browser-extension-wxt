@@ -25,7 +25,7 @@ The project has 10 unit/integration test files and a functional vitest.config.ts
 - `content-message-bus-tests`: Integration tests for contentMessageBus.ts covering message routing, context validation guards, and error handling.
 
 ### Modified Capabilities
-- `nuxt-package-scripts`: package.json scripts SHALL include test:e2e, test:e2e:ui, test:coverage, and ci:check commands.
+- `wxt-package-scripts`: package.json scripts SHALL include test:e2e, test:e2e:ui, test:coverage, and ci:check commands.
 - `vitest-configuration`: vitest.config.ts SHALL include coverage provider, include/exclude patterns, and threshold enforcement.
 
 ## Impact

@@ -16,13 +16,14 @@
 - [ ] 2.7 Unit test: valid attestation header with correct ECDSA P-256 signature passes verification
 - [ ] 2.8 Unit test: invalid signature (tampered payload) fails verification
 - [ ] 2.9 Unit test: unknown key-id returns null (graceful degradation)
+- [ ] 2.10 Implement timestamp validation: reject attestation if |now - ts| > 30 seconds, with graceful fallback to DOM-only mode
 
 ## 3. TrustedRpSigningKey Manifest
 
 - [ ] 3.1 Create initial `TrustedRpSigningKey` manifest JSON file bundled with the extension: 4 domains × 1-2 keys each
 - [ ] 3.2 Implement manifest loading: import bundled keys at extension startup
 - [ ] 3.3 Implement background key refresh: fetch signed manifest from extension update server, verify manifest signature, apply updates
-- [ ] 3.4 Implement manifest rollback protection: reject version <= last-seen, persist last-seen version per domain
+- [ ] 3.4 Implement manifest rollback protection: reject version <= last-seen, persist last-seen version per key
 - [ ] 3.5 Implement manual key refresh trigger in popup
 - [ ] 3.6 Unit test: manifest with tampered entries is rejected
 - [ ] 3.7 Unit test: key rotation with overlap window works (both old and new keys accepted during overlap)
@@ -47,6 +48,8 @@
 - [ ] 5.5 Unit test: valid ECDSA P-256 signature verifies successfully
 - [ ] 5.6 Unit test: tampered signature fails verification
 - [ ] 5.7 Unit test: expired key (beyond notAfter) fails verification
+- [ ] 5.8 Implement session identifier matching: Android Vault rejects attestation if session does not match current WebAuthn transaction
+- [ ] 5.9 Implement timestamp validation in Android Vault: reject attestation if |now - ts| > 30 seconds
 
 ## 6. Integration & Testing
 

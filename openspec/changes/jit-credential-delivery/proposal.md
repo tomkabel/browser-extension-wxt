@@ -43,6 +43,16 @@ Currently the extension can detect transactions (banking) but has no login field
 - `lib/store.ts` — Add credential request state to Zustand store
 - Android: `CredentialRequestHandler.kt`, `AutoApproveManager.kt`, `VaultLookup.kt`
 
+## Boundary with Archived Changes
+
+This change **builds on top of** archived infrastructure without re-implementing it. Specifically:
+
+- **Retained from `transaction-protocol` (do not modify)**: `ControlCommand`/`ControlResponse` types, sequence numbering, key rotation algorithm, ACK/retry logic, `commandClient.ts` base class
+- **Modified by this change**: `MessageType` union (adds `credential-request`, `credential-response`, `detect-login-form`), `commandClient.ts` (adds `sendCredentialRequest()` method)
+- **Added by this change**: `login-field-detection` capability, `credential-request-protocol`, `context-aware-approval`, `micro-payload-injection`, `CredentialPanel.tsx`, credential state in Zustand store
+- **Retained from `extension-ui-panels` (do not modify)**: Panel lazy-loading architecture, `App.tsx` routing pattern, `SessionStatus.tsx`, base Zustand store structure
+- **Modified by this change**: `App.tsx` (adds `CredentialPanel` to lazy-loaded panels), `lib/store.ts` (adds `credentialState`/`credentialDomain`/`credentialStatus` slices)
+
 ## V6 Alignment
 
 PHASE 1 — This change implements a generic website password manager that is architecturally distinct from V6's Smart-ID PIN automation. In the V6 end state:

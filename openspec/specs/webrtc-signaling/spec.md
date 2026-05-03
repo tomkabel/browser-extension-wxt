@@ -1,3 +1,5 @@
+version: 1.1.0
+
 ## MODIFIED Requirements
 
 ### Requirement: WebRTC data channel transport with ICE candidate waterfall
@@ -58,3 +60,10 @@ After successful pairing, both sides SHALL cache the peer's static key.
 - **WHEN** pairing succeeds
 - **THEN** the extension SHALL store the phone's static public key in `chrome.storage.session`
 - **AND** the phone SHALL store the extension's static public key in `EncryptedSharedPreferences`
+
+## Changelog
+
+| Version | Date | Change | Source |
+|---------|------|--------|--------|
+| 1.0.0 | 2026-05-01 | Initial spec — WebRTC data channel with DTLS, SDP relay, cached pairing state | `secure-pairing` |
+| 1.1.0 | 2026-05-01 | Added ICE candidate waterfall (local → TURN/UDP → TURN/TCP 443) and TURN credential fetch | `resilient-transport` |

@@ -24,7 +24,7 @@ The replacement — `SmartID-Attestation` response header signed with ECDSA P-25
 
 ### New Capabilities
 
-- `signed-response-attestation`: (replaces `tlsnotary-wasm-prover`) Intercepts HTTP responses from whitelisted RPs, verifies ECDSA P-256 signed control code attestations in the `SmartID-Attestation` header
+- `signed-header-attestation`: (replaces `tlsnotary-wasm-prover`) Intercepts HTTP responses from whitelisted RPs, verifies ECDSA P-256 signed control code attestations in the `SmartID-Attestation` header
 - `control-code-verification`: Pipeline that extracts the attested control code from the signed header and cross-references with DOM-scraped code
 - `zkp-key-management`: Embedding and rotation of RP ECDSA P-256 signing keys for attestation verification
 

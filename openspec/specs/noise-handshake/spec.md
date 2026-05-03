@@ -1,5 +1,7 @@
 ## Purpose
 
+version: 1.2.0
+
 Define the Noise Protocol handshake patterns (XX and IK) used for secure pairing and reconnection between the browser extension and the phone companion app.
 ## Requirements
 ### Requirement: Noise XX first pairing
@@ -51,3 +53,11 @@ Both TypeScript and Java Noise implementations SHALL pass the official Noise Pro
 
 - **WHEN** the official Noise Protocol test vectors for XX and IK are run against both implementations
 - **THEN** ALL test vectors SHALL pass (handshake output, cipher state derivation, message ordering)
+
+## Changelog
+
+| Version | Date | Change | Source |
+|---------|------|--------|--------|
+| 1.0.0 | 2026-05-01 | Initial spec — Noise XX, IK, test vectors | `secure-pairing` |
+| 1.1.0 | 2026-05-01 | Remote static key extraction fix; added 3-emoji SAS derivation | `architectural-security-remediation` |
+| 1.2.0 | 2026-05-03 | Added IK reconnection with PRF-derived key | `webauthn-prf-silent-reauth` |
