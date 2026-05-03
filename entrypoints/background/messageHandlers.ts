@@ -22,6 +22,7 @@ import { cachePrfCredentialId } from '~/lib/crypto/fallbackAuth';
 import { withTimeout } from '~/lib/asyncUtils';
 import { createSlidingWindowLimiter, createDomainRateLimiter } from '~/lib/rateLimit/slidingWindow';
 import { isReplayAssertion, recordAssertion } from '~/lib/replayProtection';
+import { TransportManager } from '~/lib/transport';
 import type {
   CredentialRequestPayload,
   LoginFormDetection,
@@ -395,6 +396,19 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       };
     }
   },
+
+  'transport-changed': async () => {
+    if (!transportManager) {
+      return { success: true, data: { activeTransport: null, usbAvailable: false } };
+    }
+    return {
+      success: true,
+      data: {
+        activeTransport: transportManager.getActiveTransportType(),
+        usbAvailable: transportManager.isUsbAvailable(),
+      },
+    };
+  },
 };
 
 async function getTabIdFromSender(sender: chrome.runtime.MessageSender): Promise<number | null> {
@@ -447,3 +461,15 @@ const mfaRateLimiter = createSlidingWindowLimiter(MFA_RATE_LIMIT_WINDOW_MS, MFA_
 
 const CREDENTIAL_RATE_LIMIT_MS = 30_000;
 const credentialRateLimiter = createDomainRateLimiter(CREDENTIAL_RATE_LIMIT_MS);
+
+let transportManager: TransportManager | null = null;
+
+export function getTransportManager(): TransportManager | null {
+  return transportManager;
+}
+
+export async function initializeTransportManager(): Promise<void> {
+  if (transportManager) return;
+  transportManager = new TransportManager();
+  await transportManager.initialize();
+}
