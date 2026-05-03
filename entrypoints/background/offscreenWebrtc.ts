@@ -49,7 +49,7 @@ export async function createOffscreenDocument(): Promise<boolean> {
 
 export async function closeOffscreenDocument(): Promise<void> {
   const transportManager = getTransportManager();
-  if (transportManager?.isUsbAvailable()) {
+  if (transportManager?.getActiveTransportType() === 'usb') {
     log.info('[OffscreenWebRTC] USB session active, keeping offscreen document alive');
     return;
   }
