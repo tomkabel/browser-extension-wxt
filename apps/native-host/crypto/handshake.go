@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"net"
 	"time"
 )
 
@@ -27,16 +28,30 @@ type Session struct {
 	hostSK   []byte
 }
 
+func writeFull(w io.Writer, buf []byte) error {
+	for len(buf) > 0 {
+		n, err := w.Write(buf)
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return io.ErrShortWrite
+		}
+		buf = buf[n:]
+	}
+	return nil
+}
+
 func WriteKeyExchangeMsg(w io.Writer, msgType byte, payload []byte) error {
 	header := make([]byte, 3)
 	header[0] = msgType
 	binary.BigEndian.PutUint16(header[1:], uint16(len(payload)))
 
-	if _, err := w.Write(header); err != nil {
+	if err := writeFull(w, header); err != nil {
 		return fmt.Errorf("write kex header: %w", err)
 	}
 	if len(payload) > 0 {
-		if _, err := w.Write(payload); err != nil {
+		if err := writeFull(w, payload); err != nil {
 			return fmt.Errorf("write kex payload: %w", err)
 		}
 	}
@@ -62,7 +77,22 @@ func ReadKeyExchangeMsg(r io.Reader) (*KeyExchangeMsg, error) {
 	return &KeyExchangeMsg{Type: msgType, Payload: payload}, nil
 }
 
+func setDeadline(rw io.ReadWriter) {
+	if conn, ok := rw.(net.Conn); ok {
+		conn.SetDeadline(time.Now().Add(KeyExchangeTimeout))
+	}
+}
+
+func clearDeadline(rw io.ReadWriter) {
+	if conn, ok := rw.(net.Conn); ok {
+		conn.SetDeadline(time.Time{})
+	}
+}
+
 func PerformHostKeyExchange(rw io.ReadWriter) (*Session, error) {
+	setDeadline(rw)
+	defer clearDeadline(rw)
+
 	kp, err := GenerateKeyPair()
 	if err != nil {
 		return nil, fmt.Errorf("generate keypair: %w", err)

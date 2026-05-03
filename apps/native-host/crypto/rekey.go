@@ -6,6 +6,11 @@ import (
 	"sync"
 )
 
+type SessionSnapshot struct {
+	Key []byte
+	Seq *SequenceTracker
+}
+
 type RekeyableSession struct {
 	mu      sync.Mutex
 	session *Session
@@ -16,10 +21,15 @@ func NewRekeyableSession(s *Session, rw io.ReadWriter) *RekeyableSession {
 	return &RekeyableSession{session: s, rw: rw}
 }
 
-func (rs *RekeyableSession) GetSession() *Session {
+func (rs *RekeyableSession) GetSession() SessionSnapshot {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	return rs.session
+	keyCopy := make([]byte, len(rs.session.Key))
+	copy(keyCopy, rs.session.Key)
+	return SessionSnapshot{
+		Key: keyCopy,
+		Seq: rs.session.Seq,
+	}
 }
 
 func (rs *RekeyableSession) Rekey() error {
