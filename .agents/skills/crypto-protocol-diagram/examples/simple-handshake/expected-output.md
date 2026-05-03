@@ -8,7 +8,7 @@ Protocol Summary) and the written Mermaid file.
 
 ## Inline Response
 
-```
+```text
 Protocol: Simple Authenticated Key Exchange
 Output:   simple-authenticated-key-exchange.md
 
@@ -51,8 +51,8 @@ Initiator                          Responder
    |                                   |
 
    [on signature verification failure]
-   |  abort(INVALID_SIGNATURE)         |
-   |<- - - - - - - - - - - - - - - - - +
+   |  Verify raises locally            |
+   |  (no abort frame transmitted)     |
 
 ## Protocol Summary
 
@@ -105,7 +105,7 @@ sequenceDiagram
     end
 
     alt signature verification failure
-        R-->>I: abort(INVALID_SIGNATURE)
+        Note over R: Verify raises locally (no abort frame)
     end
 \`\`\`
 

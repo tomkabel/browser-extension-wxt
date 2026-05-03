@@ -7,7 +7,7 @@ version: "1.0.0"
 
 # Healthcare PHI/PII Compliance Patterns
 
-Patterns for protecting patient data, clinician data, and financial data in healthcare applications. Applicable to HIPAA (US), DISHA (India), GDPR (EU), and general healthcare data protection.
+Patterns for protecting patient data, clinician data, and financial data in healthcare applications. Applicable to HIPAA (US), GDPR (EU); DISHA (India) is an emerging/proposed framework or regional guidance — and general healthcare data protection.
 
 ## When to Use
 
@@ -42,11 +42,17 @@ CREATE POLICY "staff_read_own_facility"
     WHERE user_id = auth.uid() AND role IN ('doctor','nurse','lab_tech','admin')
   ));
 
--- Audit log: insert-only (tamper-proof)
+  -- Audit log: insert-only
+  -- NOTE: RLS can be bypassed by table owners and roles with BYPASSRLS
+  -- (including superusers). For stronger protection:
+  --   1. ALTER TABLE audit_log FORCE ROW LEVEL SECURITY;
+  --   2. Audit and revoke BYPASSRLS from any roles that access audit_log.
 CREATE POLICY "audit_insert_only" ON audit_log FOR INSERT
   TO authenticated WITH CHECK (user_id = auth.uid());
 CREATE POLICY "audit_no_modify" ON audit_log FOR UPDATE USING (false);
 CREATE POLICY "audit_no_delete" ON audit_log FOR DELETE USING (false);
+
+ALTER TABLE audit_log FORCE ROW LEVEL SECURITY;
 ```
 
 ### Audit Trail
@@ -61,10 +67,15 @@ interface AuditEntry {
   action: 'create' | 'read' | 'update' | 'delete' | 'print' | 'export';
   resource_type: string;
   resource_id: string;
-  changes?: { before: object; after: object };
+  changes?: { changed_keys: string[]; redacted_summary?: string };
   ip_address: string;
   session_id: string;
 }
+
+Note: Do NOT store full before/after objects — they may contain PHI/PII.
+Only record changed_keys (the list of field names that changed) or a
+redacted/hashed summary. If before/after values must be captured for
+compliance, apply an explicit allowlist filter to strip PHI/PII fields.
 ```
 
 ### Common Leak Vectors

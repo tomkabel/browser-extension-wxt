@@ -41,7 +41,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
-    command: npm run dev
+    command: bun run dev
 
   db:
     image: postgres:16-alpine
@@ -84,8 +84,8 @@ volumes:
 # Stage: dependencies
 FROM node:22-alpine AS deps
 WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci
+COPY package.json bun.lock ./
+RUN bun install
 
 # Stage: dev (hot reload, debug tools)
 FROM node:22-alpine AS dev
@@ -93,14 +93,14 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 EXPOSE 3000
-CMD ["npm", "run", "dev"]
+CMD ["bun", "run", "dev"]
 
 # Stage: build
 FROM node:22-alpine AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npm run build && npm prune --production
+RUN bun run build
 
 # Stage: production (minimal image)
 FROM node:22-alpine AS production
@@ -154,7 +154,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ### Service Discovery
 
 Services in the same Compose network resolve by service name:
-```
+```text
 # From "app" container:
 postgres://postgres:postgres@db:5432/app_dev    # "db" resolves to the db container
 redis://redis:6379/0                             # "redis" resolves to the redis container

@@ -31,10 +31,8 @@ Cross-language patterns for memory-safe programming including RAII, ownership, s
 
 ### 2. Safety Spectrum
 
-```
+```text
 Manual (C) → Smart Pointers (C++) → Ownership (Rust) → GC (Go, Java)
-Less safe                                              More safe
-More control                                           Less control
 ```
 
 ## Patterns by Language
@@ -82,18 +80,21 @@ private:
 class Database {
 public:
     void update(const std::string& key, const std::string& value) {
-        std::lock_guard<std::mutex> lock(mutex_); // Released on scope exit
+        std::unique_lock<std::shared_mutex> lock(mutex_); // Exclusive lock
         data_[key] = value;
     }
 
     std::string get(const std::string& key) {
-        std::shared_lock<std::shared_mutex> lock(shared_mutex_);
-        return data_[key];
+        std::shared_lock<std::shared_mutex> lock(mutex_); // Shared lock
+        auto it = data_.find(key);
+        if (it != data_.end()) {
+            return it->second;
+        }
+        return {};  // Return empty string if not found
     }
 
 private:
-    std::mutex mutex_;
-    std::shared_mutex shared_mutex_;
+    std::shared_mutex mutex_;  // Single mutex for both read and write
     std::map<std::string, std::string> data_;
 };
 

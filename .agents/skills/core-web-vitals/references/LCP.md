@@ -12,11 +12,8 @@ Largest Contentful Paint (LCP) measures when the largest content element in the 
 
 ## LCP timeline
 
-```
+```text
 [  Server Response  ][  Resource Load  ][  Render  ]
-       TTFB              Download         Paint
-       └─────────────────────────────────────┘
-                         LCP Time
 ```
 
 ## Detailed optimizations
@@ -83,6 +80,15 @@ res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
   </style>
   
   <!-- Defer non-critical CSS -->
+  <!--
+    CSP Note: The inline onload handler below requires CSP allowances.
+    If using strict CSP (script-src without 'unsafe-inline'), use one of:
+    a) Move handler to external script loaded with a per-request nonce
+       e.g. <script nonce="..."> ... addEventListener ... </script>
+    b) Use script-src-attr 'unsafe-hashes' with the handler's SHA-256 hash
+    c) Use script-src-attr 'unsafe-inline' (least secure)
+    The external-script-with-nonce approach is recommended.
+  -->
   <link rel="preload" href="/styles.css" as="style" 
         onload="this.onload=null;this.rel='stylesheet'">
 </head>

@@ -388,9 +388,8 @@ Use `aria-live` regions to announce dynamic content changes without moving focus
 # Lighthouse accessibility audit
 npx lighthouse https://example.com --only-categories=accessibility
 
-# axe-core
-npm install @axe-core/cli -g
-axe https://example.com
+# axe-core (no install needed)
+bunx @axe-core/cli https://example.com
 ```
 
 ### Manual testing

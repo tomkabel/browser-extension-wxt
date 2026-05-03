@@ -23,7 +23,7 @@ Production deployment workflows and CI/CD best practices.
 
 Replace instances gradually — old and new versions run simultaneously during rollout.
 
-```
+```text
 Instance 1: v1 → v2  (update first)
 Instance 2: v1        (still running v1)
 Instance 3: v1        (still running v1)
@@ -45,7 +45,7 @@ Instance 3: v1 → v2  (update last)
 
 Run two identical environments. Switch traffic atomically.
 
-```
+```text
 Blue  (v1) ← traffic
 Green (v2)   idle, running new version
 
@@ -62,7 +62,7 @@ Green (v2) ← traffic
 
 Route a small percentage of traffic to the new version first.
 
-```
+```text
 v1: 95% of traffic
 v2:  5% of traffic  (canary)
 
@@ -84,21 +84,20 @@ v2: 100% of traffic
 
 ```dockerfile
 # Stage 1: Install dependencies
-FROM node:22-alpine AS deps
+FROM oven/bun:1 AS deps
 WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci --production=false
+COPY package.json bun.lock ./
+RUN bun install --production=false
 
 # Stage 2: Build
-FROM node:22-alpine AS builder
+FROM oven/bun:1 AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npm run build
-RUN npm prune --production
+RUN bun run build
 
 # Stage 3: Production image
-FROM node:22-alpine AS runner
+FROM oven/bun:1 AS runner
 WORKDIR /app
 
 RUN addgroup -g 1001 -S appgroup && adduser -S appuser -u 1001
@@ -114,7 +113,7 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
 
-CMD ["node", "dist/server.js"]
+CMD ["bun", "run", "dist/server.js"]
 ```
 
 ### Multi-Stage Dockerfile (Go)
@@ -167,7 +166,7 @@ CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers
 
 ### Docker Best Practices
 
-```
+```text
 # GOOD practices
 - Use specific version tags (node:22-alpine, not node:latest)
 - Multi-stage builds to minimize image size
@@ -206,11 +205,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm test -- --coverage
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - run: bun run lint
+      - run: bun run typecheck
+      - run: bun test -- --coverage
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -253,7 +252,7 @@ jobs:
 
 ### Pipeline Stages
 
-```
+```text
 PR opened:
   lint → typecheck → unit tests → integration tests → preview deploy
 

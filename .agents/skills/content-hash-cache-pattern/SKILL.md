@@ -66,8 +66,16 @@ from typing import Any
 def write_cache(cache_dir: Path, entry: CacheEntry) -> None:
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache_file = cache_dir / f"{entry.file_hash}.json"
-    data = serialize_entry(entry)
-    cache_file.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    data = json.dumps(serialize_entry(entry), ensure_ascii=False)
+    # Atomic write: write to temp file, then rename
+    tmp_file = cache_dir / f"{entry.file_hash}.tmp.{os.getpid()}"
+    try:
+        tmp_file.write_text(data, encoding="utf-8")
+        os.replace(tmp_file, cache_file)
+    except BaseException:
+        if tmp_file.is_file():
+            tmp_file.unlink(missing_ok=True)
+        raise
 
 def read_cache(cache_dir: Path, file_hash: str) -> CacheEntry | None:
     cache_file = cache_dir / f"{file_hash}.json"
@@ -91,15 +99,18 @@ def extract_with_cache(
     *,
     cache_enabled: bool = True,
     cache_dir: Path = Path(".cache"),
+    extractor_version: str = "1",
+    config_fingerprint: str = "",
 ) -> ExtractedDocument:
     """Service layer: cache check -> extraction -> cache write."""
     if not cache_enabled:
         return extract_text(file_path)  # Pure function, no cache knowledge
 
     file_hash = compute_file_hash(file_path)
+    cache_key = f"{file_hash}:{extractor_version}:{config_fingerprint}" if extractor_version or config_fingerprint else file_hash
 
     # Check cache
-    cached = read_cache(cache_dir, file_hash)
+    cached = read_cache(cache_dir, cache_key)
     if cached is not None:
         logger.info("Cache hit: %s (hash=%s)", file_path.name, file_hash[:12])
         return cached.document
@@ -107,7 +118,7 @@ def extract_with_cache(
     # Cache miss -> extract -> store
     logger.info("Cache miss: %s (hash=%s)", file_path.name, file_hash[:12])
     doc = extract_text(file_path)
-    entry = CacheEntry(file_hash=file_hash, source_path=str(file_path), document=doc)
+    entry = CacheEntry(file_hash=cache_key, source_path=str(file_path), document=doc)
     write_cache(cache_dir, entry)
     return doc
 ```

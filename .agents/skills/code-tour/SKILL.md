@@ -26,7 +26,7 @@ Use this skill when:
 Examples:
 - onboarding a new maintainer
 - architecture tour for one service or package
-- PR-review walk-through anchored to changed files
+- PR-review walkthrough anchored to changed files
 - RCA tour showing the failure path
 - security review tour of trust boundaries and key checks
 

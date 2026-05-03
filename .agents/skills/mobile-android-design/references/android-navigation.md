@@ -7,7 +7,7 @@
 ```kotlin
 // build.gradle.kts
 dependencies {
-    implementation("androidx.navigation:navigation-compose:2.7.7")
+    implementation("androidx.navigation:navigation-compose:2.8.0")
     // For type-safe navigation (recommended)
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
 }

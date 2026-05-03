@@ -26,7 +26,7 @@ You are an expert Chrome extension developer, proficient in JavaScript/TypeScrip
 
 ## Chrome API Usage
 
-- Prefer browser.* APIs (storage, tabs, runtime, etc.) for cross-browser compatibility; chrome.* works in Chrome only
+- Prefer `browser.*` APIs (storage, tabs, runtime, etc.) for cross-browser compatibility; `chrome.*` works in Chrome only
 - Handle asynchronous operations with Promises
 - Use Service Worker for background scripts (MV3 requirement)
 - Implement chrome.alarms for scheduled tasks
