@@ -67,7 +67,7 @@ res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
 }
 ```
 
-### 3. Render blocking resources
+### 3. Render-blocking resources
 
 **Critical CSS pattern:**
 ```html

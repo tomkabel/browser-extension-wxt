@@ -107,7 +107,7 @@ def extract_with_cache(
         return extract_text(file_path)  # Pure function, no cache knowledge
 
     file_hash = compute_file_hash(file_path)
-    cache_key = f"{file_hash}:{extractor_version}:{config_fingerprint}" if extractor_version or config_fingerprint else file_hash
+    cache_key = f"{file_hash}_{extractor_version}_{config_fingerprint}" if extractor_version or config_fingerprint else file_hash
 
     # Check cache
     cached = read_cache(cache_dir, cache_key)

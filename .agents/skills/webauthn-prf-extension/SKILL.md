@@ -73,7 +73,7 @@ export async function createCredentialWithPRF(): Promise<PublicKeyCredential> {
   // Store credential ID for later assertion
   const clientExtensionResults = credential.getClientExtensionResults() as AuthenticationExtensionsPRFOutputs;
   if (!clientExtensionResults.prf?.enabled) {
-    throw new ExtensionError('PRF_NOT_SUPPORTED');
+    throw new ExtensionError('PRF not supported', 'PRF_NOT_SUPPORTED');
   }
 
   return credential;
@@ -107,14 +107,14 @@ export async function assertPRFSilent(credentialId: Uint8Array): Promise<Uint8Ar
     const results = assertion.getClientExtensionResults() as AuthenticationExtensionsPRFOutputs;
 
     if (!results.prf?.results?.first) {
-      throw new ExtensionError('PRF_OUTPUT_MISSING');
+      throw new ExtensionError('PRF output missing', 'PRF_OUTPUT_MISSING');
     }
 
     return new Uint8Array(results.prf.results.first);
   } catch (err) {
     // Silent mediation may throw NotAllowedError if user interaction needed
     if (err instanceof DOMException && err.name === 'NotAllowedError') {
-      throw new ExtensionError('SILENT_AUTH_FAILED');
+      throw new ExtensionError('Silent auth failed', 'SILENT_AUTH_FAILED');
     }
     throw err;
   }
