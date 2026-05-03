@@ -1,10 +1,3 @@
-/**
- * Centralized message handlers with proper error handling.
- * - Validates incoming messages
- * - Returns consistent response structure
- * - Handles all message types
- */
-
 import { browser } from 'wxt/browser';
 import { TabStateManager } from './tabState';
 import { ApiRelay } from './apiRelay';
@@ -17,8 +10,24 @@ import {
   setConnectionError,
 } from './offscreenWebrtc';
 import { startPairing } from './pairingService';
-import { activateSession, getSession, performSilentReauth } from './sessionManager';
-import type { CredentialRequestPayload, LoginFormDetection, TransactionData } from '~/types';
+import {
+  activateSession,
+  getSession,
+  performSilentReauth,
+  setPrfSalt,
+  setPrfAvailable,
+} from './sessionManager';
+import { confirmSasMatch, rejectSasMatch, getCommandClient } from './pairingCoordinator';
+import { cachePrfCredentialId } from '~/lib/crypto/fallbackAuth';
+import { withTimeout } from '~/lib/asyncUtils';
+import { createSlidingWindowLimiter, createDomainRateLimiter } from '~/lib/rateLimit/slidingWindow';
+import { isReplayAssertion, recordAssertion } from '~/lib/replayProtection';
+import type {
+  CredentialRequestPayload,
+  LoginFormDetection,
+  MessageType,
+  TransactionData,
+} from '~/types';
 import { log } from '~/lib/errors';
 
 type MessageHandler = (
@@ -32,10 +41,8 @@ interface MessageResponse {
   error?: string;
 }
 
-const handlers: Record<string, MessageHandler> = {
+const handlers: Partial<Record<MessageType, MessageHandler>> = {
   'tab-domain-changed': async (payload, sender) => {
-    // tabId comes from sender.tab.id (auto-populated by browser.runtime)
-    // NOT from payload - that was the bug
     const { url } = payload as { domain: string; url: string };
     const tabId = sender.tab?.id;
 
@@ -173,13 +180,11 @@ const handlers: Record<string, MessageHandler> = {
   },
 
   'pairing-confirmed': async () => {
-    const { confirmSasMatch } = await import('./pairingCoordinator');
     const ok = await confirmSasMatch();
     return { success: ok, error: ok ? undefined : 'Confirmation internal error' };
   },
 
   'pairing-rejected': async () => {
-    const { rejectSasMatch } = await import('./pairingCoordinator');
     await rejectSasMatch();
     return { success: true };
   },
@@ -201,17 +206,20 @@ const handlers: Record<string, MessageHandler> = {
         };
       }
 
-      const { getCommandClient } = await import('./pairingCoordinator');
       const client = getCommandClient();
       if (!client) {
         return { success: false, error: 'Command client not ready' };
       }
 
-      const response = await client.sendAuthenticateTransaction({
-        amount: tx.amount,
-        recipient: tx.recipient,
-        timestamp: Date.now(),
-      });
+      const response = await withTimeout(
+        client.sendAuthenticateTransaction({
+          amount: tx.amount,
+          recipient: tx.recipient,
+          timestamp: Date.now(),
+        }),
+        10_000,
+        'Transaction verification timed out',
+      );
 
       return {
         success: true,
@@ -272,9 +280,6 @@ const handlers: Record<string, MessageHandler> = {
       return { success: false, error: 'PRF not enabled on credential' };
     }
 
-    const { setPrfAvailable, setPrfSalt } = await import('./sessionManager');
-    const { cachePrfCredentialId } = await import('~/lib/crypto/fallbackAuth');
-
     await cachePrfCredentialId(credentialId);
     await setPrfSalt(new Uint8Array(prfSalt));
     await setPrfAvailable();
@@ -308,20 +313,21 @@ const handlers: Record<string, MessageHandler> = {
     }
 
     try {
-      const { getCommandClient } = await import('./pairingCoordinator');
       const client = getCommandClient();
       if (!client) {
         return { success: true, data: { ...detection, clientReady: false } };
       }
 
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Credential request timed out')), 10_000),
+      const response = await withTimeout(
+        client.sendCredentialRequest(
+          detection.domain,
+          detection.url,
+          detection.usernameSelector,
+          detection.passwordSelector,
+        ),
+        10_000,
+        'Credential request timed out',
       );
-
-      const response = await Promise.race([
-        client.sendCredentialRequest(detection.domain, detection.url, detection.usernameSelector, detection.passwordSelector),
-        timeoutPromise,
-      ]);
 
       const credStatus = (response.data?.status as string) || 'error';
 
@@ -339,14 +345,21 @@ const handlers: Record<string, MessageHandler> = {
         credBuffer.fill(0);
       }
 
-      return { success: true, data: { status: credStatus, approval_mode: response.data?.approval_mode } };
+      return {
+        success: true,
+        data: { status: credStatus, approval_mode: response.data?.approval_mode },
+      };
     } catch (err) {
-      return { success: true, data: { error: err instanceof Error ? err.message : 'Request failed' } };
+      return {
+        success: true,
+        data: { error: err instanceof Error ? err.message : 'Request failed' },
+      };
     }
   },
 
   'credential-request': async (payload) => {
-    const { domain, url, usernameFieldId, passwordFieldId } = payload as CredentialRequestPayload;
+    const { domain, url, usernameFieldId, passwordFieldId } =
+      payload as CredentialRequestPayload;
 
     if (!domain || !url) {
       return { success: false, error: 'Missing domain or URL in credential request' };
@@ -357,20 +370,16 @@ const handlers: Record<string, MessageHandler> = {
     }
 
     try {
-      const { getCommandClient } = await import('./pairingCoordinator');
       const client = getCommandClient();
       if (!client) {
         return { success: false, error: 'Command client not connected' };
       }
 
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Credential request timed out')), 10_000),
-      );
-
-      const response = await Promise.race([
+      const response = await withTimeout(
         client.sendCredentialRequest(domain, url, usernameFieldId, passwordFieldId),
-        timeoutPromise,
-      ]);
+        10_000,
+        'Credential request timed out',
+      );
 
       return {
         success: true,
@@ -380,14 +389,15 @@ const handlers: Record<string, MessageHandler> = {
         },
       };
     } catch (err) {
-      return { success: false, error: err instanceof Error ? err.message : 'Credential request failed' };
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Credential request failed',
+      };
     }
   },
 };
 
 async function getTabIdFromSender(sender: chrome.runtime.MessageSender): Promise<number | null> {
-  // Prefer sender.tab.id when available (content script messages)
-  // Fallback to querying active tab for popup messages where sender.tab may be missing
   if (sender.tab?.id) {
     return sender.tab.id;
   }
@@ -403,7 +413,7 @@ export function registerMessageHandlers(): void {
       return true;
     }
 
-    const handler = handlers[message.type];
+    const handler = handlers[message.type as MessageType];
     if (!handler) {
       sendResponse({ success: false, error: `Unknown message type: ${message.type}` });
       return true;
@@ -411,7 +421,7 @@ export function registerMessageHandlers(): void {
 
     handler(message.payload, sender)
       .then(sendResponse)
-      .catch((err) => {
+      .catch((err: Error) => {
         sendResponse({ success: false, error: err.message });
       });
 
@@ -419,7 +429,9 @@ export function registerMessageHandlers(): void {
   });
 }
 
-function isValidMessage(message: unknown): message is { type: string; payload: unknown } {
+function isValidMessage(
+  message: unknown,
+): message is { type: string; payload: unknown } {
   return (
     typeof message === 'object' &&
     message !== null &&
@@ -431,61 +443,7 @@ function isValidMessage(message: unknown): message is { type: string; payload: u
 
 const MFA_RATE_LIMIT_WINDOW_MS = 60_000;
 const MFA_RATE_LIMIT_MAX = 3;
-
-const mfaRateLimiter = {
-  _entries: [] as number[],
-
-  allow(): boolean {
-    const now = Date.now();
-    this._entries = this._entries.filter((t) => now - t < MFA_RATE_LIMIT_WINDOW_MS);
-    if (this._entries.length >= MFA_RATE_LIMIT_MAX) {
-      return false;
-    }
-    this._entries.push(now);
-    return true;
-  },
-};
-
-const REPLAY_WINDOW_MS = 5 * 60 * 1000;
-const replayCache = new Map<string, number>();
-
-function isReplayAssertion(tuple: string): boolean {
-  const ts = replayCache.get(tuple);
-  if (ts && Date.now() - ts < REPLAY_WINDOW_MS) {
-    log.warn('Replay assertion detected:', tuple.slice(0, 64));
-    return true;
-  }
-  return false;
-}
-
-function recordAssertion(tuple: string): void {
-  replayCache.set(tuple, Date.now());
-  if (replayCache.size > 100) {
-    const cutoff = Date.now() - REPLAY_WINDOW_MS;
-    for (const [key, ts] of replayCache) {
-      if (ts < cutoff) replayCache.delete(key);
-    }
-  }
-}
+const mfaRateLimiter = createSlidingWindowLimiter(MFA_RATE_LIMIT_WINDOW_MS, MFA_RATE_LIMIT_MAX);
 
 const CREDENTIAL_RATE_LIMIT_MS = 30_000;
-const credentialRateLimiter = {
-  _entries: new Map<string, number>(),
-
-  allow(domain: string): boolean {
-    const last = this._entries.get(domain);
-    const now = Date.now();
-    if (last && now - last < CREDENTIAL_RATE_LIMIT_MS) {
-      return false;
-    }
-    this._entries.set(domain, now);
-
-    for (const [key, ts] of this._entries) {
-      if (now - ts > CREDENTIAL_RATE_LIMIT_MS * 2) {
-        this._entries.delete(key);
-      }
-    }
-
-    return true;
-  },
-};
+const credentialRateLimiter = createDomainRateLimiter(CREDENTIAL_RATE_LIMIT_MS);
