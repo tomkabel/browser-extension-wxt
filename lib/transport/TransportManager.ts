@@ -124,10 +124,11 @@ export class TransportManager {
 
     if (target === 'usb' && this.usbAvailable) {
       try {
-        if (current && current.type !== 'usb') {
-          await current.disconnect();
-        }
         await this.usbTransport.connect();
+        if (current && current.type === 'webrtc') {
+          // Flush pending data while WebRTC is still the active transport
+          await current.send(new Uint8Array(0));
+        }
         this.activeTransport = this.usbTransport;
         if (this.messageCallback) {
           this.usbTransport.onMessage(this.messageCallback);
@@ -135,7 +136,7 @@ export class TransportManager {
         this.emitChange(previous, 'usb', reason);
         return;
       } catch {
-        // USB connect failed, stay on current
+        // USB connect or flush failed, stay on current
       }
     }
 
