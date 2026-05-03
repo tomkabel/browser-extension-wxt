@@ -69,7 +69,7 @@ export const cspReportOnly = {
   "frame-ancestors": ["'none'"],
   "base-uri": ["'self'"],
   "form-action": ["'self'"],
-  "report-uri": ["/api/csp-report"],
+  "report-uri": ["/api/csp-report"],    // legacy fallback; prefer report-to in CSP Level 3
 };
 
 function formatCSP(policy: Record<string, string[]>): string {

@@ -224,6 +224,7 @@ const securityHeaders = [
   }
 ]
 ```
+> **Warning:** The example above uses `'unsafe-eval'` and `'unsafe-inline'` in `script-src`, which largely defeats the XSS protection CSP provides. This is a minimal/development configuration. For production, replace `'unsafe-inline'` with a nonce (`'nonce-{random}'`) and remove `'unsafe-eval'` unless strictly required by your framework.
 
 #### Verification Steps
 - [ ] User-provided HTML sanitized
