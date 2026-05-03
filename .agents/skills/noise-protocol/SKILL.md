@@ -1,6 +1,6 @@
 ---
 name: noise-protocol
-description: Implement the Noise XX handshake pattern for E2EE signaling and transport, with cipher state management, test vectors, and cross-language interop between TypeScript (noise-c.wasm) and Java/lazysodium. Covers ephemeral-static key exchange, payload encryption/decryption, split() for transport initiation, and common pitfalls.
+description: Implement the Noise XX handshake pattern for E2EE signaling and transport, with cipher state management, test vectors, and cross-language interop between TypeScript (salty-crypto) and Java. Covers ephemeral-static key exchange, payload encryption/decryption, split() for transport initiation, and common pitfalls.
 ---
 
 # Noise Protocol — XX Handshake for SmartID2
@@ -34,30 +34,24 @@ SmartID2 uses the **Noise XX** handshake pattern:
 3. **Initiator** sends static public key `s` encrypted, performs `se`
 4. Both call `split()` → `CipherState` for transport
 
-## TypeScript Implementation (noise-c.wasm)
+## TypeScript Implementation (salty-crypto)
 
 ### Setup and Handshake Initiation
 
 ```typescript
-import { NoiseHandshake } from '~/lib/channel/noise';
-import { loadNoiseWasm } from '~/lib/channel/wasm';
-
-const noise = await loadNoiseWasm();
+import { createXXHandshake, generateKeyPair } from '~/lib/channel/noise';
 
 // Static keypair loaded from chrome.storage.session (RAM-only)
-const staticKeypair: Keypair = {
-  publicKey: Uint8Array.from(session.publicKey),
-  secretKey: Uint8Array.from(session.secretKey),
-};
+const staticKeypair = generateKeyPair();
 
-const handshake = new NoiseHandshake(noise, 'XX', true, staticKeypair);
-// 'true' = initiator (browser extension). false = responder (Android app).
+const handshake = createXXHandshake(staticKeypair);
+// Initiator = browser extension. For responder, use createResponderXXHandshake().
 
 // Pre-populate remote static key from QR code scan
-handshake.setRemoteStaticKey(qrCodeParsed.publicKey);
+// (handshakes use createXXHandshake which doesn't require pre-setting)
 
-// -> e
-const message1 = handshake.writeMessageE();
+// -> e (write first handshake message)
+const { packet: message1 } = startXXHandshake(new Uint8Array(0), handshake);
 // Send message1 via WebRTC data channel or signaling server
 ```
 
@@ -65,33 +59,34 @@ const message1 = handshake.writeMessageE();
 
 ```typescript
 // On Android (Java) or browser responder side:
-const handshake = new NoiseHandshake(noise, 'XX', false, responderKeypair);
-handshake.setRemoteStaticKey(initiatorPublicKeyFromQR);
+import { createResponderXXHandshake } from '~/lib/channel/noise';
 
-// Read initiator's ephemeral key
-handshake.readMessageE(message1);
+const handshake = createResponderXXHandshake(responderKeypair);
 
-// <- e, ee, s, es
-const message2 = handshake.writeMessageE_EE_S_ES();
+// Read initiator's first message
+const { payload, finished } = readXXHandshake(message1, handshake);
+
+// <- e, ee, s, es (responder writes its handshake message)
+const { packet: message2 } = startXXHandshake(new Uint8Array(0), handshake);
 ```
 
 ### Completing Handshake and Split
 
 ```typescript
-// Initiator reads message2
-handshake.readMessageE_EE_S_ES(message2);
+// Both sides use readXXHandshake / startXXHandshake until finished
+const { payload, finished } = readXXHandshake(message2, handshake);
+// finished is true after the last handshake message
 
-// -> s, se
-const message3 = handshake.writeMessageS_SE();
-
-// Responder reads message3
-handshake.readMessageS_SE(message3);
-
-// Both sides derive transport ciphers
-const { cs1, cs2 } = handshake.split();
-// cs1: initiator → responder (sending)
-// cs2: initiator ← responder (receiving)
-// Note: In XX pattern, the responder's cs1/cs2 are swapped relative to initiator
+// Derive transport ciphers
+const { session } = createNoiseSession(
+  splitXXHandshake(handshake),
+  staticKeypair,
+  remoteStaticPublicKey,
+  'XX'
+);
+// session.transport.send.encrypt(plaintext) for sending
+// session.transport.recv.decrypt(ciphertext) for receiving
+// In XX pattern, the responder's send/recv are swapped relative to initiator
 ```
 
 ### Transport Encryption/Decryption
@@ -99,18 +94,18 @@ const { cs1, cs2 } = handshake.split();
 ```typescript
 // Initiator sending
 const plaintext = new TextEncoder().encode('CREDENTIAL_REQUEST:{"domain":"github.com"}');
-const ciphertext = cs1.encryptWithAd(new Uint8Array(0), plaintext);
+const ciphertext = encryptMessage(session, plaintext);
 dataChannel.send(ciphertext);
 
 // Initiator receiving
 const response = await readFromDataChannel();
-const decrypted = cs2.decryptWithAd(new Uint8Array(0), response);
+const decrypted = decryptMessage(session, response);
 const json = new TextDecoder().decode(decrypted);
 ```
 
 **Critical**: Always use an empty `ad` (associated data) for transport messages unless you are binding to a higher-level protocol frame. SmartID2 binds the message type to the Noise payload envelope, not to the AEAD AD.
 
-## Java / Lazysodium Implementation
+## Java Implementation
 
 ```java
 import com.goterl.lazysodium.LazySodiumAndroid;
@@ -174,40 +169,25 @@ Transport key initiator<-responder (first 32 bytes of split[1]):
 
 ## Common Pitfalls
 
-1. **Nonce reuse**: `CipherState` nonces increment per message. Never serialize a CipherState and restore it at a stale nonce. If the service worker restarts, re-run the full handshake or use a resumption protocol.
+1. **Nonce reuse**: Transport nonces increment per message. Never serialize a transport state and restore it at a stale nonce. If the service worker restarts, re-run the full handshake or use a resumption protocol.
 2. **Pattern mismatch**: `Noise_XX` is NOT `Noise_IK`. In XX, both static keys are transmitted encrypted inside the handshake. Do not send static keys in plaintext.
-3. **Key order after split**: The initiator's `cs1` encrypts, responder's `cs1` decrypts. If you get garbled plaintext after split, you have swapped the cipher states.
-4. **DH clamping**: X25519 scalars must be clamped before `crypto_scalarmult`. noise-c.wasm and lazysodium do this internally, but raw libsodium wrappers may not.
-5. **Empty payload vs no payload**: `writeMessageE()` with no payload still produces a 48-byte message (ephemeral key + AEAD tag). Do not truncate.
-6. **Wasm memory lifecycle**: When using noise-c.wasm, ensure the WASM memory buffer isn't garbage-collected mid-handshake. Hold a strong reference to the `NoiseHandshake` instance.
+3. **Key order after split**: The initiator's `session.transport.send` encrypts, responder's `session.transport.recv` decrypts. If you get garbled plaintext after split, you have swapped the cipher states.
+4. **DH clamping**: X25519 scalars must be clamped before scalar multiplication. salty-crypto and libsodium do this internally, but raw wrappers may not.
+5. **Empty payload vs no payload**: Starting a handshake with an empty payload still produces a valid message frame. Do not skip the handshake message.
+6. **Salty-crypto initialization**: Ensure the salty-crypto WASM module is initialized before calling any Noise functions. Hold a reference to prevent garbage collection.
 
-## Cipher State Management
+## Transport State Management
+
+The `splitXXHandshake()` function returns a `TransportState` which manages encryption/decryption internally. Use `encryptMessage()` and `decryptMessage()` helpers from `~/lib/channel/noise`:
 
 ```typescript
-export class ManagedCipherState {
-  private nonce = 0;
-  private readonly key: Uint8Array;
-  private destroyed = false;
+import { completeXXHandshake, encryptMessage, decryptMessage } from '~/lib/channel/noise';
 
-  constructor(key: Uint8Array) {
-    this.key = new Uint8Array(key); // defensive copy
-  }
-
-  encrypt(plaintext: Uint8Array): Uint8Array {
-    if (this.destroyed) throw new ExtensionError('CIPHER_DESTROYED');
-    if (this.nonce >= 2 ** 64 - 1) throw new ExtensionError('NONCE_EXHAUSTED');
-    const iv = new Uint8Array(12);
-    const view = new DataView(iv.buffer);
-    view.setBigUint64(4, BigInt(this.nonce), false); // 64-bit nonce, 4-byte padding
-    this.nonce++;
-    return aesGcmEncrypt(this.key, iv, plaintext);
-  }
-
-  destroy(): void {
-    this.key.fill(0);
-    this.destroyed = true;
-  }
-}
+const transport = await completeXXHandshake(handshake, sendFn, recvFn);
+// transport.send.encrypt(plaintext) and transport.recv.decrypt(ciphertext)
+// are managed by the session wrapper:
+const session = createNoiseSession(transport, localKey, remoteKey, 'XX');
+const encrypted = encryptMessage(session, plaintext);
 ```
 
 ## References
