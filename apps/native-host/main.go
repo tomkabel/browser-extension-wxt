@@ -14,7 +14,21 @@ import (
 	"github.com/google/gousb"
 	"github.com/smartid/vault6-native-host/aoa"
 	sidcrypto "github.com/smartid/vault6-native-host/crypto"
-	nm "github.com/smartid/vault6-native-host/native_messaging"
+	nm 	"github.com/smartid/vault6-native-host/native_messaging"
+)
+
+var (
+	performKeyExchange = sidcrypto.PerformHostKeyExchange
+	startReadLoop      = func(session *Session, writer *nm.MessageWriter) *ReadLoop {
+		rl := NewReadLoop(session, writer)
+		rl.Start(context.Background())
+		return rl
+	}
+)
+
+const (
+	usbFlushTimeout = 10 * time.Millisecond
+	usbFlushBufSize = 4096
 )
 
 type usbReadWriter struct {
@@ -166,6 +180,20 @@ func (s *Session) closeLocked() {
 	s.connected = false
 }
 
+// flushUsbEndpoint drains any stale data remaining in the USB IN endpoint
+// buffer. This is needed after a failed key exchange to prevent the read
+// loop from interpreting leftover protocol data as encrypted payload.
+func flushUsbEndpoint(in *gousb.InEndpoint) error {
+	if in == nil {
+		return fmt.Errorf("flushUsbEndpoint: nil endpoint")
+	}
+	buf := make([]byte, usbFlushBufSize)
+	ctx, cancel := context.WithTimeout(context.Background(), usbFlushTimeout)
+	defer cancel()
+	_, err := in.ReadContext(ctx, buf)
+	return err
+}
+
 func registerHandlers(r *nm.Router, session *Session, writer *nm.MessageWriter) {
 	r.Register(nm.MsgPing, func(msg *nm.Message) (*nm.Message, error) {
 		return &nm.Message{Type: nm.MsgPong}, nil
@@ -219,12 +247,13 @@ func registerHandlers(r *nm.Router, session *Session, writer *nm.MessageWriter) 
 		session.connected = true
 		session.connectedAt = time.Now()
 
-		cryptoSess, err := sidcrypto.PerformHostKeyExchange(usbRW)
+		cryptoSess, err := performKeyExchange(usbRW)
 		if err != nil {
 			session.device = nil
 			session.connected = false
 			session.connectedAt = time.Time{}
 			_ = aoaDev.Close()
+			session.usbRW = nil
 			return &nm.Message{
 				Type:    nm.MsgConnectResult,
 				Success: nm.BoolPtr(false),
@@ -234,9 +263,7 @@ func registerHandlers(r *nm.Router, session *Session, writer *nm.MessageWriter) 
 
 		session.cryptoSession = cryptoSess
 
-		readLoop := NewReadLoop(session, writer)
-		session.readLoop = readLoop
-		readLoop.Start(context.Background())
+		session.readLoop = startReadLoop(session, writer)
 
 		if err := writer.Write(&nm.Message{Type: nm.MsgUsbConnected}); err != nil {
 			fmt.Fprintf(os.Stderr, "failed to write usb-connected message: %v\n", err)
@@ -300,13 +327,14 @@ func registerHandlers(r *nm.Router, session *Session, writer *nm.MessageWriter) 
 
 	r.Register(nm.MsgRekey, func(msg *nm.Message) (*nm.Message, error) {
 		session.mu.Lock()
-		defer session.mu.Unlock()
 
 		if session.cryptoSession == nil {
+			session.mu.Unlock()
 			return &nm.Message{Type: nm.MsgRekeyResult, Success: nm.BoolPtr(false), Error: "no active session"}, nil
 		}
 
 		if session.device == nil || session.usbRW == nil {
+			session.mu.Unlock()
 			return &nm.Message{Type: nm.MsgRekeyResult, Success: nm.BoolPtr(false), Error: "device not available"}, nil
 		}
 
@@ -320,18 +348,48 @@ func registerHandlers(r *nm.Router, session *Session, writer *nm.MessageWriter) 
 		// encrypted channel, so it acts as its own control channel and provides
 		// proper key rotation — the new AES-GCM key is derived from a fresh
 		// ECDH negotiation, eliminating nonce reuse concerns.
+		usbRW := session.usbRW
 		oldKey := session.cryptoSession.Key
 		oldSeq := session.cryptoSession.Seq
 
-		newSession, err := sidcrypto.PerformHostKeyExchange(session.usbRW)
+		// Release the mutex during blocking USB I/O so that session.Close()
+		// (hotplug disconnect), MsgSendPayload, and MsgGetStatus are not
+		// blocked for the duration of the key exchange.
+		session.mu.Unlock()
+
+		newSession, err := performKeyExchange(usbRW)
+
+		session.mu.Lock()
+		defer session.mu.Unlock()
+
 		if err != nil {
-			readLoop := NewReadLoop(session, writer)
-			session.readLoop = readLoop
-			readLoop.Start(context.Background())
+			// Only flush and restart if the device we performed the exchange
+			// with is still the current device (TOCTOU guard). If the device
+			// was swapped while the lock was released, the captured usbRW
+			// points to closed endpoints — do not use it.
+			if session.usbRW == usbRW && session.device != nil {
+				if flushErr := flushUsbEndpoint(usbRW.in); flushErr != nil {
+					// flush is best-effort; logged but non-fatal
+				}
+				session.readLoop = startReadLoop(session, writer)
+			}
 			return &nm.Message{
 				Type:    nm.MsgRekeyResult,
 				Success: nm.BoolPtr(false),
 				Error:   fmt.Sprintf("rekey failed: %v", err),
+			}, nil
+		}
+
+		// If the device was swapped during the exchange, the negotiated key
+		// belongs to the old device and must not be used.
+		if session.usbRW != usbRW {
+			sidcrypto.ZeroSessionKey(&newSession.Key)
+			newSession.Seq.Reset()
+			session.readLoop = startReadLoop(session, writer)
+			return &nm.Message{
+				Type:    nm.MsgRekeyResult,
+				Success: nm.BoolPtr(false),
+				Error:   "device changed during rekey",
 			}, nil
 		}
 
@@ -340,9 +398,7 @@ func registerHandlers(r *nm.Router, session *Session, writer *nm.MessageWriter) 
 		sidcrypto.ZeroSessionKey(&oldKey)
 		oldSeq.Reset()
 
-		readLoop := NewReadLoop(session, writer)
-		session.readLoop = readLoop
-		readLoop.Start(context.Background())
+		session.readLoop = startReadLoop(session, writer)
 
 		return &nm.Message{Type: nm.MsgRekeyResult, Success: nm.BoolPtr(true)}, nil
 	})
