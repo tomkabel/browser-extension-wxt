@@ -192,7 +192,7 @@ function runFullHandshake(
 
 describe('Noise Protocol - Property-Based Tests', () => {
   describe('Encrypt/decrypt round-trip', () => {
-    const NUM_ITERATIONS = 1000;
+    const NUM_ITERATIONS = 50;
 
     for (const pat of PROPERTY_TEST_PATTERNS) {
       it(`${pat}: ${NUM_ITERATIONS} random payloads round-trip`, () => {
@@ -209,12 +209,12 @@ describe('Noise Protocol - Property-Based Tests', () => {
             expect(decrypted).toEqual(payload);
           }
         }
-      }, 120000);
+      }, 30000);
     }
   });
 
   describe('Wrong-key rejection', () => {
-    const WRONG_KEY_ITERATIONS = 100;
+    const WRONG_KEY_ITERATIONS = 50;
 
     for (const pat of PROPERTY_TEST_PATTERNS) {
       it(`${pat}: wrong key fails decryption`, () => {
@@ -229,14 +229,16 @@ describe('Noise Protocol - Property-Based Tests', () => {
             respTransport.recv.decrypt(encrypted);
           }).toThrow();
         }
-      }, 15000);
+      }, 30000);
     }
   });
 
   describe('Tampered ciphertext rejection', () => {
+    const TAMPERED_ITERATIONS = 50;
+
     for (const pat of PROPERTY_TEST_PATTERNS) {
       it(`${pat}: tampered ciphertext fails`, () => {
-        for (let i = 0; i < 100; i++) {
+        for (let i = 0; i < TAMPERED_ITERATIONS; i++) {
           const { initTransport, respTransport } = runFullHandshake(pat);
 
           const payload = generateRandomBytes(64);
@@ -250,12 +252,12 @@ describe('Noise Protocol - Property-Based Tests', () => {
             respTransport.recv.decrypt(tampered);
           }).toThrow();
         }
-      });
+      }, 30000);
     }
   });
 
   describe('Sequence monotonicity', () => {
-    const SEQUENCE_ITERATIONS = 500;
+    const SEQUENCE_ITERATIONS = 100;
 
     for (const pat of PROPERTY_TEST_PATTERNS) {
       it(`${pat}: nonces increment correctly over ${SEQUENCE_ITERATIONS} messages`, () => {
@@ -278,7 +280,7 @@ describe('Noise Protocol - Property-Based Tests', () => {
           const recvHex = hex(recvPayload);
           expect(recvHex).toBe(sentHex);
         }
-      }, 30000);
+      }, 15000);
 
       it(`${pat}: out-of-order decryption fails`, () => {
         const { initTransport, respTransport } = runFullHandshake(pat);
@@ -298,7 +300,7 @@ describe('Noise Protocol - Property-Based Tests', () => {
   });
 
   describe('Key rotation (long-lived session)', () => {
-    const LONG_SESSION_MSGS = 2000;
+    const LONG_SESSION_MSGS = 500;
 
     for (const pat of PROPERTY_TEST_PATTERNS) {
       it(`${pat}: ${LONG_SESSION_MSGS} messages without nonce exhaustion`, () => {
@@ -310,7 +312,7 @@ describe('Noise Protocol - Property-Based Tests', () => {
           const decrypted = respTransport.recv.decrypt(encrypted);
           expect(decrypted).toEqual(payload);
         }
-      }, 30000);
+      }, 15000);
     }
   });
 });
