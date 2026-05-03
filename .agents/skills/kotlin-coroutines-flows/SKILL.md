@@ -20,7 +20,7 @@ Patterns for structured concurrency, Flow-based reactive streams, and coroutine 
 
 ### Scope Hierarchy
 
-```
+```text
 Application
   └── viewModelScope (ViewModel)
         └── coroutineScope { } (structured child)

@@ -20,7 +20,7 @@ origin: ECC
 
 Analyzes your codebase and generates a cohesive design system:
 
-```
+```text
 1. Scan CSS/Tailwind/styled-components for existing patterns
 2. Extract: colors, typography, spacing, border-radius, shadows, breakpoints
 3. Research 3 competitor sites for inspiration (via browser MCP)
@@ -35,7 +35,7 @@ Output: `DESIGN.md` + `design-tokens.json` + `design-preview.html`
 
 Scores your UI across 10 dimensions (0-10 each):
 
-```
+```text
 1. Color consistency — are you using your palette or random hex values?
 2. Typography hierarchy — clear h1 > h2 > h3 > body > caption?
 3. Spacing rhythm — consistent scale (4px/8px/16px) or arbitrary?
@@ -54,7 +54,7 @@ Each dimension gets a score, specific examples, and a fix with exact file:line.
 
 Identifies generic AI-generated design patterns:
 
-```
+```text
 - Gratuitous gradients on everything
 - Purple-to-blue defaults
 - "Glass morphism" cards with no purpose
@@ -67,16 +67,16 @@ Identifies generic AI-generated design patterns:
 ## Examples
 
 **Generate for a SaaS app:**
-```
+```bash
 /design-system generate --style minimal --palette earth-tones
 ```
 
 **Audit existing UI:**
-```
+```bash
 /design-system audit --url http://localhost:3000 --pages / /pricing /docs
 ```
 
 **Check for AI slop:**
-```
+```bash
 /design-system slop-check
 ```

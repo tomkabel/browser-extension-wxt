@@ -392,7 +392,7 @@ ALTER TABLE users DROP COLUMN IF EXISTS avatar_url;
 
 For critical production changes, follow the expand-contract pattern:
 
-```
+```text
 Phase 1: EXPAND
   - Add new column/table (nullable or with default)
   - Deploy: app writes to BOTH old and new
@@ -409,7 +409,7 @@ Phase 3: CONTRACT
 
 ### Timeline Example
 
-```
+```text
 Day 1: Migration adds new_status column (nullable)
 Day 1: Deploy app v2 — writes to both status and new_status
 Day 2: Run backfill migration for existing rows

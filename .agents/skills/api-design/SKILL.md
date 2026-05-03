@@ -21,7 +21,7 @@ Conventions and best practices for designing consistent, developer-friendly REST
 
 ### URL Structure
 
-```
+```http
 # Resources are nouns, plural, lowercase, kebab-case
 GET    /api/v1/users
 GET    /api/v1/users/:id
@@ -42,7 +42,7 @@ POST   /api/v1/auth/refresh
 
 ### Naming Rules
 
-```
+```text
 # GOOD
 /api/v1/team-members          # kebab-case for multi-word resources
 /api/v1/orders?status=active  # query params for filtering
@@ -71,7 +71,7 @@ POST   /api/v1/auth/refresh
 
 ### Status Code Reference
 
-```
+```text
 # Success
 200 OK                    — GET, PUT, PATCH (with response body)
 201 Created               — POST (include Location header)
@@ -94,7 +94,7 @@ POST   /api/v1/auth/refresh
 
 ### Common Mistakes
 
-```
+```text
 # BAD: 200 for everything
 { "status": 200, "success": false, "error": "Not found" }
 
@@ -199,7 +199,7 @@ interface ApiError {
 
 ### Offset-Based (Simple)
 
-```
+```text
 GET /api/v1/users?page=2&per_page=20
 
 # Implementation
@@ -213,7 +213,7 @@ LIMIT 20 OFFSET 20;
 
 ### Cursor-Based (Scalable)
 
-```
+```text
 GET /api/v1/users?cursor=eyJpZCI6MTIzfQ&limit=20
 
 # Implementation
@@ -249,7 +249,7 @@ LIMIT 21;  -- fetch one extra to determine has_next
 
 ### Filtering
 
-```
+```text
 # Simple equality
 GET /api/v1/orders?status=active&customer_id=abc-123
 
@@ -266,7 +266,7 @@ GET /api/v1/orders?customer.country=US
 
 ### Sorting
 
-```
+```text
 # Single field (prefix - for descending)
 GET /api/v1/products?sort=-created_at
 
@@ -276,7 +276,7 @@ GET /api/v1/products?sort=-featured,price,-created_at
 
 ### Full-Text Search
 
-```
+```text
 # Search query parameter
 GET /api/v1/products?q=wireless+headphones
 
@@ -286,7 +286,7 @@ GET /api/v1/users?email=alice
 
 ### Sparse Fieldsets
 
-```
+```text
 # Return only specified fields (reduces payload)
 GET /api/v1/users?fields=id,name,email
 GET /api/v1/orders?fields=id,total,status&include=customer.name
@@ -296,7 +296,7 @@ GET /api/v1/orders?fields=id,total,status&include=customer.name
 
 ### Token-Based Auth
 
-```
+```http
 # Bearer token in Authorization header
 GET /api/v1/users
 Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
@@ -328,7 +328,7 @@ app.delete("/api/v1/users/:id", requireRole("admin"), async (req, res) => {
 
 ### Headers
 
-```
+```http
 HTTP/1.1 200 OK
 X-RateLimit-Limit: 100
 X-RateLimit-Remaining: 95
@@ -358,7 +358,7 @@ Retry-After: 60
 
 ### URL Path Versioning (Recommended)
 
-```
+```text
 /api/v1/users
 /api/v2/users
 ```
@@ -368,7 +368,7 @@ Retry-After: 60
 
 ### Header Versioning
 
-```
+```text
 GET /api/users
 Accept: application/vnd.myapp.v2+json
 ```
@@ -378,12 +378,12 @@ Accept: application/vnd.myapp.v2+json
 
 ### Versioning Strategy
 
-```
+```text
 1. Start with /api/v1/ — don't version until you need to
 2. Maintain at most 2 active versions (current + previous)
 3. Deprecation timeline:
    - Announce deprecation (6 months notice for public APIs)
-   - Add Sunset header: Sunset: Sat, 01 Jan 2026 00:00:00 GMT
+   - Add Sunset header: Sunset: <FUTURE_DATE_IN_RFC1123_FORMAT>
    - Return 410 Gone after sunset date
 4. Non-breaking changes don't need a new version:
    - Adding new fields to responses

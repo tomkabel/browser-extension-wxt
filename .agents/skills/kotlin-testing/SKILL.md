@@ -42,7 +42,7 @@ The following sections contain detailed, runnable examples for each testing patt
 
 #### The RED-GREEN-REFACTOR Cycle
 
-```
+```text
 RED     -> Write a failing test first
 GREEN   -> Write minimal code to pass the test
 REFACTOR -> Improve code while keeping tests green

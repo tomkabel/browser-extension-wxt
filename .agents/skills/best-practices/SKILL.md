@@ -30,7 +30,7 @@ Modern web development standards based on Lighthouse best practices audits. Cove
 ```
 
 **HSTS Header:**
-```
+```text
 Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
 ```
 
@@ -49,7 +49,7 @@ Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
 ```
 
 **CSP Header (recommended):**
-```
+```text
 Content-Security-Policy: 
   default-src 'self';
   script-src 'self' 'nonce-abc123' https://trusted.com;
@@ -70,7 +70,7 @@ Content-Security-Policy:
 
 ### Security headers
 
-```
+```text
 # Prevent clickjacking
 X-Frame-Options: DENY
 

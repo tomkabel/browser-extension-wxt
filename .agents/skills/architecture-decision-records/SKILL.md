@@ -93,7 +93,7 @@ When a user asks "why did we choose X?":
 
 ### ADR Directory Structure
 
-```
+```text
 docs/
 └── adr/
     ├── README.md              ← index of all ADRs
@@ -151,7 +151,7 @@ Watch for these patterns in conversation that indicate an architectural decision
 
 ## ADR Lifecycle
 
-```
+```text
 proposed → accepted → [deprecated | superseded by ADR-NNNN]
 ```
 

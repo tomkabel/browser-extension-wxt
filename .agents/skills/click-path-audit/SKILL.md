@@ -28,7 +28,7 @@ Real example: A "New Email" button called `setComposeMode(true)` then `selectThr
 
 For EVERY interactive touchpoint in the target area:
 
-```
+```text
 1. IDENTIFY the handler (onClick, onSubmit, onChange, etc.)
 2. TRACE every function call in the handler, IN ORDER
 3. For EACH function call:
@@ -49,7 +49,7 @@ For EVERY interactive touchpoint in the target area:
 
 Before auditing any touchpoint, build a side-effect map of every state store action:
 
-```
+```text
 For each Zustand store / React context in scope:
   For each action/setter:
     - What fields does it set?
@@ -76,7 +76,7 @@ DANGEROUS RESETS (actions that clear state they don't own):
 
 For each button/toggle/form submit in the target area:
 
-```
+```text
 TOUCHPOINT: [Button label] in [Component:line]
   HANDLER: onClick → {
     call 1: functionA() → sets {X: true}
@@ -90,7 +90,7 @@ TOUCHPOINT: [Button label] in [Component:line]
 **Check each of these bug patterns:**
 
 #### Pattern 1: Sequential Undo
-```
+```text
 handler() {
   setState_A(true)     // sets X = true
   setState_B(null)     // side effect: resets X = false
@@ -99,7 +99,7 @@ handler() {
 ```
 
 #### Pattern 2: Async Race
-```
+```text
 handler() {
   fetchA().then(() => setState({ loading: false }))
   fetchB().then(() => setState({ loading: true }))
@@ -108,7 +108,7 @@ handler() {
 ```
 
 #### Pattern 3: Stale Closure
-```
+```text
 const [count, setCount] = useState(0)
 const handler = useCallback(() => {
   setCount(count + 1)  // captures stale count
@@ -117,14 +117,14 @@ const handler = useCallback(() => {
 ```
 
 #### Pattern 4: Missing State Transition
-```
+```text
 // Button says "Save" but handler only validates, never actually saves
 // Button says "Delete" but handler sets a flag without calling the API
 // Button says "Send" but the API endpoint is removed/broken
 ```
 
 #### Pattern 5: Conditional Dead Path
-```
+```text
 handler() {
   if (someState) {        // someState is ALWAYS false at this point
     doTheActualThing()    // never reached
@@ -133,7 +133,7 @@ handler() {
 ```
 
 #### Pattern 6: useEffect Interference
-```
+```text
 // Button sets stateX = true
 // A useEffect watches stateX and resets it to false
 // User sees nothing happen
@@ -143,7 +143,7 @@ handler() {
 
 For each bug found:
 
-```
+```text
 CLICK-PATH-NNN: [severity: CRITICAL/HIGH/MEDIUM/LOW]
   Touchpoint: [Button label] in [file:line]
   Pattern: [Sequential Undo / Async Race / Stale Closure / Missing Transition / Dead Path / useEffect Interference]
@@ -168,7 +168,7 @@ This audit is expensive. Scope it appropriately:
 
 ### Recommended agent split for full app:
 
-```
+```text
 Agent 1: Map ALL state stores (Step 1) — this is shared context for all other agents
 Agent 2: Dashboard (Tasks, Notes, Journal, Ideas)
 Agent 3: Chat (DanteChatColumn, JustChatPage)
@@ -210,7 +210,7 @@ Agent 1 MUST complete first. Its output is input for all other agents.
 ## Example: The Bug That Inspired This Skill
 
 **ThreadList.tsx "New Email" button:**
-```
+```text
 onClick={() => {
   useEmailStore.getState().setComposeMode(true)   // ✓ sets composeMode = true
   useEmailStore.getState().selectThread(null)      // ✗ RESETS composeMode = false
@@ -218,7 +218,7 @@ onClick={() => {
 ```
 
 Store definition:
-```
+```text
 selectThread: (thread) => set({
   selectedThread: thread,
   selectedThreadId: thread?.id ?? null,

@@ -20,7 +20,7 @@ origin: ECC
 
 Measures real browser metrics via browser MCP:
 
-```
+```text
 1. Navigate to each target URL
 2. Measure Core Web Vitals:
    - LCP (Largest Contentful Paint) — target < 2.5s
@@ -42,7 +42,7 @@ Measures real browser metrics via browser MCP:
 
 Benchmarks API endpoints:
 
-```
+```text
 1. Hit each endpoint 100 times
 2. Measure: p50, p95, p99 latency
 3. Track: response size, status codes
@@ -54,7 +54,7 @@ Benchmarks API endpoints:
 
 Measures development feedback loop:
 
-```
+```text
 1. Cold build time
 2. Hot reload time (HMR)
 3. Test suite duration
@@ -67,14 +67,14 @@ Measures development feedback loop:
 
 Run before and after a change to measure impact:
 
-```
+```bash
 /benchmark baseline    # saves current metrics
 # ... make changes ...
 /benchmark compare     # compares against baseline
 ```
 
 Output:
-```
+```markdown
 | Metric | Before | After | Delta | Verdict |
 |--------|--------|-------|-------|---------|
 | LCP | 1.2s | 1.4s | +200ms | WARNING: WARN |

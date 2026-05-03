@@ -34,7 +34,7 @@ LCP measures when the largest visible content element renders. Usually this is:
 ### Common LCP issues
 
 **1. Slow server response (TTFB > 800ms)**
-```
+```text
 Fix: CDN, caching, optimized backend, edge rendering
 ```
 
@@ -439,3 +439,4 @@ startTransition(() => setExpensiveState(newValue));
 - [web.dev INP](https://web.dev/articles/inp)
 - [web.dev CLS](https://web.dev/articles/cls)
 - [Performance skill](../performance/SKILL.md)
+
