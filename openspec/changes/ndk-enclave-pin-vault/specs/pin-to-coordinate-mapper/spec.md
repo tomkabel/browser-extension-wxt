@@ -17,9 +17,16 @@ The NDK enclave SHALL map decrypted PIN digits to anonymous X/Y float coordinate
 
 #### Scenario: Variable PIN length
 
-- **WHEN** the PIN is 4 digits (PIN1 short form) or 6 digits (PIN1 long form)
-- **THEN** the mapper SHALL produce the correct number of coordinate pairs
-- **AND** SHALL NOT pad or truncate
+- **WHEN** the PIN is 4 digits (PIN1 short form), 5 digits (PIN2), or 6 digits (PIN1 long form)
+- **THEN** the mapper SHALL produce the correct number of coordinate pairs (4, 5, or 6 respectively)
+- **AND** SHALL NOT pad or truncate any PIN length
+- **AND** for a 5-digit PIN (PIN2) the mapper SHALL produce exactly 5 coordinate pairs (e.g., PIN "12345" → coordinates for keys 1, 2, 3, 4, 5)
+
+#### Scenario: Non-digit character rejected
+
+- **WHEN** the decrypted PIN string contains any non-digit character (e.g., control bytes from corrupted ciphertext)
+- **THEN** the mapper SHALL return an error
+- **AND** SHALL NOT produce coordinate output
 
 #### Scenario: Invalid layout bounds
 

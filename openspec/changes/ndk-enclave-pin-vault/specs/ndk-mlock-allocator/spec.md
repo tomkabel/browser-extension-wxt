@@ -24,4 +24,4 @@ The NDK enclave SHALL implement a memory allocator using `mlock()` for physical 
 
 - **WHEN** `allocate()` is called
 - **THEN** the allocator SHALL check `getrlimit(RLIMIT_MEMLOCK)` for sufficient budget
-- **AND** if budget is inadequate, SHALL log a warning and fall back to `madvise(MADV_WILLNEED | MADV_DONTDUMP)`
+- **AND** if budget is inadequate, SHALL log a warning and fall back to two sequential madvise calls: `madvise(..., MADV_WILLNEED)` followed by `madvise(..., MADV_DONTDUMP)`

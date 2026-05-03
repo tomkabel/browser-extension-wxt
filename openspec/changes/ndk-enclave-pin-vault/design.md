@@ -42,8 +42,8 @@ This transforms the PIN from a cryptographic secret into an anonymous spatial ge
 ├─────────────────────────────────────────────────────┤
 │  C++ NDK ENCLAVE (libvault_enclave.so)                │
 │                                                       │
-│  1. mlock(pinBuffer, MAX_PIN_SIZE)                    │
-│  2. AKeyStore keystore retrieval + AKeyStore_getBlob()│
+│  1. mlock(pinBuffer, page_size)                       │
+│  2. JNI call to Java AndroidKeyStore Cipher.decrypt() │
 │     → plaintext PIN into pinBuffer                    │
 │  3. For each digit in pinBuffer:                      │
 │       idx = digit - '0'                               │
@@ -51,7 +51,7 @@ This transforms the PIN from a cryptographic secret into an anonymous spatial ge
 │       y = layoutBounds[idx * 2 + 1]                   │
 │       coordinates.push(x, y)                          │
 │  4. explicit_bzero(pinBuffer, MAX_PIN_SIZE)           │
-│  5. munlock(pinBuffer, MAX_PIN_SIZE)                  │
+│  5. munlock(data_page, page_size)                     │
 │  6. Return float[] coordinates to Java                │
 └─────────────────────────────────────────────────────┘
 ```
@@ -64,59 +64,76 @@ class MlockAllocator {
   static constexpr size_t GUARD_PAGES = 2;    // PROT_NONE pages before/after
 
   void* allocate() {
-    // Allocate with guard pages to detect overflow
-    size_t total = (GUARD_PAGES * page_size) + MAX_PIN_SIZE + (GUARD_PAGES * page_size);
+    // Allocate: GUARD_PAGES + 1 data page + GUARD_PAGES; right-align the PIN
+    // buffer to the end of the single accessible page so any one-byte overflow
+    // hits the next PROT_NONE guard
+    size_t total = (GUARD_PAGES * page_size) + page_size + (GUARD_PAGES * page_size);
     uint8_t* mem = static_cast<uint8_t*>(mmap(nullptr, total, PROT_NONE,
                                               MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
-    // Make the middle region read-write
-    mprotect(mem + (GUARD_PAGES * page_size), MAX_PIN_SIZE, PROT_READ | PROT_WRITE);
-    // Lock in RAM
-    mlock(mem + (GUARD_PAGES * page_size), MAX_PIN_SIZE);
+    // Make the single middle page read-write
+    uint8_t* data_page = mem + (GUARD_PAGES * page_size);
+    mprotect(data_page, page_size, PROT_READ | PROT_WRITE);
+    // Lock the full page in RAM
+    mlock(data_page, page_size);
+    // Right-align PIN buffer to the end of the data page
+    uint8_t* pin_buffer = data_page + page_size - MAX_PIN_SIZE;
     // Poison with known pattern to detect use-after-free
-    memset(mem + (GUARD_PAGES * page_size), 0xAA, MAX_PIN_SIZE);
-    return mem + (GUARD_PAGES * page_size);
+    memset(pin_buffer, 0xAA, MAX_PIN_SIZE);
+    return pin_buffer;
   }
 
   void deallocate(void* ptr) {
-    uint8_t* mem = static_cast<uint8_t*>(ptr) - (GUARD_PAGES * page_size);
-    size_t total = (GUARD_PAGES * page_size) + MAX_PIN_SIZE + (GUARD_PAGES * page_size);
+    // Compute the data page base: PIN buffer starts page_size - MAX_PIN_SIZE bytes from end
+    uint8_t* data_page = static_cast<uint8_t*>(ptr) - page_size + MAX_PIN_SIZE;
+    uint8_t* mem = data_page - (GUARD_PAGES * page_size);
+    size_t total = (GUARD_PAGES * page_size) + page_size + (GUARD_PAGES * page_size);
     explicit_bzero(ptr, MAX_PIN_SIZE);
-    munlock(ptr, MAX_PIN_SIZE);
+    munlock(data_page, page_size);
     munmap(mem, total);
   }
 };
 ```
 
-### 3. Keystore NDK Bridge
+### 3. Keystore JNI Bridge (Primary)
 
-Android Keystore decryption via NDK uses `AKeyStore` API (API level 28+, Android 9+):
+The primary PIN decryption path uses JNI to call documented Java AndroidKeyStore APIs. The NDK `AKeyStore` API is unsupported and used only as an internal fallback.
+
+```cpp
+// JNI call into Java Cipher API for AndroidKeyStore decryption.
+// Java side: Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+//            cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv));
+//            byte[] plaintext = cipher.doFinal(ciphertext);
+//
+// After GetByteArrayElements() copies the decrypted bytes to C++,
+// the Java byte[] is zeroed and released immediately.
+
+status_t decryptPin(JNIEnv* env, const char* keyAlias,
+                    const uint8_t* ciphertext, size_t ctLen,
+                    uint8_t* plaintext, size_t* ptLen) {
+  // 1. Look up Java class and method IDs for the AndroidKeyStore Cipher wrapper
+  // 2. Call Java method that performs Cipher decryption in AndroidKeystore
+  // 3. Use GetByteArrayElements() to copy decrypted bytes into mlocked buffer
+  // 4. Call ReleaseByteArrayElements(..., JNI_ABORT) to discard JNI copy
+  //    without copying back
+  // 5. Zero the Java byte[] immediately via SetByteArrayRegion() with zeros
+  // 6. Return status
+}
+```
+
+**NDK AKeyStore fallback (unsupported, may be removed):**
 
 ```cpp
 #include <android/keystore.h>
 
-status_t decryptPin(const char* keyAlias,
-                    const uint8_t* ciphertext, size_t ctLen,
-                    uint8_t* plaintext, size_t* ptLen) {
-  // 1. Open keystore and retrieve the key blob
-  AKeyStore* keystore = AKeyStore_getKeyStore();
-  if (!keystore) return ERROR_KEYSTORE_UNAVAILABLE;
-
-  size_t blobLen = 0;
-  uint8_t* blob = nullptr;
-  keymaster_security_level_t securityLevel;
-  int32_t result = AKeyStore_getBlob(keystore, keyAlias, &blob, &blobLen,
-                                      &securityLevel);
-  if (result != 0) return ERROR_KEY_NOT_FOUND;
-
-  // 2. Decrypt using AES/GCM/NoPadding via keymaster
-  //    The ciphertext blob from Android Keystore contains
-  //    IV + encrypted data + tag (GCM appends tag)
-  // 3. Write plaintext directly into the mlocked buffer
-  // 4. Return status
+status_t decryptPin_fallback(const char* keyAlias,
+                             const uint8_t* ciphertext, size_t ctLen,
+                             uint8_t* plaintext, size_t* ptLen) {
+  // AKeyStore_getKeyStore, AKeyStore_getBlob are NOT stable NDK APIs.
+  // This path is provided as an unsupported fallback only.
+  // See https://issuetracker.google.com for Android Keystore NDK stability.
+  // ... implementation ...
 }
 ```
-
-Note: The specific keymaster/keystore NDK API entry points (`AKeyStore_getKeyStore`, `AKeyStore_getBlob`, `AKeyStore_storeBlob`) were introduced in API 28. On API 33+ the `AKeyStore_setAuthBoundBlob` function provides additional auth-bound guarantees. The JNI fallback path decrypts in Java but immediately zeros after JNI transfer to C++.
 
 The key alias is the PIN identifier (e.g., `"smartid_pin1"` or `"smartid_pin2"`). The key was created during Phase 0 provisioning with `setUserAuthenticationRequired(true)`.
 
@@ -170,8 +187,8 @@ The sanitizer is called on all code paths:
 
 ## Risks / Trade-offs
 
-- [Risk] `mlock()` requires `CAP_IPC_LOCK` which is unavailable to unprivileged Android apps — The NDK library uses `mlock()` via the system call directly (available to any process that has `mlockall(MCL_CURRENT)` or sufficient RLIMIT_MEMLOCK). Android does not expose a specific permission for `mlock()`; verify `getrlimit(RLIMIT_MEMLOCK)` has sufficient budget. If `mlock()` fails (EFAULT/ENOMEM), fall back to `madvise(MADV_WILLNEED | MADV_DONTDUMP)` with explicit page locking via `mincore()` polling loop
+- [Risk] `mlock()` requires `CAP_IPC_LOCK` which is unavailable to unprivileged Android apps — The NDK library uses `mlock()` via the system call directly (available to any process that has `mlockall(MCL_CURRENT)` or sufficient RLIMIT_MEMLOCK). Android does not expose a specific permission for `mlock()`; verify `getrlimit(RLIMIT_MEMLOCK)` has sufficient budget. If `mlock()` fails (EFAULT/ENOMEM), fall back to two sequential madvise calls: `madvise(..., MADV_WILLNEED)` then `madvise(..., MADV_DONTDUMP)` with explicit page locking via `mincore()` polling loop
 - [Risk] Smart-ID app grid layout changes between versions — PinGridAnalyzer must detect layout version and adjust; use resource ID matching to find the grid container
-- [Risk] `AKeyStore` NDK API is not well-documented — Rely on Android Keystore Java API via JNI if NDK API is unstable; decrypt in Java but zero immediately after JNI transfer to C++
+- [Risk] `AKeyStore` NDK API is not a stable NDK API — The primary path uses documented Java AndroidKeyStore APIs via JNI. The NDK `AKeyStore_*` paths are an unsupported fallback only and may be removed if undocumented behavior changes
 - [Risk] Memory dumps via /proc/pid/mem or LiME — `mlock()` prevents swap but not in-process memory dumping; assume process memory is adversary-controlled, which is why we never store PINs in Java heap
 - [Trade-off] JNI overhead of passing layout bounds each session vs caching — Layout bounds change only when Smart-ID app updates; cache them keyed by Smart-ID app version hash

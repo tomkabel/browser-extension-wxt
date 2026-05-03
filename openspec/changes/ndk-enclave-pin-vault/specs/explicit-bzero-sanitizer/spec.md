@@ -19,5 +19,6 @@ The NDK enclave SHALL zero all secret buffers on all exit paths using a compiler
 #### Scenario: Signal handler
 
 - **WHEN** a SIGSEGV or SIGTERM is received during enclave operation
-- **THEN** the signal handler SHALL zero the buffer
+- **THEN** the signal handler SHALL zero the buffer via `explicit_bzero()`
+- **AND** SHALL issue `std::atomic_signal_fence(std::memory_order_seq_cst)` to prevent reordering between the handler and the interrupted code path
 - **AND** SHALL call `munlock()` and `munmap()`

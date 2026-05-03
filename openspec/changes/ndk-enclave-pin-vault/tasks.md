@@ -11,7 +11,7 @@
 - [ ] 2.1 Implement `MlockAllocator` in C++: `allocate()` uses `mmap()` with PROT_NONE guard pages (2 pages before, 2 pages after), `mprotect()` for middle region, `mlock()` for RAM locking
 - [ ] 2.2 Implement `deallocate()`: `explicit_bzero()` on data, `munlock()`, `munmap()` full region including guard pages
 - [ ] 2.3 Implement `RLIMIT_MEMLOCK` budget check: verify `getrlimit(RLIMIT_MEMLOCK)` has sufficient budget before `mlock()`; log warning if inadequate
-- [ ] 2.4 Implement fallback: if `mlock()` fails, use `madvise(MADV_WILLNEED | MADV_DONTDUMP)` with `mincore()` polling loop
+- [ ] 2.4 Implement fallback: if `mlock()` fails, use two sequential madvise calls — `madvise(..., MADV_WILLNEED)` then `madvise(..., MADV_DONTDUMP)` — with `mincore()` polling loop
 - [ ] 2.5 Poison allocated memory with `0xAA` pattern to detect use-after-free
 - [ ] 2.6 Unit test: allocation/deallocation roundtrip does not leak memory
 - [ ] 2.7 Unit test: guard page access triggers SIGSEGV (verified in test harness)
@@ -58,4 +58,4 @@
 - [ ] 7.2 Integration test: memory leak detection via AddressSanitizer (run full test suite with `-fsanitize=address`)
 - [ ] 7.3 Integration test: verify JVM heap has no PIN plaintext after enclave operation (scan heap dump)
 - [ ] 7.4 Manual QA: test on real Android device (API 33+), verify PIN entry automation works
-- [ ] 7.5 Run `bun run lint && bun run typecheck` on extension side
+- [ ] 7.5 Cross-layer Checks: Run `bun run lint && bun run typecheck` on extension side
