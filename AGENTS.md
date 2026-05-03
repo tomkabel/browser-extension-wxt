@@ -2,6 +2,8 @@
 
 This is a WXT-based browser extension (Chrome Manifest V3) using React 19, TypeScript 5.6 (strict), Tailwind CSS 4, and Zustand for state management.
 
+**Project**: SmartID2 — secure transaction verification and credential management.
+
 ## Build Commands
 
 - `bun run dev` — Start WXT dev server with HMR
@@ -30,8 +32,7 @@ This project uses **bun** as its package manager. Always use `bun run` / `bun in
 - Target is `ESNext` with `moduleResolution: "Bundler"`.
 - `jsx: "react-jsx"` (React 17+ transform).
 - `noEmit: true` — type-check only.
-- Path aliases resolve to the project root:
-  - `~/` and `@/` and `~~/` → project root
+- Path alias `~/` resolves to the project root:
   - Example: `import { log } from '~/lib/errors'`
 
 ## Code Style
@@ -90,15 +91,24 @@ This project uses **bun** as its package manager. Always use `bun run` / `bun in
 
 ```
 entrypoints/
+  auth/           # WebAuthn MFA authentication page
   background/     # Service worker scripts
   content/        # Content scripts injected into pages
+  offscreen-webrtc/ # Offscreen document for WebRTC data channel
   popup/          # Extension popup UI (React)
-lib/              # Shared utilities, errors, and Zustand stores
-public/           # Static assets
+lib/
+  channel/        # Noise protocol, QR code, emoji SAS, command client
+  crypto/         # WebAuthn PRF/fallback auth crypto
+  rateLimit/      # Reusable rate limiter factories
+  transaction/    # Transaction detection (bank-specific detectors)
 types/            # Shared TypeScript interfaces
 e2e/              # Playwright end-to-end tests
   fixtures/       # Static HTML pages for E2E test scenarios
+scripts/          # Utility scripts (env validation, ad-hoc testing)
+docs/             # Architecture and planning documents
 research/         # Research documents (gitignored from Prettier)
+signaling-server/ # WebSocket signaling server (deployed separately)
+turn-server/      # Coturn TURN server config (deployed separately)
 ```
 
 ## Library Modules (`lib/`)
@@ -109,6 +119,9 @@ research/         # Research documents (gitignored from Prettier)
 - **`lib/piiFilter.ts`** — `filterPii(text)` redacts credit cards (with Luhn validation), emails, phones, passwords, and other PII. `filterDomContent()` combines PII filtering with text length truncation.
 - **`lib/storage.ts`** — Thin re-export of `wxt/utils/storage`.
 - **`lib/store.ts`** — Zustand store (`useAppStore`) managing `currentTab`, `apiHealthy`, `apiStatus`, `apiError`, `lastSent`.
+- **`lib/rateLimit/slidingWindow.ts`** — `createSlidingWindowLimiter()` and `createDomainRateLimiter()` for reusable rate limiting.
+- **`lib/replayProtection.ts`** — `isReplayAssertion()` / `recordAssertion()` for WebAuthn assertion replay prevention.
+- **`lib/asyncUtils.ts`** — `withTimeout<T>()` for adding timeouts to promises.
 - **`lib/domainParser.test.ts`**, **`lib/errors.test.ts`**, etc. — Unit tests are co-located with source files, named `*.test.ts` or `*.test.tsx`.
 
 ## Messaging
@@ -132,7 +145,7 @@ interface MessageResponse {
 
 ### Background Handlers (`entrypoints/background/messageHandlers.ts`)
 
-- Centralized handler registry: `handlers` record keyed by message type.
+- Centralized handler registry: `handlers` record keyed by `MessageType`.
 - `registerMessageHandlers()` validates message format, dispatches to the matching handler, and always returns `true` (async).
 - Tab ID resolution: prefer `sender.tab?.id` (from content scripts); fallback to `browser.tabs.query({ active: true, currentWindow: true })` for popup messages where `sender.tab` may be missing.
 - All handlers return `{ success, data?, error? }`.
@@ -152,7 +165,7 @@ interface MessageResponse {
 
 ## Popup Component Patterns
 
-- **Code splitting**: Use `React.lazy()` + `Suspense` for each panel component (DomainPanel, ContentPanel, ApiPanel) loaded from `entrypoints/popup/panels/`.
+- **Code splitting**: Use `React.lazy()` + `Suspense` for each panel component (AuthPanel, TransactionPanel, CredentialPanel, PairingPanel) loaded from `entrypoints/popup/panels/`.
 - **Tab lifecycle**: Panels subscribe to `browser.tabs.onActivated` / `browser.tabs.onUpdated` to refetch data when the active tab changes.
 - **Cleanup**: Always use a `mounted` flag in `useEffect` to prevent state updates after unmount. Always remove listeners in the effect cleanup function.
 - **Messaging**: Popup communicates with the background script via `browser.runtime.sendMessage({ type, payload })`.
@@ -165,13 +178,13 @@ interface MessageResponse {
 - **Setup**: `vitest.setup.ts` imports `@testing-library/jest-dom`, resets `fakeBrowser` before each test, and mocks `global.fetch`.
 - **WXT mocking**: Use `fakeBrowser` from `wxt/testing` for browser API mocking. Call `fakeBrowser.reset()` in `beforeEach`.
 - **File naming**: Test files are co-located with source: `*.test.ts` / `*.test.tsx` for unit/integration tests.
-- **Coverage**: v8 provider with thresholds: lines ≥ 70%, branches ≥ 68%. Coverage targets `lib/`, `entrypoints/background/`, `entrypoints/content/`. Index files and test files are excluded.
+- **Coverage**: v8 provider with thresholds: lines ≥ 80%, branches ≥ 75%. Coverage targets `lib/`, `entrypoints/background/`, `entrypoints/content/`, `entrypoints/popup/`. Index files, test files, and style files are excluded.
 - **E2E exclusion**: Vitest config excludes `e2e/**` so E2E specs are not picked up by the unit test runner.
 
 ### E2E Tests (Playwright)
 
 - **Location**: `e2e/` directory. Test fixtures at `e2e/fixtures/`.
-- **Config**: `playwright.config.ts` — Chromium headless, CI-aware (retries, parallel workers, GitHub reporter). Dev server lifecycle via `webServer` config.
+- **Config**: `playwright.config.ts` — Chromium headless, CI-aware (retries, parallel workers, GitHub reporter). Extension loaded via `--load-extension` flag.
 - **Prerequisite**: E2E tests require `bun run build` first (extension must exist at `.output/chrome-mv3/`).
 - **Extension ID**: Resolved from `.output/chrome-mv3/manifest.json` at runtime.
 - **Pattern**: `test.beforeAll` creates a browser context and page. `test.afterAll` closes the context. Tests skip gracefully if extension is not built.
