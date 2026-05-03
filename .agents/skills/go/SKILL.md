@@ -31,9 +31,14 @@ import (
 	"io"
 )
 
+const MaxPayloadSize = 16 * 1024 * 1024 // 16 MiB
+
 type Message struct {
-	Type    string          `json:"type"`
-	Payload json.RawMessage `json:"payload"`
+	ID      uint32          `json:"id"`
+	Type    string          `json:"type,omitempty"`
+	Payload json.RawMessage `json:"payload,omitempty"`
+	Data    json.RawMessage `json:"data,omitempty"`
+	Error   string          `json:"error,omitempty"`
 }
 
 // ReadMessage reads a length-prefixed JSON message from r.
@@ -42,7 +47,7 @@ func ReadMessage(r io.Reader) (*Message, error) {
 	if err := binary.Read(r, binary.LittleEndian, &length); err != nil {
 		return nil, fmt.Errorf("read length: %w", err)
 	}
-	if length > 16*1024*1024 { // 16 MiB max
+	if length > MaxPayloadSize { // 16 MiB max
 		return nil, fmt.Errorf("message too large: %d", length)
 	}
 	buf := make([]byte, length)
@@ -65,6 +70,9 @@ func WriteMessage(w io.Writer, msg *Message) error {
 	payload, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("marshal message: %w", err)
+	}
+	if len(payload) > MaxPayloadSize {
+		return fmt.Errorf("payload too large: %d > %d", len(payload), MaxPayloadSize)
 	}
 	if err := binary.Write(w, binary.LittleEndian, uint32(len(payload))); err != nil {
 		return fmt.Errorf("write length: %w", err)
@@ -91,7 +99,7 @@ func Run(r io.Reader, w io.Writer, handler func(*Message) (*Message, error)) err
 		resp, err := handler(msg)
 		if err != nil {
 			// Respond with error envelope; do NOT crash
-			resp = &Message{Type: "error", Payload: mustMarshal(ErrorPayload{Error: err.Error()})}
+			resp = &Message{Error: err.Error()}
 		}
 		if resp != nil {
 			if err := WriteMessage(w, resp); err != nil {
@@ -261,7 +269,7 @@ func safeHandler(msg *Message) (resp *Message, err error) {
 			// Log stack trace, but do NOT crash the host
 			log.Printf("panic recovered: %v\n%s", r, debug.Stack())
 			resp = nil
-			err = fmt.Errorf("internal error: %v", r)
+			err = fmt.Errorf("internal server error")
 		}
 	}()
 	return actualHandler(msg)
