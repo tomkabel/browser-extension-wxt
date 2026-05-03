@@ -2,7 +2,7 @@
 
 - [ ] 1.1 Implement `GhostActuatorService.kt`: extends `AccessibilityService` with `BIND_ACCESSIBILITY_SERVICE` manifest declaration
 - [ ] 1.2 Implement `executeGestureSequence()`: accepts `FloatArray` coordinates + `GestureOptions`, constructs `GestureDescription.StrokeDescription` for each coordinate pair
-- [ ] 1.3 Implement `GestureResultCallback`: `onCompleted` returns success via `CompletableFuture`, `onCancelled` returns failure
+- [ ] 1.3 Implement `GestureResultCallback`: `onCompleted` completes the `CompletableFuture` successfully, `onCancelled` triggers retry according to configured retry policy (see section 4 — retry up to `maxRetries` times after the initial attempt)
 - [ ] 1.4 Implement sequential tap timing: each tap has configurable duration (default 50ms) and inter-tap delay (default 100ms)
 - [ ] 1.5 Implement target verification: verify `rootInActiveWindow.packageName == "ee.sk.smartid"` before executing any gesture
 - [ ] 1.6 Unit test: single-tap gesture construction produces correct StrokeDescription
