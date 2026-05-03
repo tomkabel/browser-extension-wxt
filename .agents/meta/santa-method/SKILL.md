@@ -24,7 +24,7 @@ Do NOT use for internal drafts, exploratory research, or tasks with deterministi
 
 ## Architecture
 
-```
+```text
 ┌─────────────┐
 │  GENERATOR   │  Phase 1: Make a List
 │  (Agent A)   │  Produce the deliverable
@@ -298,7 +298,7 @@ Track these to measure Santa Method effectiveness:
 
 Santa Method costs approximately 2-3x the token cost of generation alone per verification cycle. For most high-stakes output, this is a bargain:
 
-```
+```text
 Cost of Santa = (generation tokens) + 2×(review tokens per round) × (avg rounds)
 Cost of NOT Santa = (reputation damage) + (correction effort) + (trust erosion)
 ```

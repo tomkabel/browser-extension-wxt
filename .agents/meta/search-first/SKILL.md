@@ -18,7 +18,7 @@ Use this skill when:
 
 ## Workflow
 
-```
+```text
 ┌─────────────────────────────────────────────┐
 │  1. NEED ANALYSIS                           │
 │     Define what functionality is needed      │
@@ -71,7 +71,7 @@ Before writing a utility or adding functionality, mentally run through:
 
 For non-trivial functionality, launch the researcher agent:
 
-```
+```text
 Task(subagent_type="general-purpose", prompt="
   Research existing tools for: [DESCRIPTION]
   Language/framework: [LANG]
@@ -127,7 +127,7 @@ Combine for progressive discovery:
 ## Examples
 
 ### Example 1: "Add dead link checking"
-```
+```text
 Need: Check markdown files for broken links
 Search: npm "markdown dead link checker"
 Found: textlint-rule-no-dead-link (score: 9/10)
@@ -136,7 +136,7 @@ Result: Zero custom code, battle-tested solution
 ```
 
 ### Example 2: "Add HTTP client wrapper"
-```
+```text
 Need: Resilient HTTP client with retries and timeout handling
 Search: npm "http client retry", PyPI "httpx retry"
 Found: got (Node) with retry plugin, httpx (Python) with built-in retry
@@ -145,7 +145,7 @@ Result: Zero custom code, production-proven libraries
 ```
 
 ### Example 3: "Add config file linter"
-```
+```text
 Need: Validate project config files against a schema
 Search: npm "config linter schema", "json schema validator cli"
 Found: ajv-cli (score: 8/10)

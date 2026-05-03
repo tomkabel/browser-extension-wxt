@@ -283,7 +283,7 @@ services:
 
 ## .dockerignore
 
-```
+```text
 node_modules
 .git
 .env
@@ -343,7 +343,7 @@ docker network inspect <project>_default
 
 ## Anti-Patterns
 
-```
+```text
 # BAD: Using docker compose in production without orchestration
 # Use Kubernetes, ECS, or Docker Swarm for production multi-container workloads
 
