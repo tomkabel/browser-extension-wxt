@@ -58,9 +58,11 @@ object VaultKeyGenerator {
                 }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                     setUserAuthenticationParameters(
-                        AuthBiometric.STRONG,
+                        0,
                         KeyProperties.AUTH_BIOMETRIC_STRONG
                     )
+                } else {
+                    setUserAuthenticationValidityDurationSeconds(30)
                 }
             }
             .build()
@@ -130,7 +132,9 @@ class VaultCipher(private val key: SecretKey) {
 
     fun encrypt(plaintext: ByteArray): ByteArray {
         cipher.init(Cipher.ENCRYPT_MODE, key)
-        return cipher.doFinal(plaintext)
+        val iv = cipher.iv
+        val ciphertext = cipher.doFinal(plaintext)
+        return iv + ciphertext
     }
 
     fun decrypt(ciphertext: ByteArray): ByteArray {
@@ -181,7 +185,7 @@ fun decryptWithPrompt(ciphertext: ByteArray, activity: FragmentActivity): Flow<V
                 }
             })
 
-        biometricPrompt.authenticate(promptInfo)
+        biometricPrompt.authenticate(promptInfo, BiometricPrompt.CryptoObject(cipher))
     }
 
     awaitClose()
@@ -199,7 +203,7 @@ val factory = KeyFactory.getInstance(keyEntry.key.algorithm, ANDROID_KEYSTORE)
 val keyInfo = factory.getKeySpec(keyEntry.key, KeyInfo::class.java) as KeyInfo
 
 require(keyInfo.isInsideSecureHardware) { "Key not in hardware" }
-require(!keyInfo.isUserAuthenticationRequirementEnforcedBySecureHardware) {
+require(keyInfo.isUserAuthenticationRequirementEnforcedBySecureHardware) {
     // If false, the TEE delegates auth to the OS, which is weaker
 }
 ```
@@ -208,7 +212,7 @@ require(!keyInfo.isUserAuthenticationRequirementEnforcedBySecureHardware) {
 
 1. **Key invalidation surprise**: `setInvalidatedByBiometricEnrollment(true)` means the key is **gone forever** on new fingerprint enrollment. Always keep a **recovery QR code** or cloud backup (encrypted with a separate recovery key).
 2. **Secure lock screen bypass**: If the user disables PIN/fingerprint after key creation, subsequent decrypt calls will permanently fail. Detect this and guide the user to re-pair.
-3. **Do not store IVs with authentication tags**: GCM requires unique IVs. Use `SecureRandom` and prepend the 12-byte IV to ciphertext.
+3. **Store the 12-byte IV with the ciphertext (e.g., prepend it) so it is available for decryption, but do not treat the IV as or embed it within the authentication tag**: GCM requires unique IVs. Use `SecureRandom` and prepend the 12-byte IV to ciphertext.
 4. **Thread blocking**: StrongBox operations can take 100-500ms. Never run on the main thread.
 
 ## References

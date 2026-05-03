@@ -98,8 +98,14 @@ class GhostActuatorService : AccessibilityService() {
 
     private val executor = Handler(Looper.getMainLooper())
 
+    private fun supportsDispatchGesture(): Boolean {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.N &&
+            accessibilityServiceInfo != null &&
+            accessibilityServiceInfo.flags and AccessibilityServiceInfo.FLAG_REQUEST_TOUCH_EXPLORATION_MODE != 0
+    }
+
     fun enterPin(digits: List<Int>, keypadCoordinates: Map<Int, Point>): Flow<GhostActResult> = callbackFlow {
-        if (!canPerformGestures()) {
+        if (!supportsDispatchGesture()) {
             trySend(GhostActResult.Error("CANNOT_PERFORM_GESTURES"))
             close()
             return@callbackFlow
@@ -183,17 +189,34 @@ fun swipe(from: Point, to: Point, durationMs: Long = 300L): Boolean {
 }
 ```
 
-For multi-segment gestures (e.g., pattern lock with intermediate points), use `StrokeDescription.continueStroke()`:
+For multi-segment gestures (e.g., pattern lock with intermediate points), use `StrokeDescription.continueStroke()`. Each segment must be wrapped in its own `GestureDescription` and dispatched via `accessibilityService.dispatchGesture()`, with subsequent dispatches chained from the previous `onCompleted` callback:
 
 ```kotlin
-val stroke1 = GestureDescription.StrokeDescription(path1, 0, 200, true) // willContinue = true
-val stroke2 = stroke1.continueStroke(path2, 0, 200, true)
-val stroke3 = stroke2.continueStroke(path3, 0, 200, false)
+val stroke1 = GestureDescription.StrokeDescription(path1, 0, 200, true)
 
-val gesture = GestureDescription.Builder()
+// Dispatch the first segment
+val gesture1 = GestureDescription.Builder()
     .addStroke(stroke1)
     .build()
-// Note: continueStroke is added implicitly by the framework
+dispatchGesture(gesture1, object : GestureResultCallback() {
+    override fun onCompleted(gestureDescription: GestureDescription?) {
+        // First segment completed — dispatch second segment
+        val stroke2 = stroke1.continueStroke(path2, 0, 200, true)
+        val gesture2 = GestureDescription.Builder()
+            .addStroke(stroke2)
+            .build()
+        dispatchGesture(gesture2, object : GestureResultCallback() {
+            override fun onCompleted(gestureDescription: GestureDescription?) {
+                // Second segment completed — dispatch third (final) segment
+                val stroke3 = stroke2.continueStroke(path3, 0, 200, false)
+                val gesture3 = GestureDescription.Builder()
+                    .addStroke(stroke3)
+                    .build()
+                dispatchGesture(gesture3, null, null)
+            }
+        }, null)
+    }
+}, null)
 ```
 
 ## Privilege Escalation & Security Risks
@@ -225,11 +248,11 @@ override fun onAccessibilityEvent(event: AccessibilityEvent) {
 }
 ```
 
-## Handling `canPerformGesture` Checks
+## Handling Gesture Capability Checks
 
 ```kotlin
 fun ensureGestureCapability(): Boolean {
-    if (!canPerformGestures()) {
+    if (!supportsDispatchGesture()) {
         // Guide user to enable gesture permission in Accessibility settings
         val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
@@ -241,7 +264,7 @@ fun ensureGestureCapability(): Boolean {
 }
 ```
 
-On Android 14+, `canPerformGestures()` may return `false` even if declared, if the user has revoked the permission via Settings > Apps > Special app access.
+On Android 14+, `supportsDispatchGesture()` may return `false` even if declared, if the user has revoked the permission via Settings > Apps > Special app access.
 
 ## Common Pitfalls
 
