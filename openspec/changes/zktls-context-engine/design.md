@@ -1,114 +1,165 @@
 ## Context
 
-The zkTLS Context Engine provides mathematical certainty about what a TLS server transmitted to the browser. It uses a lightweight Multi-Party Computation (MPC) protocol (TLSNotary or DECO) that allows the browser extension to generate a zero-knowledge proof that a specific string (the Smart-ID control code) appeared in the TLS-encrypted server response.
+The Attestation Context Engine provides mathematical certainty about what a bank's server transmitted to the browser. It uses a simple, standard cryptographic approach: the bank's server includes a signed HTTP response header (`SmartID-Attestation`) containing the control code. The extension verifies the ECDSA P-256 signature using the bank's known public key.
+
+This replaces the TLSNotary/DECO WASM MPC prover approach (previously specified). The replacement is possible because:
+
+1. **Smart-ID RP banks are cooperative**: The whitelist of 4 banks (lhv.ee, swedbank.ee, seb.ee, tara.ria.ee) are known business partners. Adding a response header is trivial for them and requires no protocol change.
+
+2. **The threat model doesn't change**: A RAT on the user's device can strip or modify the header, but cannot forge a valid ECDSA P-256 signature because it lacks the bank's private signing key. The worst outcome is degraded to DOM-only mode (current behavior).
+
+3. **No external infrastructure needed**: No Notary server, no WASM compilation, no Offscreen Document prover host, no SharedArrayBuffer.
 
 The proving operates as follows:
-1. The extension's Offscreen Document hosts a WASM-compiled MPC prover
-2. The prover observes the TLS 1.3 handshake between the browser and the RP server
-3. During TLS notarization, the prover commits to specific parts of the TLS transcript
-4. The prover generates a ZKP that proves: "The server holding TLS private key for domain X transmitted string Y in response Z"
-5. This proof is compact (<4KB) and can be verified using only the server's TLS certificate public key
+1. The user navigates to a whitelisted RP and initiates a Smart-ID login
+2. The bank's server generates the control code and includes it in both the HTML DOM and a `SmartID-Attestation` response header
+3. The extension intercepts the response via `chrome.webRequest.onHeadersReceived`
+4. The extension parses the header, extracts the signed payload, and verifies the ECDSA P-256 signature using the bank's public key
+5. The attested control code is cross-referenced with the DOM-scraped code
+6. On match: highest confidence; on mismatch: use attested code (RAT detected); on missing header: degrade to DOM-only
 
 ## Goals / Non-Goals
 
 **Goals:**
-- WASM-compiled TLSNotary/DECO prover running in the Offscreen Document
-- ZKP generation for TLS 1.3 transcript inclusion (specific control code string)
-- Proof size <4KB for efficient transport over USB or WebRTC
-- Proof verification on Android using the bank/RP's TLS certificate
-- Control code extraction from attested transcript
-- Cross-reference with DOM-scraped code for defense-in-depth
-- Support for whitelisted RP domains (lhv.ee, swedbank.ee, seb.ee, tara.ria.ee)
+- ECDSA P-256 signature verification via `crypto.subtle.verify()` for attested control codes
+- Response header interception via `chrome.webRequest.onHeadersReceived` in service worker
+- `TrustedRpSigningKey` manifest for whitelisted RP domains (lhv.ee, swedbank.ee, seb.ee, tara.ria.ee)
+- Cross-reference attested code with DOM-scraped code for defense-in-depth
+- Secure key rotation with signed manifest and rollback protection
+- Proof delivery to Android Vault over existing transport (USB/WebRTC) for WebAuthn challenge binding
+- Support for multiple active signing keys per RP (for key rotation without window gaps)
 
 **Non-Goals:**
-- TLS 1.2 support (all Smart-ID RPs use TLS 1.3)
-- Proving arbitrary transcript content (only control code strings)
-- Real-time proof generation for every page load (only during Smart-ID auth flow)
-- Browser-independent operation (requires MV3 offscreen document API)
+- WASM module loading or compilation (removed — no longer needed)
+- Offscreen Document prover host (removed — attestation runs in service worker)
+- Notary server deployment or operation (removed — no third-party MPC participant)
+- ZKP serialization or compact binary proof format (removed — attestation is a HTTP header)
+- TLS 1.2 support (all Smart-ID RPs use TLS 1.3, and this approach is TLS-version-agnostic)
 
 ## Decisions
 
-### 1. WASM Compilation Target
-
-The TLSNotary MPC prover is written in Rust and compiled to WASM via `wasm-pack`. The WASM module:
-- Size target: <2MB gzipped
-- Lazy-loaded when a whitelisted RP domain is detected
-- Cached in `chrome.storage.local` after first load
-- Requires SharedArrayBuffer for MPC prover threads (need COOP/COEP headers via Offscreen Document)
-
-### 2. ZKP Flow
+### 1. Attestation Flow
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  BROWSER EXTENSION (Offscreen Document)                      │
+│  BROWSER EXTENSION (Service Worker)                          │
 │                                                              │
 │  1. User navigates to lhv.ee, initiates Smart-ID login       │
-│  2. Extension detects control code "4892" in DOM             │
-│  3. Offscreen Doc loads WASM prover                          │
-│  4. Prover observes TLS 1.3 handshake (notarization)         │
-│  5. Prover generates ZKP: "lhv.ee TLS cert attested '4892'" │
-│  6. Proof serialized to <4KB binary                          │
-│  7. Proof sent to Go Native Host → Android Vault             │
+│  2. Server responds with HTML + header:                      │
+│     SmartID-Attestation: v1;cid=<code>;sig=<signature>      │
+│  3. webRequest.onHeadersReceived intercepts the response     │
+│  4. Extension parses header, looks up RP public key          │
+│  5. crypto.subtle.verify() with ECDSA P-256                  │
+│  6. If valid: attested code = what bank sent                 │
+│  7. Cross-reference with DOM-scraped code                    │
+│  8. Attested code sent over USB/WebRTC to Android Vault      │
 │                                                              │
 │  ANDROID VAULT (Java Orchestrator)                           │
 │                                                              │
-│  8. ZkProofVerifier receives proof + bank TLS cert           │
-│  9. Verifier checks: proof valid? cert matches RP?           │
-│  10. Extracts attested control code: "4892"                  │
-│  11. Passes to ChallengeVerifier for WebAuthn binding        │
+│  9. AttestationVerifier receives {code, signature, keyId}    │
+│  10. Verifies ECDSA P-256 signature with local public key    │
+│  11. Extracts attested control code for ChallengeVerifier    │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 3. TLSNotary Mechanics (Simplified)
+### 2. Header Format
 
-TLSNotary works by splitting the TLS session into two parties:
-- **Notary**: A third-party server that observes the TLS handshake and attests to the transcript
-- **Prover**: The browser (our WASM module) that proves specific transcript excerpts
+```
+SmartID-Attestation: v1;<base64url(json-payload)>;<base64url(ecdsa-signature)>;<key-id>
 
-For privacy, the Notary never learns the transcript content — it only attests to its cryptographic integrity. The Prover generates a ZKP showing that a specific string exists within the attested transcript without revealing the rest of the transcript.
+Where json-payload = {"code":"4892","session":"abc123","ts":1715000000}
+```
 
-Implementation approach:
-1. Establish a TLS 1.3 connection to the RP server
-2. Split the TLS session key between Prover and Notary using MPC
-3. Notary commits to the encrypted transcript
-4. Prover generates a ZKP of inclusion for the control code substring
-5. The resulting proof includes: TLS session fingerprint, transcript position, control code, Notary's attestation signature
+The header format uses base64url (RFC 4648 §5, no padding) for safe HTTP transport:
+- `v1` — format version identifier
+- `payload` — UTF-8 JSON, base64url-encoded
+- `signature` — raw ECDSA P-256 signature (r||s, 64 bytes), base64url-encoded
+- `key-id` — plaintext string identifying which signing key was used (e.g. `"lhv-2026q2"`)
 
-### 4. RP Certificate Key Management
+Total header size: approximately 150-200 bytes (vs 4KB ZKP proof target and 2MB WASM module).
 
-Bank/RP TLS certificates rotate periodically. The extension must maintain a current set of trusted public keys:
+### 3. Signature Verification
 
 ```typescript
-interface TrustedRpKey {
-  domain: string
-  subjectPublicKey: Uint8Array  // DER-encoded SPKI
-  notBefore: string             // ISO 8601
-  notAfter: string              // ISO 8601
-  fingerprint: string           // SHA-256 of DER certificate
+// Pure TypeScript — no WASM, no Offscreen Document
+// Runs in extension service worker via chrome.webRequest.onHeadersReceived
+
+const encoder = new TextEncoder();
+
+async function verifyAttestation(
+    rawHeader: string,
+    rpDomain: string
+): Promise<AttestedCode | null> {
+    const parts = rawHeader.split(';');
+    if (parts[0] !== 'v1' || parts.length !== 4) return null;
+
+    const [, payloadB64, sigB64, keyId] = parts;
+    const sig = base64urlDecode(sigB64);
+    const payloadBytes = encoder.encode(payloadB64);
+    const payload = JSON.parse(atob(payloadB64));
+
+    const pubKey = TRUSTED_RP_KEYS[rpDomain]?.[keyId];
+    if (!pubKey) {
+        log.warn(`Unknown key-id ${keyId} for ${rpDomain}`);
+        return null;
+    }
+
+    const valid = await crypto.subtle.verify(
+        { name: 'ECDSA', hash: 'SHA-256' },
+        pubKey,
+        sig,
+        payloadBytes
+    );
+
+    if (!valid) {
+        log.warn(`Invalid attestation signature for ${rpDomain}`);
+        return null;
+    }
+
+    return { code: payload.code, keyId, signature: sigB64 };
+}
+```
+
+### 4. RP Signing Key Management
+
+Bank/RP signing keys are ECDSA P-256 keys dedicated to this purpose (NOT the bank's TLS certificate keys):
+
+```typescript
+interface TrustedRpSigningKey {
+  domain: string          // e.g. "lhv.ee"
+  keyId: string           // e.g. "lhv-2026q2" — used for rotation
+  publicKey: CryptoKey    // ECDSA P-256, imported via crypto.subtle.importKey()
+  notBefore: string       // ISO 8601
+  notAfter: string        // ISO 8601
 }
 ```
 
 Keys are updated via:
-- Bundled with extension release (initial set)
+- Bundled with extension release (initial set, 4 domains × 1-2 keys each)
 - Background update check against a signed key manifest
 - User can manually trigger an update in the popup
 
+Key rotation is handled by pre-distributing the new key before the old key expires (overlap window). Multiple active keys per domain are supported.
+
 ### 5. Performance Budget
 
-| Operation | Budget | Target |
+| Operation | Budget | Implementation |
 |---|---|---|
-| WASM module load (cold) | <500ms | First load from storage |
-| TLS handshake observation | <200ms | Transparent to user |
-| ZKP generation | <1000ms | Offscreen Document, non-blocking |
-| Proof serialization | <10ms | Into <4KB binary |
-| Android verification | <50ms | On device CPU |
-| Total latency add | <2s | Acceptable for auth flow |
+| Response header interception | <1ms | webRequest listener callback |
+| Header parsing + key lookup | <5ms | Local Map lookup |
+| ECDSA P-256 signature verify | <10ms | Web Crypto API (native) |
+| Cross-reference with DOM | <1ms | String comparison |
+| Android-side verification | <10ms | Java crypto API |
+| Total latency added | <20ms | Zero network round trips |
+| Bundle size added | ~200 bytes | Pure TypeScript |
+
+Compare with the prior TLSNotary approach: 2MB WASM module, 1-2s ZKP generation, Notary server RTT.
 
 ## Risks / Trade-offs
 
-- [Risk] TLSNotary requires a Notary server (third-party MPC participant) — Self-host a Notary instance or use TLSNotary's public infrastructure; latency impact on proof generation
-- [Risk] WASM SharedArrayBuffer may be unavailable (cross-origin isolation) — Offscreen Document can set required headers via manifest CSP
-- [Risk] TLS 1.3 session resumption (0-RTT) may skip full handshake — Force full handshake during zkTLS sessions or handle 0-RTT case separately
-- [Risk] RP TLS certificate rotation breaks trust — Implement automatic key refresh from a signed manifest hosted alongside the extension update server
-- [Risk] Proof generation increases login latency by ~1-2s — Show "Attesting transaction context..." in the popup; this is a one-time cost per session
-- [Trade-off] DECO (more private, no Notary needed) vs TLSNotary (more mature, needs Notary) — Start with TLSNotary for faster implementation; DECO as a future optimization when WASM support matures
+- [Risk] Bank must add a response header — This requires coordination with each of the 4 whitelisted RPs. However, the implementation cost per bank is trivial: add one response header on the Smart-ID login endpoint. This is substantially simpler than deploying a Notary server or modifying TLS behavior.
+- [Risk] Header may be stripped by intermediaries — Proxies, AV software, or the RAT can strip the `SmartID-Attestation` header. The extension gracefully degrades to DOM-only mode in this case (same security level as today's V5). The RAT cannot forge a valid signature.
+- [Risk] Key rotation synchronization — If the bank rotates their signing key and the extension's manifest is outdated, verification fails until the manifest refreshes. Mitigated by: bundling keys with overlap windows, background manifest refresh, and graceful degradation to DOM-only.
+- [Trade-off] No TLSNotary, no witness of the TLS transcript — This approach proves "the bank's signing key committed to this control code" rather than "the bank's TLS session contained this string." The security level is equivalent for the threat model: a RAT cannot forge either, and both degrade to DOM-only on failure. The operational complexity is drastically lower.
+- [Trade-off] No WASM, no Offscreen Document — Attestation runs entirely in the service worker. The existing Offscreen Document is preserved for WebRTC only. No `SharedArrayBuffer` or `COOP/COEP` headers needed anywhere.
+- [Risk] Replay of old attestation headers — Mitigated by including a session identifier and timestamp in the signed payload. The Android Vault checks that the session matches the current WebAuthn transaction.

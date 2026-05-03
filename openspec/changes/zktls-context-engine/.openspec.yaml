@@ -4,15 +4,15 @@ specs:
   - specs/tlsnotary-wasm-prover
   - specs/control-code-verification
   - specs/zkp-key-management
-  - specs/zkp-serialization
 context: |
-  Phase 2 — WASM-compiled TLSNotary/DECO MPC prover running in the extension's
-  Offscreen Document. Generates a zero-knowledge proof that a specific control
-  code string appeared in a TLS 1.3 server response from a whitelisted RP.
-  Proof size target <4KB for efficient transport over USB/WebRTC. Android-side
-  verification using the bank/RP's TLS certificate public key. Enables
-  mathematical certainty about network truth, defeating RAT/DOM manipulation.
-  V6 Alignment: Core V6 Layer 1 defense. Blocked on TLSNotary licensing/audit
-    for WASM compilation. Blocking challenge-bound-webauthn which needs the zkTLS
-    proof as WebAuthn challenge input. Depends on completed usb-aoa-transport-proxy
+  Phase 2 — Signed HTTP response header attestation for Smart-ID control codes.
+  The bank's server includes a SmartID-Attestation response header: base64url
+  payload + ECDSA P-256 signature. The extension intercepts via webRequest.onHeadersReceived,
+  verifies the signature using Web Crypto API and the RP's known signing key
+  (TrustedRpSigningKey manifest). No WASM, no Notary server, no Offscreen
+  Document involvement. Pure TypeScript implementation (~100 lines).
+  V6 Alignment: Core V6 Layer 1 defense. No longer blocked on licensing/audit.
+    Removes all prior TLSNotary risks (AGPL, Notary infra, SharedArrayBuffer, <2MB WASM).
+    Blocking challenge-bound-webauthn which needs the attested control code as
+    WebAuthn challenge input. Depends on completed usb-aoa-transport-proxy
     for proof delivery to Android for verification.
