@@ -296,6 +296,7 @@ func registerHandlers(r *nm.Router, session *Session, writer *nm.MessageWriter) 
 
 		_, err = aoa.WriteBulk(session.device.OutEndpoint(), ciphertext, aoa.DefaultTransferTimeout)
 		if err != nil {
+			session.cryptoSession.Seq.RevertOutbound(seq)
 			return &nm.Message{Type: nm.MsgSendResult, Success: nm.BoolPtr(false), Error: fmt.Sprintf("USB write failed: %v", err)}, nil
 		}
 

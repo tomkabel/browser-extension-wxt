@@ -56,6 +56,14 @@ func (st *SequenceTracker) ValidateInbound(received uint64) error {
 	return nil
 }
 
+func (st *SequenceTracker) RevertOutbound(seq uint64) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if seq < st.outbound {
+		st.outbound = seq
+	}
+}
+
 func (st *SequenceTracker) Reset() {
 	st.mu.Lock()
 	defer st.mu.Unlock()
