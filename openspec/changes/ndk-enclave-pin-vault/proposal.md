@@ -58,4 +58,4 @@ PHASE 2 — Critical V6 capability. This is the Layer 3 defense that eliminates 
 
 - Blocked on: [`ghost-actuator-gesture-injection`](#) (enclave produces input for the actuator)
 - Blocking: `eidas-qes-hardware-gate` (needs enclave for PIN2 handling)
-- Related: `usb-aoa-transport-proxy` (transport for the verified payload that authorizes PIN decryption)
+- Builds on: `usb-aoa-transport-proxy` (completed — transport for the verified payload that authorizes PIN decryption)

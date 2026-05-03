@@ -51,5 +51,6 @@ PHASE 2 — Core V6 capability. This is the Layer 4 execution mechanism that tra
 
 ## Dependencies
 
-- Blocked on: `ndk-enclave-pin-vault` (provides the coordinate inputs), `usb-aoa-transport-proxy` (delivers the verified payload that authorizes actuation)
+- Blocked on: `ndk-enclave-pin-vault` (provides the coordinate inputs)
+- Builds on: `usb-aoa-transport-proxy` (completed — delivers the verified payload that authorizes actuation over AOA 2.0 or WebRTC fallback)
 - Related: `eidas-qes-hardware-gate` (extends Ghost Actuator with hardware interrupt suspension)

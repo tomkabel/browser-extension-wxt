@@ -1,2 +1,18 @@
 schema: spec-driven
 created: 2026-05-03
+specs:
+  - specs/hardware-interrupt-gate
+  - specs/non-obscuring-overlay
+  - specs/haptic-signaling
+  - specs/qes-audit-trail
+context: |
+  Phase 2 — eIDAS Qualified Electronic Signature compliance layer. Introduces a
+  mandatory hardware interrupt (Volume Down button) before the Ghost Actuator
+  executes PIN2 gesture sequences. The Hardware Interrupt Gate (HIG) state machine
+  suspends Ghost Actuator execution, emits an SOS haptic pulse, and waits 30s for
+  the user to physically press Volume Down after visually verifying the transaction
+  on the Smart-ID app screen. A cryptographic audit trail records all QES events
+  signed with a device-local attestation key.
+  V6 Alignment: Final V6 defense layer making automated QES legally bulletproof.
+    Built on top of ghost-actuator-gesture-injection and ndk-enclave-pin-vault.
+    The challenge-bound-webauthn PC biometric verification must precede gate arming.

@@ -43,8 +43,8 @@ This transforms the PIN from a cryptographic secret into an anonymous spatial ge
 │  C++ NDK ENCLAVE (libvault_enclave.so)                │
 │                                                       │
 │  1. mlock(pinBuffer, MAX_PIN_SIZE)                    │
-│  2. AKeyStore_decryptBlob() → plaintext PIN           │
-│     into pinBuffer                                    │
+│  2. AKeyStore keystore retrieval + AKeyStore_getBlob()│
+│     → plaintext PIN into pinBuffer                    │
 │  3. For each digit in pinBuffer:                      │
 │       idx = digit - '0'                               │
 │       x = layoutBounds[idx * 2]                       │
@@ -89,19 +89,34 @@ class MlockAllocator {
 
 ### 3. Keystore NDK Bridge
 
-Android Keystore decryption via NDK uses `AKeyStore` API (API level 28+):
+Android Keystore decryption via NDK uses `AKeyStore` API (API level 28+, Android 9+):
 
 ```cpp
-status_t decryptPin(AKeystore* keystore, const char* keyAlias,
+#include <android/keystore.h>
+
+status_t decryptPin(const char* keyAlias,
                     const uint8_t* ciphertext, size_t ctLen,
                     uint8_t* plaintext, size_t* ptLen) {
-  // 1. Get key characteristics (verify user authentication required)
-  // 2. Create decryption builder with AES/GCM/NoPadding
-  // 3. Set auth timeout to 0 (require biometric each time)
-  // 4. Decrypt directly into mlocked buffer
-  // 5. Return status
+  // 1. Open keystore and retrieve the key blob
+  AKeyStore* keystore = AKeyStore_getKeyStore();
+  if (!keystore) return ERROR_KEYSTORE_UNAVAILABLE;
+
+  size_t blobLen = 0;
+  uint8_t* blob = nullptr;
+  keymaster_security_level_t securityLevel;
+  int32_t result = AKeyStore_getBlob(keystore, keyAlias, &blob, &blobLen,
+                                      &securityLevel);
+  if (result != 0) return ERROR_KEY_NOT_FOUND;
+
+  // 2. Decrypt using AES/GCM/NoPadding via keymaster
+  //    The ciphertext blob from Android Keystore contains
+  //    IV + encrypted data + tag (GCM appends tag)
+  // 3. Write plaintext directly into the mlocked buffer
+  // 4. Return status
 }
 ```
+
+Note: The specific keymaster/keystore NDK API entry points (`AKeyStore_getKeyStore`, `AKeyStore_getBlob`, `AKeyStore_storeBlob`) were introduced in API 28. On API 33+ the `AKeyStore_setAuthBoundBlob` function provides additional auth-bound guarantees. The JNI fallback path decrypts in Java but immediately zeros after JNI transfer to C++.
 
 The key alias is the PIN identifier (e.g., `"smartid_pin1"` or `"smartid_pin2"`). The key was created during Phase 0 provisioning with `setUserAuthenticationRequired(true)`.
 
@@ -155,7 +170,7 @@ The sanitizer is called on all code paths:
 
 ## Risks / Trade-offs
 
-- [Risk] `mlock()` requires `android.permission.MANAGE_OWN_ANDROID_KEYS` — Verify this is available on Android 13+; fall back to `madvise(MADV_WILLNEED)` if unavailable
+- [Risk] `mlock()` requires `CAP_IPC_LOCK` which is unavailable to unprivileged Android apps — The NDK library uses `mlock()` via the system call directly (available to any process that has `mlockall(MCL_CURRENT)` or sufficient RLIMIT_MEMLOCK). Android does not expose a specific permission for `mlock()`; verify `getrlimit(RLIMIT_MEMLOCK)` has sufficient budget. If `mlock()` fails (EFAULT/ENOMEM), fall back to `madvise(MADV_WILLNEED | MADV_DONTDUMP)` with explicit page locking via `mincore()` polling loop
 - [Risk] Smart-ID app grid layout changes between versions — PinGridAnalyzer must detect layout version and adjust; use resource ID matching to find the grid container
 - [Risk] `AKeyStore` NDK API is not well-documented — Rely on Android Keystore Java API via JNI if NDK API is unstable; decrypt in Java but zero immediately after JNI transfer to C++
 - [Risk] Memory dumps via /proc/pid/mem or LiME — `mlock()` prevents swap but not in-process memory dumping; assume process memory is adversary-controlled, which is why we never store PINs in Java heap
