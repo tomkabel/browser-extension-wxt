@@ -9,7 +9,7 @@
 - [ ] 2.1 Set up Rust toolchain with `wasm-pack` target in the project build system
 - [ ] 2.2 Create Rust crate for TLSNotary MPC prover with minimum feature set (TLS 1.3 observation, transcript commitment, proof generation)
 - [ ] 2.3 Add WASM compilation step to `wxt.config.ts` build pipeline (lazy-loaded, not in initial bundle)
-- [ ] 2.4 Configure Offscreen Document CSP headers to support `SharedArrayBuffer` (COOP/COEP)
+- [ ] 2.4 Configure Offscreen Document cross-origin headers to support `SharedArrayBuffer` (Cross-Origin-Opener-Policy and Cross-Origin-Embedder-Policy)
 - [ ] 2.5 Verify WASM binary size target: <2MB gzipped
 - [ ] 2.6 Unit test: WASM module loads and initializes in Offscreen Document context
 
@@ -45,7 +45,7 @@
 - [ ] 6.2 Measure TLS 1.3 handshake observation time: target <200ms
 - [ ] 6.3 Measure ZKP generation time: target <1000ms
 - [ ] 6.4 Implement lazy loading: only load WASM module when whitelisted RP domain is detected
-- [ ] 6.5 Cache WASM binary in `chrome.storage.local` after first load to reduce subsequent load times
+- [ ] 6.5 Cache WASM binary using binary-native storage after first load: prefer IndexedDB (store as Blob/ArrayBuffer in an "wasm-cache" object store, retrieve via get()) or the Cache API from the extension service worker (fetch/cache the .wasm response); avoid chrome.storage.local due to its 5MB quota and JSON serialization overhead (base64-encoding)
 
 ## 7. Integration & Testing
 

@@ -15,10 +15,15 @@ The extension SHALL maintain a set of trusted RP TLS certificate public keys for
 - **WHEN** the extension background script runs
 - **AND** a signed key manifest is available from the extension update server
 - **THEN** the extension SHALL fetch and verify the manifest signature
-- **AND** update the TrustedRpKey store with any new or rotated keys
+- **AND** validate freshness by checking the manifest contains a monotonic version or a signed timestamp+expiry
+- **AND** reject manifests with version <= last-seen version per TrustedRpKey, or timestamps outside acceptable clock-skew/expiry
+- **AND** persist the last-seen version or timestamp per TrustedRpKey to enforce rollback protection
+- **AND** update the TrustedRpKey store with any new or rotated keys only after all checks pass
 
 #### Scenario: Manual key refresh
 
 - **WHEN** the user triggers "Refresh RP keys" in the popup
 - **THEN** the extension SHALL immediately fetch the latest signed key manifest
+- **AND** verify the manifest signature using the same validation procedures as the background refresh flow
+- **AND** reject any manifest whose signature does not verify (do not apply unverified key updates)
 - **AND** display the update result (success/failure) in the popup
