@@ -10,7 +10,7 @@ export default defineConfig(async () => {
       environment: 'jsdom',
       globals: true,
       setupFiles: ['./vitest.setup.ts'],
-      exclude: ['e2e/**', 'node_modules/**', '.kilocode/**'],
+      exclude: ['e2e/**', 'node_modules/**', '.kilocode/**', '.kilo/**'],
       coverage: {
         provider: 'v8',
         include: [

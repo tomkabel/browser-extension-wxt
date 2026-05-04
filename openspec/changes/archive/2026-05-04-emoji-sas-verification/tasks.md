@@ -23,10 +23,10 @@
 
 ## 4. Android Companion
 
-- [ ] 4.1 Implement emoji SAS derivation on Android (`EmojiSasDerivation.kt` — same algorithm as extension)
-- [ ] 4.2 Update `PairingFragment.kt` to show 3-emoji SAS with "Yes, Match" / "No, Cancel" after handshake
-- [ ] 4.3 Handle `pairing-confirmed` message sent from extension after user taps "Match"
-- [ ] 4.4 Add accessibility fallback on Android: show numeric SAS for TalkBack users
+- [x] 4.1 Implement emoji SAS derivation on Android (`EmojiSasDerivation.kt` — same algorithm as extension)
+- [x] 4.2 Update `PairingFragment.kt` to show 3-emoji SAS with "Yes, Match" / "No, Cancel" after handshake
+- [x] 4.3 Handle `pairing-confirmed` message sent from extension after user taps "Match"
+- [x] 4.4 Add accessibility fallback on Android: show numeric SAS for TalkBack users
 
 ## 5. Signaling Server Compatibility
 
@@ -34,7 +34,7 @@
 
 ## 6. Testing & Polish
 
-- [ ] 6.1 Add E2E test for emoji SAS pairing flow (QR scan → handshake → emoji display → confirm match)
+- [x] 6.1 Add E2E test for emoji SAS pairing flow (QR scan → handshake → emoji display → confirm match)
 - [x] 6.2 Add unit test for accessibility preference detection
 - [x] 6.3 Run `bun run lint && bun run typecheck` and fix all issues
-- [ ] 6.4 Manual QA: test numeric fallback with screen reader enabled
+- [x] 6.4 Manual QA: test numeric fallback with screen reader enabled

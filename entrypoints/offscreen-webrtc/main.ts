@@ -1,6 +1,6 @@
 import { io, type Socket } from 'socket.io-client';
 
-interface TurnCredentials {
+export interface TurnCredentials {
   username: string;
   password: string;
   ttl: number;
@@ -25,6 +25,7 @@ const CONNECTION_TOTAL_TIMEOUT_MS = 15_000;
 let reconnectAttempt = 0;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let connectionTimeout: ReturnType<typeof setTimeout> | null = null;
+let credsRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 let lastConnectionState = '';
 
 function log(message: string): void {
@@ -60,22 +61,41 @@ async function fetchTurnCredentials(): Promise<TurnCredentials | null> {
   }
 }
 
-function buildIceServers(creds: TurnCredentials | null): RTCIceServer[] {
+function scheduleCredsRefresh(ttlSeconds: number): void {
+  const refreshMs = Math.max((ttlSeconds - 30) * 1000, 5_000);
+  credsRefreshTimer = setTimeout(async () => {
+    const newCreds = await fetchTurnCredentials();
+    if (newCreds) {
+      turnCredentials = newCreds;
+      scheduleCredsRefresh(newCreds.ttl);
+    }
+  }, refreshMs);
+}
+
+export function buildIceServers(creds: TurnCredentials | null): RTCIceServer[] {
   const servers: RTCIceServer[] = [
     { urls: 'stun:stun.l.google.com:19302' },
   ];
 
   if (creds) {
-    for (const stunUrl of creds.stunUrls) {
-      servers.push({ urls: stunUrl });
+    if (Array.isArray(creds.stunUrls)) {
+      for (const stunUrl of creds.stunUrls) {
+        if (typeof stunUrl === 'string' && stunUrl.length > 0) {
+          servers.push({ urls: stunUrl });
+        }
+      }
     }
 
-    const turnConfig: RTCIceServer = {
-      urls: creds.urls,
-      username: creds.username,
-      credential: creds.password,
-    };
-    servers.push(turnConfig);
+    const turnUrls = creds.urls;
+    if (Array.isArray(turnUrls) && turnUrls.length > 0) {
+      const validUrls = turnUrls.filter((u): u is string => typeof u === 'string' && u.length > 0);
+      if (validUrls.length > 0) {
+        const turnConfig: RTCIceServer = { urls: validUrls };
+        if (creds.username) turnConfig.username = creds.username;
+        if (creds.password) turnConfig.credential = creds.password;
+        servers.push(turnConfig);
+      }
+    }
   }
 
   return servers;
@@ -129,10 +149,10 @@ function logConnectionMetrics(): void {
   }
 }
 
-function setupPeerConnection(): void {
+function setupPeerConnection(relayOnly = false): void {
   pc = new RTCPeerConnection({
     iceServers: buildIceServers(turnCredentials),
-    iceTransportPolicy: 'all',
+    iceTransportPolicy: relayOnly ? 'relay' : 'all',
     iceCandidatePoolSize: 0,
   });
 
@@ -145,8 +165,10 @@ function setupPeerConnection(): void {
   dataChannel.binaryType = 'arraybuffer';
 
   dataChannel.onopen = () => {
-    log('Data channel opened');
-    logConnectionMetrics();
+    log(`Data channel opened${relayOnly ? ' (relay)' : ''}`);
+    if (!relayOnly) {
+      logConnectionMetrics();
+    }
   };
 
   dataChannel.onmessage = (event: MessageEvent) => {
@@ -159,7 +181,7 @@ function setupPeerConnection(): void {
   };
 
   dataChannel.onclose = () => {
-    log('Data channel closed');
+    log(`Data channel closed${relayOnly ? ' (relay)' : ''}`);
   };
 
   pc.onicecandidate = (event: RTCPeerConnectionIceEvent) => {
@@ -168,47 +190,56 @@ function setupPeerConnection(): void {
     }
   };
 
-  pc.onconnectionstatechange = () => {
-    const state = pc?.connectionState ?? 'unknown';
-    log(`Connection state: ${state}`);
+  if (relayOnly) {
+    pc.onconnectionstatechange = () => {
+      log(`Connection state (relay): ${pc?.connectionState}`);
+    };
+    pc.oniceconnectionstatechange = () => {
+      log(`ICE connection state (relay): ${pc?.iceConnectionState}`);
+    };
+  } else {
+    pc.onconnectionstatechange = () => {
+      const state = pc?.connectionState ?? 'unknown';
+      log(`Connection state: ${state}`);
 
-    notifyBackground('webrtc-connection-state', {
-      state,
-      previous: lastConnectionState,
-    });
+      notifyBackground('webrtc-connection-state', {
+        state,
+        previous: lastConnectionState,
+      });
 
-    lastConnectionState = state;
+      lastConnectionState = state;
 
-    if (connectionTimeout && (state === 'connected' || state === 'failed')) {
-      clearTimeout(connectionTimeout);
-      connectionTimeout = null;
-    }
+      if (connectionTimeout && (state === 'connected' || state === 'failed')) {
+        clearTimeout(connectionTimeout);
+        connectionTimeout = null;
+      }
 
-    if (state === 'connected') {
-      reconnectAttempt = 0;
-      logConnectionMetrics();
-    }
+      if (state === 'connected') {
+        reconnectAttempt = 0;
+        logConnectionMetrics();
+      }
 
-    if (state === 'failed' || state === 'disconnected') {
-      scheduleReconnect();
-    }
-  };
+      if (state === 'failed' || state === 'disconnected') {
+        scheduleReconnect();
+      }
+    };
 
-  pc.oniceconnectionstatechange = () => {
-    const iceState = pc?.iceConnectionState ?? 'unknown';
-    log(`ICE connection state: ${iceState}`);
+    pc.oniceconnectionstatechange = () => {
+      const iceState = pc?.iceConnectionState ?? 'unknown';
+      log(`ICE connection state: ${iceState}`);
 
-    if (iceState === 'failed' && reconnectAttempt === 0) {
-      attemptRelayFallback();
-    }
-  };
+      if (iceState === 'failed' && reconnectAttempt === 0) {
+        attemptRelayFallback();
+      }
+    };
 
-  connectionTimeout = setTimeout(() => {
-    if (pc?.connectionState !== 'connected') {
-      log('Connection timeout - total failure');
-      notifyBackground('webrtc-connection-timeout', {});
-    }
-  }, CONNECTION_TOTAL_TIMEOUT_MS);
+    connectionTimeout = setTimeout(() => {
+      if (pc?.connectionState !== 'connected') {
+        log('Connection timeout - total failure');
+        notifyBackground('webrtc-connection-timeout', {});
+      }
+    }, CONNECTION_TOTAL_TIMEOUT_MS);
+  }
 }
 
 function attemptRelayFallback(): void {
@@ -217,49 +248,7 @@ function attemptRelayFallback(): void {
   log('ICE failed, attempting relay-only retry');
 
   closePeerConnection();
-
-  pc = new RTCPeerConnection({
-    iceServers: buildIceServers(turnCredentials),
-    iceTransportPolicy: 'relay',
-    iceCandidatePoolSize: 0,
-  });
-
-  dataChannel = pc.createDataChannel('smartid2', {
-    ordered: true,
-    negotiated: false,
-    id: 0,
-  });
-
-  dataChannel.binaryType = 'arraybuffer';
-  dataChannel.onopen = () => {
-    log('Data channel opened (relay)');
-  };
-  dataChannel.onmessage = (event: MessageEvent) => {
-    if (event.data instanceof ArrayBuffer) {
-      chrome.runtime.sendMessage({
-        type: 'webrtc-data-received',
-        payload: { data: Array.from(new Uint8Array(event.data)) },
-      }).catch(() => {});
-    }
-  };
-  dataChannel.onclose = () => {
-    log('Data channel closed (relay)');
-  };
-
-  pc.onconnectionstatechange = () => {
-    log(`Connection state (relay): ${pc?.connectionState}`);
-  };
-
-  pc.oniceconnectionstatechange = () => {
-    log(`ICE connection state (relay): ${pc?.iceConnectionState}`);
-  };
-
-  pc.onicecandidate = (event: RTCPeerConnectionIceEvent) => {
-    if (event.candidate && sasCode) {
-      socket?.emit('ice-candidate', sasCode, event.candidate);
-    }
-  };
-
+  setupPeerConnection(true);
   createOffer().catch((err) => log(`Relay offer error: ${err}`));
 }
 
@@ -397,6 +386,10 @@ function disconnect(): void {
     clearTimeout(connectionTimeout);
     connectionTimeout = null;
   }
+  if (credsRefreshTimer) {
+    clearTimeout(credsRefreshTimer);
+    credsRefreshTimer = null;
+  }
   if (dataChannel) {
     dataChannel.close();
     dataChannel = null;
@@ -424,6 +417,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       (async () => {
         sasCode = message.payload.sasCode as string;
         turnCredentials = await fetchTurnCredentials();
+        if (turnCredentials) {
+          scheduleCredsRefresh(turnCredentials.ttl);
+        }
         setupPeerConnection();
         connectSignaling(sasCode);
       })().catch((err) => log(`Start pairing error: ${err}`));

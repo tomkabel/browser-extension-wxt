@@ -34,7 +34,7 @@
 
 - [x] 5.1 Add TURN server URL to `wxt.config.ts` CSP `connect-src`
 - [x] 5.2 Add `VITE_TURN_URL` validation to `prebuild` script
-- [ ] 5.3 Update documentation in `README.md` with TURN server setup instructions
+- [x] 5.3 Update documentation in `README.md` with TURN server setup instructions
 
 ## 6. Spec Alignment (see analysis in ARCHITECTURE.md review)
 
@@ -45,7 +45,7 @@
 
 ## 7. Testing
 
-- [ ] 7.1 Unit test: ICE server configuration fetched and parsed correctly
+- [x] 7.1 Unit test: ICE server configuration fetched and parsed correctly
 - [x] 7.2 Unit test: connection state machine transitions
 - [ ] 7.3 Manual QA: test connection on home Wi-Fi (local, <5ms)
 - [ ] 7.4 Manual QA: test connection behind UDP-blocking firewall (TURN/TCP 443)

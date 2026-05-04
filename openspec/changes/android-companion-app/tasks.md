@@ -51,14 +51,14 @@
 
 ## 3B. V6 Smart-ID PIN Vault (Phase 2 — NDK Enclave)
 
-- [ ] 3B.1 Implement `SmartIdPinVault.kt`: AndroidKeyStore `KeyGenParameterSpec` with `setUserAuthenticationRequired(true)` and `setUnlockedDeviceRequired(true)`
-- [ ] 3B.2 Implement `pinEncrypt(pinBytes, keyAlias)` — encrypt PIN during Phase 0 provisioning using AES/GCM/NoPadding; zero plaintext buffer immediately
-- [ ] 3B.3 Implement `pinDecryptToBuffer(ciphertext, keyAlias, mlockBuffer)` — decrypt PIN directly into C++ `mlock` buffer via JNI; never store in Kotlin variable
-- [ ] 3B.4 Implement `hasPin(keyAlias)` — check if PIN has been provisioned for given alias (`smartid_pin1`, `smartid_pin2`)
-- [ ] 3B.5 Implement `deletePin(keyAlias)` — remove PIN entry from Keystore
-- [ ] 3B.6 Handle `pin-authorization` command: verify preconditions (zkTLS + WebAuthn passed), authorize enclave, return `float[x,y][]` coordinates (not PIN digits)
-- [ ] 3B.7 Detect biometric invalidation (user changed/deleted biometric after provisioning) — show error notification "Biometric changed, re-enter Smart-ID PIN"
-- [ ] 3B.8 Add `android:maxSdkVersion` guard for `setIsStrongBoxBacked(true)` — StrongBox supported on API 28+ with hardware; fall back to TEE-backed on older devices
+- [x] 3B.1 Implement `SmartIdPinVault.kt`: AndroidKeyStore `KeyGenParameterSpec` with `setUserAuthenticationRequired(true)` and `setUnlockedDeviceRequired(true)`
+- [x] 3B.2 Implement `pinEncrypt(pinBytes, keyAlias)` — encrypt PIN during Phase 0 provisioning using AES/GCM/NoPadding; zero plaintext buffer immediately
+- [x] 3B.3 Implement `pinDecryptToBuffer(ciphertext, keyAlias, mlockBuffer)` — decrypt PIN directly into C++ `mlock` buffer via JNI; never store in Kotlin variable
+- [x] 3B.4 Implement `hasPin(keyAlias)` — check if PIN has been provisioned for given alias (`smartid_pin1`, `smartid_pin2`)
+- [x] 3B.5 Implement `deletePin(keyAlias)` — remove PIN entry from Keystore
+- [x] 3B.6 Handle `pin-authorization` command: verify preconditions (zkTLS + WebAuthn passed), authorize enclave, return `float[x,y][]` coordinates (not PIN digits)
+- [x] 3B.7 Detect biometric invalidation (user changed/deleted biometric after provisioning) — show error notification "Biometric changed, re-enter Smart-ID PIN"
+- [x] 3B.8 Add `android:maxSdkVersion` guard for `setIsStrongBoxBacked(true)` — StrongBox supported on API 28+ with hardware; fall back to TEE-backed on older devices
 
 ## 4. PRF Silent Re-Auth (Phase 3 — Dumb Terminal)
 
