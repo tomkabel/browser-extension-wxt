@@ -183,6 +183,7 @@ function encodeSdp(sdp: string): string {
   return btoa(binary);
 }
 
+// First 8 fields only; drops generation, ufrag, network-id (QR code size budget)
 function candidateToShort(candidate: string): string {
   const parts = candidate.split(' ');
   if (parts.length >= 8) {
