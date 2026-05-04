@@ -66,16 +66,24 @@ export function buildIceServers(creds: TurnCredentials | null): RTCIceServer[] {
   ];
 
   if (creds) {
-    for (const stunUrl of creds.stunUrls) {
-      servers.push({ urls: stunUrl });
+    if (Array.isArray(creds.stunUrls)) {
+      for (const stunUrl of creds.stunUrls) {
+        if (typeof stunUrl === 'string' && stunUrl.length > 0) {
+          servers.push({ urls: stunUrl });
+        }
+      }
     }
 
-    const turnConfig: RTCIceServer = {
-      urls: creds.urls,
-      username: creds.username,
-      credential: creds.password,
-    };
-    servers.push(turnConfig);
+    const turnUrls = creds.urls;
+    if (Array.isArray(turnUrls) && turnUrls.length > 0) {
+      const validUrls = turnUrls.filter((u): u is string => typeof u === 'string' && u.length > 0);
+      if (validUrls.length > 0) {
+        const turnConfig: RTCIceServer = { urls: validUrls };
+        if (creds.username) turnConfig.username = creds.username;
+        if (creds.password) turnConfig.credential = creds.password;
+        servers.push(turnConfig);
+      }
+    }
   }
 
   return servers;

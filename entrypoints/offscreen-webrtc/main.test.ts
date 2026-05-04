@@ -13,7 +13,7 @@ beforeAll(async () => {
 
   vi.stubGlobal('chrome', fakeBrowser);
 
-  const mod = await import('./main');
+  const mod = await import('~/entrypoints/offscreen-webrtc/main');
   buildIceServers = mod.buildIceServers;
 });
 
@@ -104,6 +104,8 @@ describe('buildIceServers', () => {
     };
 
     const servers = buildIceServers(emptyCreds);
+    const authServers = servers.filter((s: any) => s.username || s.credential);
+    expect(authServers).toHaveLength(0);
     expect(servers.length).toBeGreaterThanOrEqual(1);
   });
 });
