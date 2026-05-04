@@ -17,16 +17,30 @@ import {
   setPrfSalt,
   setPrfAvailable,
 } from './sessionManager';
-import { confirmSasMatch, rejectSasMatch, getCommandClient, clearPendingRemoteKey, getPendingRemoteKey, fallbackToPrfOnly } from './pairingCoordinator';
+import {
+  confirmSasMatch,
+  rejectSasMatch,
+  getCommandClient,
+  clearPendingRemoteKey,
+  getPendingRemoteKey,
+  fallbackToPrfOnly,
+} from './pairingCoordinator';
 import { cachePrfCredentialId, getCachedPrfCredentialId } from '~/lib/crypto/fallbackAuth';
 import { withTimeout } from '~/lib/asyncUtils';
 import { createSlidingWindowLimiter, createDomainRateLimiter } from '~/lib/rateLimit/slidingWindow';
 import { isReplayAssertion, recordAssertion } from '~/lib/replayProtection';
 import { TransportManager } from '~/lib/transport';
 import { getAttestationStatus, refreshRpKeys, getDomCode } from './attestationManager';
-import { deriveChallenge, generateSessionNonce, serializeChallengeComponents } from '~/lib/webauthn';
-import { startWebRequestCapture, getTlsBindingComponents, buildChallengeProof } from '~/lib/tlsBinding';
-import { isDomainApproved } from './contentScriptManager';
+import {
+  deriveChallenge,
+  generateSessionNonce,
+  serializeChallengeComponents,
+} from '~/lib/webauthn';
+import {
+  startWebRequestCapture,
+  getTlsBindingComponents,
+  buildChallengeProof,
+} from '~/lib/tlsBinding';
 import type {
   AttestedCodePayload,
   CredentialRequestPayload,
@@ -42,9 +56,11 @@ import {
   removePendingDomain,
   getPendingDomains,
   getApprovedDomains,
+  isDomainApproved,
   isDomainDeniedInSession,
   addDeniedDomain,
   registerForDomain,
+  unregisterForDomain,
 } from './contentScriptManager';
 import { transmitCredentialToAndroid } from './pairingCoordinator';
 
@@ -381,8 +397,7 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
   },
 
   'credential-request': async (payload) => {
-    const { domain, url, usernameFieldId, passwordFieldId } =
-      payload as CredentialRequestPayload;
+    const { domain, url, usernameFieldId, passwordFieldId } = payload as CredentialRequestPayload;
 
     if (!domain || !url) {
       return { success: false, error: 'Missing domain or URL in credential request' };
@@ -523,7 +538,23 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
 
       const controlCode = await getDomCode(sender.tab.id);
 
-      const pageContent = document.body?.innerText ?? '';
+      let pageContent = '';
+      try {
+        const scrapeResult = (await withTimeout(
+          browser.tabs.sendMessage(sender.tab.id, {
+            type: 'read-dom',
+            payload: { maxLength: 5000 },
+          }),
+          3000,
+          'Page content scrape timed out',
+        )) as { success?: boolean; text?: string };
+        if (scrapeResult?.success && scrapeResult.text) {
+          pageContent = scrapeResult.text;
+        }
+      } catch {
+        log.warn('[BG] Could not scrape page content from tab', sender.tab.id);
+      }
+
       const tlsBindingHash = await buildChallengeProof(
         sender.tab.id,
         controlCode ?? '0000',
@@ -533,14 +564,14 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       const sessionNonce = generateSessionNonce();
 
       const tlvComponents = serializeChallengeComponents({
-        tlsBinding: tlsBindingHash,
+        zkTlsProof: tlsBindingHash,
         origin,
         controlCode: controlCode ?? '0000',
         sessionNonce,
       });
 
       const derivedChallenge = await deriveChallenge({
-        tlsBinding: tlsBindingHash,
+        zkTlsProof: tlsBindingHash,
         origin,
         controlCode: controlCode ?? '0000',
         sessionNonce,
@@ -582,7 +613,10 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       };
     } catch (err) {
       log.error('Failed to begin challenge assertion:', err);
-      return { success: false, error: err instanceof Error ? err.message : 'Assertion initiation failed' };
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Assertion initiation failed',
+      };
     }
   },
 
@@ -622,9 +656,15 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
 
   'domain-denied': async (payload) => {
     const { domain } = payload as { domain: string };
-    await addDeniedDomain(domain);
-    await removePendingDomain(domain);
-    log.info('[BG] Domain denied:', domain);
+    const currentlyApproved = await isDomainApproved(domain);
+    if (currentlyApproved) {
+      await unregisterForDomain(domain);
+      log.info('[BG] Domain approval revoked:', domain);
+    } else {
+      await addDeniedDomain(domain);
+      await removePendingDomain(domain);
+      log.info('[BG] Domain denied:', domain);
+    }
     return { success: true, data: { domain } };
   },
 
@@ -661,7 +701,13 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       return { success: false, error: data.error ?? 'Assertion failed' };
     }
 
-    if (!data.credentialId || !data.tlvComponents || !data.authenticatorData || !data.signature || !data.clientDataJSON) {
+    if (
+      !data.credentialId ||
+      !data.tlvComponents ||
+      !data.authenticatorData ||
+      !data.signature ||
+      !data.clientDataJSON
+    ) {
       const error = 'Incomplete assertion data';
       await browser.storage.session.set({ 'assertion:result': { status: 'error', error } });
       return { success: false, error };
@@ -702,7 +748,10 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
     } catch (err) {
       log.error('Failed to transmit assertion:', err);
       await browser.storage.session.set({
-        'assertion:result': { status: 'error', error: err instanceof Error ? err.message : 'Transmission failed' },
+        'assertion:result': {
+          status: 'error',
+          error: err instanceof Error ? err.message : 'Transmission failed',
+        },
       });
       return { success: false, error: err instanceof Error ? err.message : 'Transmission failed' };
     }
@@ -710,7 +759,12 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
 
   'deliver-attested-code': async (payload) => {
     const attPayload = payload as AttestedCodePayload;
-    if (!attPayload.controlCode || !attPayload.keyId || !attPayload.signature || !attPayload.rpDomain) {
+    if (
+      !attPayload.controlCode ||
+      !attPayload.keyId ||
+      !attPayload.signature ||
+      !attPayload.rpDomain
+    ) {
       return { success: false, error: 'Missing required attestation fields' };
     }
 
@@ -737,7 +791,10 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       log.info('Attestation delivered to device via transport');
       return { success: true, data: { delivered: true, rpDomain: attPayload.rpDomain } };
     } catch (err) {
-      return { success: false, error: err instanceof Error ? err.message : 'Attestation delivery failed' };
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Attestation delivery failed',
+      };
     }
   },
 };
@@ -781,9 +838,7 @@ export function registerMessageHandlers(): void {
   });
 }
 
-function isValidMessage(
-  message: unknown,
-): message is { type: string; payload?: unknown } {
+function isValidMessage(message: unknown): message is { type: string; payload?: unknown } {
   return (
     typeof message === 'object' &&
     message !== null &&
@@ -818,11 +873,14 @@ export async function initializeTransportManager(): Promise<void> {
   }
   if (transportManager) return;
   transportManager = new TransportManager();
-  transportManagerInitPromise = transportManager.initialize().catch((err) => {
-    transportManager = null;
-    throw err;
-  }).finally(() => {
-    transportManagerInitPromise = null;
-  });
+  transportManagerInitPromise = transportManager
+    .initialize()
+    .catch((err) => {
+      transportManager = null;
+      throw err;
+    })
+    .finally(() => {
+      transportManagerInitPromise = null;
+    });
   return transportManagerInitPromise;
 }
