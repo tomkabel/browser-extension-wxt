@@ -103,7 +103,7 @@ describe('end-to-end crypto verification', () => {
 
     const encoder = new TextEncoder();
     const newPayloadBytes = encoder.encode(JSON.stringify(payload));
-    const newPayloadB64 = base64urlEncode(newPayloadBytes.buffer as ArrayBuffer);
+    const newPayloadB64 = base64urlEncode(newPayloadBytes.slice().buffer as ArrayBuffer);
 
     const spoofedHeader = `v1;${newPayloadB64};${parts[2]};${parts[3]}`;
     const result = await verifier.verifyHeader(spoofedHeader, 'lhv.ee');
