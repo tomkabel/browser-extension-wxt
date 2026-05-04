@@ -502,14 +502,14 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       const sessionNonce = generateSessionNonce();
 
       const tlvComponents = serializeChallengeComponents({
-        zkTlsProof: proofBytes,
+        tlsBinding: proofBytes,
         origin,
         controlCode: controlCode ?? '0000',
         sessionNonce,
       });
 
       const derivedChallenge = await deriveChallenge({
-        zkTlsProof: proofBytes,
+        tlsBinding: proofBytes,
         origin,
         controlCode: controlCode ?? '0000',
         sessionNonce,

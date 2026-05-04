@@ -1,5 +1,4 @@
 import { uint8ArrayToArrayBuffer } from '~/lib/asyncUtils';
-import type { TlsBindingComponents } from '~/lib/tlsBinding';
 
 export interface ChallengeComponents {
   version: number;
