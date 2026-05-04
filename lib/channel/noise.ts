@@ -10,7 +10,10 @@ import type {
   NoiseKeyPair,
   NoiseSession,
   NoiseXXResult,
+  ProtocolCapabilities,
 } from '~/lib/channel/noiseTypes';
+
+export type { ProtocolCapabilities };
 
 export type { NoiseKeyPair, NoiseSession, CachedPairing, NoiseXXResult };
 

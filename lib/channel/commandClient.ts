@@ -1,17 +1,21 @@
 import { browser } from 'wxt/browser';
+import { RttEstimator } from './rttEstimator';
+import {
+  CommandType,
+} from '~/types/commands';
 import type {
   CommandState,
-  CommandType,
   ControlCommand,
   ControlResponse,
   PendingCommand,
 } from '~/types/commands';
 
 const MAX_RETRIES = 3;
-const ACK_TIMEOUT_MS = 5000;
 const ROTATION_THRESHOLD = 1000;
 const STORAGE_KEY_SEQUENCE = 'cmd:sequence';
 const STORAGE_KEY_MSG_COUNT = 'cmd:msgCount';
+const HEARTBEAT_INTERVAL_MS = 15_000;
+const MAX_MISSED_PINGS = 3;
 
 interface SignatureProvider {
   sign(data: string): Promise<string>;
@@ -29,9 +33,15 @@ export function createCommandClient(
   keyRotationProvider: KeyRotationProvider,
   options?: {
     sessionGuard?: () => Promise<void>;
+    onTransportDead?: (reason: string) => void;
   },
 ) {
   const pending = new Map<number, PendingCommand>();
+  const rttEstimator = new RttEstimator();
+  let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  let missedPings = 0;
+  let lastCommandTime = 0;
+  let pendingPingSeq: number | null = null;
 
   async function getNextSequence(): Promise<number> {
     const stored = await browser.storage.session.get(STORAGE_KEY_SEQUENCE);
@@ -105,8 +115,21 @@ export function createCommandClient(
     const response = decodeMessage(raw);
     if (!response) return;
 
+    if (response.status === 'pong') {
+      if (pendingPingSeq === response.sequence) {
+        pendingPingSeq = null;
+        missedPings = 0;
+      }
+      return;
+    }
+
     const entry = pending.get(response.sequence);
     if (!entry) return;
+
+    const rttSample = performance.now() - entry.sentAt;
+    if (rttSample > 0 && rttSample < 30000) {
+      rttEstimator.updateRtt(rttSample);
+    }
 
     pending.delete(response.sequence);
 
@@ -114,6 +137,39 @@ export function createCommandClient(
       entry.reject(new Error(response.error ?? 'Command failed'));
     } else {
       entry.resolve(response);
+    }
+  }
+
+  async function sendHeartbeatPing(): Promise<void> {
+    if (Date.now() - lastCommandTime < HEARTBEAT_INTERVAL_MS) return;
+
+    const sequence = await getNextSequence();
+    pendingPingSeq = sequence;
+    const cmd = createCommand(CommandType.Ping, { ts: performance.now() }, sequence);
+    const encoded = encodeMessage(cmd);
+    sendData(encoded).catch(() => {});
+
+    setTimeout(() => {
+      if (pendingPingSeq === sequence) {
+        pendingPingSeq = null;
+        missedPings++;
+        if (missedPings >= MAX_MISSED_PINGS) {
+          stopHeartbeat();
+          options?.onTransportDead?.('WebRTC heartbeat failure: 3 consecutive pings missed');
+        }
+      }
+    }, rttEstimator.getRto() * MAX_RETRIES);
+  }
+
+  function startHeartbeat(): void {
+    stopHeartbeat();
+    heartbeatTimer = setInterval(sendHeartbeatPing, HEARTBEAT_INTERVAL_MS);
+  }
+
+  function stopHeartbeat(): void {
+    if (heartbeatTimer !== null) {
+      clearInterval(heartbeatTimer);
+      heartbeatTimer = null;
     }
   }
 
@@ -125,7 +181,7 @@ export function createCommandClient(
       const entry: PendingCommand = {
         command,
         attempts: 0,
-        sentAt: Date.now(),
+        sentAt: performance.now(),
         resolve,
         reject,
       };
@@ -139,14 +195,15 @@ export function createCommandClient(
         }
 
         entry.attempts++;
-        entry.sentAt = Date.now();
+        entry.sentAt = performance.now();
         sendData(encoded).catch(() => {});
 
+        const rto = rttEstimator.getRto();
         const timeout = setTimeout(() => {
           if (pending.has(command.sequence)) {
             attemptSend();
           }
-        }, ACK_TIMEOUT_MS);
+        }, rto);
 
         const checkResolved = () => {
           if (!pending.has(command.sequence)) {
@@ -168,6 +225,9 @@ export function createCommandClient(
       await options.sessionGuard();
     }
 
+    lastCommandTime = Date.now();
+    startHeartbeat();
+
     const sequence = await getNextSequence();
     const cmd = createCommand(command, payload, sequence);
 
@@ -180,11 +240,11 @@ export function createCommandClient(
   async function sendAuthenticateTransaction(
     transaction: Record<string, unknown>,
   ): Promise<ControlResponse> {
-    return sendCommand('authenticate_transaction' as CommandType, transaction);
+    return sendCommand(CommandType.AuthenticateTransaction, transaction);
   }
 
   async function sendPing(): Promise<ControlResponse> {
-    return sendCommand('ping' as CommandType, {});
+    return sendCommand(CommandType.Ping, { ts: performance.now() });
   }
 
   async function sendCredentialRequest(
@@ -193,7 +253,7 @@ export function createCommandClient(
     usernameFieldId: string,
     passwordFieldId: string,
   ): Promise<ControlResponse> {
-    return sendCommand('credential-request' as CommandType, {
+    return sendCommand(CommandType.CredentialRequest, {
       domain,
       url,
       usernameFieldId,
@@ -214,6 +274,10 @@ export function createCommandClient(
     };
   }
 
+  function getRttEstimator(): RttEstimator {
+    return rttEstimator;
+  }
+
   return {
     sendCommand,
     sendAuthenticateTransaction,
@@ -223,6 +287,9 @@ export function createCommandClient(
     getPendingCount,
     getState,
     signPayload,
+    getRttEstimator,
+    startHeartbeat,
+    stopHeartbeat,
   };
 }
 
