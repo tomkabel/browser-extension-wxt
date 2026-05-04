@@ -17,14 +17,25 @@ import {
   setPrfSalt,
   setPrfAvailable,
 } from './sessionManager';
-import { confirmSasMatch, rejectSasMatch, getCommandClient, clearPendingRemoteKey, getPendingRemoteKey, fallbackToPrfOnly } from './pairingCoordinator';
+import {
+  confirmSasMatch,
+  rejectSasMatch,
+  getCommandClient,
+  clearPendingRemoteKey,
+  getPendingRemoteKey,
+  fallbackToPrfOnly,
+} from './pairingCoordinator';
 import { cachePrfCredentialId, getCachedPrfCredentialId } from '~/lib/crypto/fallbackAuth';
 import { withTimeout } from '~/lib/asyncUtils';
 import { createSlidingWindowLimiter, createDomainRateLimiter } from '~/lib/rateLimit/slidingWindow';
-import { isReplayAssertion, recordAssertion } from '~/lib/replayProtection';
+import { checkAndReserveAssertion } from '~/lib/replayProtection';
 import { TransportManager } from '~/lib/transport';
 import { getAttestationStatus, refreshRpKeys, getDomCode } from './attestationManager';
-import { deriveChallenge, generateSessionNonce, serializeChallengeComponents } from '~/lib/webauthn';
+import {
+  deriveChallenge,
+  generateSessionNonce,
+  serializeChallengeComponents,
+} from '~/lib/webauthn';
 import { startWebRequestCapture, getTlsBindingComponents, buildChallengeProof } from '~/lib/tlsBinding';
 import { isDomainApproved } from './contentScriptManager';
 import type {
@@ -168,10 +179,14 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
     }
 
     try {
-      const response = await browser.tabs.sendMessage(tabId, {
-        type: 'detect-transaction',
-        payload,
-      });
+      const response = await withTimeout(
+        browser.tabs.sendMessage(tabId, {
+          type: 'detect-transaction',
+          payload,
+        }),
+        5000,
+        'Transaction detection timed out',
+      );
       return response;
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : 'Detection failed' };
@@ -275,11 +290,9 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
     }
 
     const assertionTuple = `${credentialId}:${clientDataJSON}:${authenticatorData}`;
-    if (await isReplayAssertion(assertionTuple)) {
+    if (await checkAndReserveAssertion(assertionTuple)) {
       return { success: false, error: 'Assertion replay detected' };
     }
-
-    await recordAssertion(assertionTuple);
 
     const session = await activateSession();
     return {
@@ -357,13 +370,17 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       if (credStatus === 'found' && response.data?.username && response.data?.password) {
         const credBuffer = new TextEncoder().encode(response.data.password as string);
 
-        await browser.tabs.sendMessage(tabId, {
-          type: 'credential-response',
-          payload: {
-            username: response.data.username,
-            password: response.data.password,
-          },
-        });
+        await withTimeout(
+          browser.tabs.sendMessage(tabId, {
+            type: 'credential-response',
+            payload: {
+              username: response.data.username,
+              password: response.data.password,
+            },
+          }),
+          5000,
+          'Credential response timed out',
+        );
 
         credBuffer.fill(0);
       }
@@ -381,8 +398,7 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
   },
 
   'credential-request': async (payload) => {
-    const { domain, url, usernameFieldId, passwordFieldId } =
-      payload as CredentialRequestPayload;
+    const { domain, url, usernameFieldId, passwordFieldId } = payload as CredentialRequestPayload;
 
     if (!domain || !url) {
       return { success: false, error: 'Missing domain or URL in credential request' };
@@ -518,7 +534,10 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
     const tabId = sender.tab.id;
 
     try {
-      const origin = new URL(sender.tab.url ?? '').origin;
+      if (!sender.tab.url) {
+        return { success: false, error: 'Cannot determine origin from sender tab' };
+      }
+      const origin = new URL(sender.tab.url).origin;
       if (!origin || origin === 'null') {
         return { success: false, error: 'Cannot determine origin from sender tab' };
       }
@@ -553,14 +572,14 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
         sessionNonce,
       });
 
+      const rpId = chrome.runtime.id;
+
       const derivedChallenge = await deriveChallenge({
         tlsBinding: tlsBindingHash,
         origin,
         controlCode: controlCode ?? '0000',
         sessionNonce,
       });
-
-      const rpId = chrome.runtime.id;
 
       const tlsBinding = await getTlsBindingComponents(
         tabId,
@@ -596,7 +615,10 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       };
     } catch (err) {
       log.error('Failed to begin challenge assertion:', err);
-      return { success: false, error: err instanceof Error ? err.message : 'Assertion initiation failed' };
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Assertion initiation failed',
+      };
     }
   },
 
@@ -675,7 +697,16 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       return { success: false, error: data.error ?? 'Assertion failed' };
     }
 
-    if (!data.credentialId || !data.tlvComponents || !data.authenticatorData || !data.signature || !data.clientDataJSON) {
+    if (
+      !data.credentialId ||
+      !data.tlvComponents ||
+      !data.sessionNonce ||
+      !data.origin ||
+      !data.controlCode ||
+      !data.authenticatorData ||
+      !data.signature ||
+      !data.clientDataJSON
+    ) {
       const error = 'Incomplete assertion data';
       await browser.storage.session.set({ 'assertion:result': { status: 'error', error } });
       return { success: false, error };
@@ -716,7 +747,10 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
     } catch (err) {
       log.error('Failed to transmit assertion:', err);
       await browser.storage.session.set({
-        'assertion:result': { status: 'error', error: err instanceof Error ? err.message : 'Transmission failed' },
+        'assertion:result': {
+          status: 'error',
+          error: err instanceof Error ? err.message : 'Transmission failed',
+        },
       });
       return { success: false, error: err instanceof Error ? err.message : 'Transmission failed' };
     }
@@ -724,7 +758,12 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
 
   'deliver-attested-code': async (payload) => {
     const attPayload = payload as AttestedCodePayload;
-    if (!attPayload.controlCode || !attPayload.keyId || !attPayload.signature || !attPayload.rpDomain) {
+    if (
+      !attPayload.controlCode ||
+      !attPayload.keyId ||
+      !attPayload.signature ||
+      !attPayload.rpDomain
+    ) {
       return { success: false, error: 'Missing required attestation fields' };
     }
 
@@ -751,7 +790,10 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       log.info('Attestation delivered to device via transport');
       return { success: true, data: { delivered: true, rpDomain: attPayload.rpDomain } };
     } catch (err) {
-      return { success: false, error: err instanceof Error ? err.message : 'Attestation delivery failed' };
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Attestation delivery failed',
+      };
     }
   },
 };
@@ -795,9 +837,7 @@ export function registerMessageHandlers(): void {
   });
 }
 
-function isValidMessage(
-  message: unknown,
-): message is { type: string; payload?: unknown } {
+function isValidMessage(message: unknown): message is { type: string; payload?: unknown } {
   return (
     typeof message === 'object' &&
     message !== null &&
@@ -832,11 +872,14 @@ export async function initializeTransportManager(): Promise<void> {
   }
   if (transportManager) return;
   transportManager = new TransportManager();
-  transportManagerInitPromise = transportManager.initialize().catch((err) => {
-    transportManager = null;
-    throw err;
-  }).finally(() => {
-    transportManagerInitPromise = null;
-  });
+  transportManagerInitPromise = transportManager
+    .initialize()
+    .catch((err) => {
+      transportManager = null;
+      throw err;
+    })
+    .finally(() => {
+      transportManagerInitPromise = null;
+    });
   return transportManagerInitPromise;
 }

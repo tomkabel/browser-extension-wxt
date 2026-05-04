@@ -7,6 +7,7 @@ export interface FilteredContent {
 
 export enum PiiCategory {
   Password = 'password',
+  Iban = 'iban',
   CreditCard = 'credit_card',
   SSN = 'ssn',
   Email = 'email',
@@ -14,12 +15,14 @@ export enum PiiCategory {
   Name = 'name',
   Address = 'address',
   EstonianIdCode = 'estonian_id_code',
-  Iban = 'iban',
   Passport = 'passport',
 }
 
 const PATTERNS: Record<PiiCategory, RegExp> = {
-  [PiiCategory.Password]: /\b(password|passwd|pwd|pin[12]?)\s*[:=]\s*\S{1,64}\b/gi,
+  [PiiCategory.Password]: /\b(password|passwd|pwd|pin[12]?)\s*[:=]\s*\S{1,64}(?=\s|$)/gi,
+
+  [PiiCategory.Iban]:
+    /\b[A-Z]{2}\d{2}\s?(?:\d{4}\s?){2,7}\d{1,4}\b/gi,
 
   [PiiCategory.CreditCard]: /\b(?:\d[\s-]?){13,19}\b/g,
 
@@ -36,11 +39,8 @@ const PATTERNS: Record<PiiCategory, RegExp> = {
 
   [PiiCategory.EstonianIdCode]: /\b\d{11}\b(?:\s*[A-Z]{2})?/g,
 
-  [PiiCategory.Iban]:
-    /\b[A-Z]{2}\d{2}\s?(?:\d{4}\s?){2,7}\d{1,4}\b/g,
-
   [PiiCategory.Passport]:
-    /\b([A-Z]{1,2}\d{6,8}|[A-Z]{2}\d{7}|EE\d{8})\b/g,
+    /\b[A-Z]{2}\d{6,8}\b/gi,
 };
 
 const REDACTED = '[REDACTED]';
@@ -67,7 +67,26 @@ function isValidCardNumber(digits: string): boolean {
   return luhnCheck(cleaned);
 }
 
-function isValidEstonianIdCode(digits: string): boolean {
+export function isValidIban(value: string): boolean {
+  const cleaned = value.replace(/\s/g, '').toUpperCase();
+  if (cleaned.length < 15 || cleaned.length > 34) return false;
+  const rearranged = cleaned.slice(4) + cleaned.slice(0, 4);
+  let numeric = '';
+  for (const ch of rearranged) {
+    if (ch >= 'A' && ch <= 'Z') {
+      numeric += (ch.charCodeAt(0) - 55).toString();
+    } else {
+      numeric += ch;
+    }
+  }
+  let remainder = 0;
+  for (let i = 0; i < numeric.length; i++) {
+    remainder = (remainder * 10 + parseInt(numeric[i]!, 10)) % 97;
+  }
+  return remainder === 1;
+}
+
+export function isValidEstonianIdCode(digits: string): boolean {
   const cleaned = digits.replace(/\D/g, '');
   if (cleaned.length !== 11) return false;
   const multipliers1 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 1];
@@ -109,6 +128,19 @@ export function filterPii(text: string): FilteredContent {
       });
       if (count > 0) {
         categories.add(PiiCategory.CreditCard);
+        redactionCount += count;
+      }
+    } else if (category === PiiCategory.Iban) {
+      let count = 0;
+      result = result.replace(pattern, (match) => {
+        if (isValidIban(match)) {
+          count++;
+          return REDACTED;
+        }
+        return match;
+      });
+      if (count > 0) {
+        categories.add(PiiCategory.Iban);
         redactionCount += count;
       }
     } else if (category === PiiCategory.EstonianIdCode) {
