@@ -46,7 +46,7 @@ export function createVerifier(keyStore: KeyStore) {
       controlCode: parsed.payload.code,
       rpDomain,
       keyId: parsed.keyId,
-      signature: rawHeader.split(';')[2] ?? '',
+      signature: parsed.signatureB64,
       sessionId: parsed.payload.session,
       timestamp: parsed.payload.ts,
     };

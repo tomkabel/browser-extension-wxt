@@ -8,6 +8,7 @@ export interface ParsedAttestationHeader {
   version: string;
   payload: AttestationHeaderPayload;
   signature: ArrayBuffer;
+  signatureB64: string;
   keyId: string;
 }
 
@@ -42,6 +43,7 @@ export function parseAttestationHeader(rawHeader: string): ParsedAttestationHead
       version: parts[0] as string,
       payload,
       signature,
+      signatureB64: sigB64,
       keyId,
     };
   } catch (err) {

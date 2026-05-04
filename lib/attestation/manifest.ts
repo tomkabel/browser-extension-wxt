@@ -1,7 +1,7 @@
 import { browser } from 'wxt/browser';
 import type { SignedKeyManifest } from './types';
-import { KeyStore } from './keyStore';
-import { base64urlDecode } from './base64url';
+import { KeyStore, hexToBytes } from './keyStore';
+import { sortedJsonStringify, base64urlDecode } from './base64url';
 import { log } from '~/lib/errors';
 
 const MANIFEST_SIGNING_KEY_HEX =
@@ -56,7 +56,7 @@ export async function refreshKeyManifest(
       }
 
       const payloadBytes = new TextEncoder().encode(
-        JSON.stringify({ version: manifest.version, keys: manifest.keys }),
+        sortedJsonStringify({ version: manifest.version, keys: manifest.keys }),
       );
       const sigBytes = new Uint8Array(base64urlDecode(manifest.manifestSignature));
 
@@ -96,10 +96,4 @@ async function persistLastSeenVersions(manifest: SignedKeyManifest): Promise<voi
   await browser.storage.local.set(entries);
 }
 
-function hexToBytes(hex: string): Uint8Array<ArrayBuffer> {
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < hex.length; i += 2) {
-    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
-  }
-  return bytes;
-}
+

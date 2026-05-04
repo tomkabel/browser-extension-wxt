@@ -86,11 +86,6 @@ export class KeyStore implements RpKeyStore {
     return true;
   }
 
-  async getLastSeenVersion(keyId: string): Promise<number> {
-    const stored = await browser.storage.local.get(`attestation:lastVersion:${keyId}`);
-    return (stored[`attestation:lastVersion:${keyId}`] as number) ?? 0;
-  }
-
   private isKeyActive(key: TrustedRpSigningKey): boolean {
     const now = new Date();
     const notBefore = new Date(key.notBefore);
@@ -103,7 +98,10 @@ export class KeyStore implements RpKeyStore {
   }
 }
 
-function hexToBytes(hex: string): Uint8Array<ArrayBuffer> {
+export function hexToBytes(hex: string): Uint8Array<ArrayBuffer> {
+  if (hex.length % 2 !== 0 || !/^[0-9a-fA-F]+$/.test(hex)) {
+    throw new Error(`Invalid hex string: length=${hex.length}`);
+  }
   const bytes = new Uint8Array(hex.length / 2);
   for (let i = 0; i < hex.length; i += 2) {
     bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);

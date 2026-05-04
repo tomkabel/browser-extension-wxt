@@ -32,7 +32,6 @@ export interface RpKeyStore {
   getAllKeysForDomain(domain: string): TrustedRpSigningKey[];
   getManifestVersion(): number;
   updateManifest(manifest: SignedKeyManifest): boolean;
-  getLastSeenVersion(keyId: string): Promise<number>;
 }
 
 export type AttestationStatus =
