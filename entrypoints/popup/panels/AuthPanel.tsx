@@ -57,9 +57,11 @@ export const AuthPanel = forwardRef<HTMLHeadingElement>(function AuthPanel(_prop
 
   useEffect(() => {
     if (assertionStatus !== 'pending') return;
+    let mounted = true;
 
     const interval = setInterval(async () => {
       const stored = await chrome.storage.session.get('assertion:result');
+      if (!mounted) return;
       const result = stored['assertion:result'] as
         { status: string; error?: string } | undefined;
       if (result) {
@@ -75,6 +77,7 @@ export const AuthPanel = forwardRef<HTMLHeadingElement>(function AuthPanel(_prop
     }, 500);
 
     return () => {
+      mounted = false;
       clearInterval(interval);
     };
   }, [assertionStatus, setAssertionStatus, setAssertionError]);
