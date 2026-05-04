@@ -13,6 +13,8 @@ import {
   decodeCapabilities,
   intersectCapabilities,
   CURRENT_PROTOCOL_VERSION,
+  SUPPORTED_FEATURES,
+  SUPPORTED_TRANSPORTS,
 } from '~/lib/channel/noiseTypes';
 import { completePairing, clearPairing } from './pairingService';
 import { createCommandClient, type CommandClient } from '~/lib/channel/commandClient';
@@ -57,7 +59,7 @@ function processIncomingMessage(data: ArrayBuffer): void {
     const remoteCaps = decodeCapabilities(content);
     if (remoteCaps) {
       negotiatedCaps = intersectCapabilities(
-        { version: CURRENT_PROTOCOL_VERSION, features: [], supportedTransports: [] },
+        { version: CURRENT_PROTOCOL_VERSION, features: SUPPORTED_FEATURES, supportedTransports: SUPPORTED_TRANSPORTS },
         remoteCaps,
       );
       log.info('[Coordinator] Negotiated capabilities:', negotiatedCaps);
@@ -140,8 +142,8 @@ async function performXXHandshake(): Promise<HandshakeResult | null> {
     const remoteCaps = decodeCapabilities(msg2Payload);
     const localCaps: ProtocolCapabilities = {
       version: CURRENT_PROTOCOL_VERSION,
-      features: [],
-      supportedTransports: [],
+      features: SUPPORTED_FEATURES,
+      supportedTransports: SUPPORTED_TRANSPORTS,
     };
     negotiatedCaps = remoteCaps
       ? intersectCapabilities(localCaps, remoteCaps)

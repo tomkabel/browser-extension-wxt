@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fakeBrowser } from 'wxt/testing';
+import { CURRENT_PROTOCOL_VERSION } from '~/lib/channel/noiseTypes';
 
 vi.spyOn(console, 'info').mockImplementation(() => {});
 vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -42,6 +43,7 @@ describe('transmitCredentialToAndroid', () => {
     expect(decoded.publicKeyBytes).toBe(
       btoa(String.fromCharCode(...Array.from(publicKeyBytes))),
     );
+    expect(decoded.protocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
   });
 
   it('returns false when no transport is available', async () => {
