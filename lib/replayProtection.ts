@@ -13,10 +13,18 @@ async function deriveKey(tuple: string): Promise<string> {
 }
 
 export async function isReplayAssertion(tuple: string): Promise<boolean> {
+  cleanupExpired();
   const key = await deriveKey(tuple);
   const ts = replayCache.get(key);
   if (ts && Date.now() - ts < REPLAY_WINDOW_MS) return true;
   return false;
+}
+
+function cleanupExpired(): void {
+  const cutoff = Date.now() - REPLAY_WINDOW_MS;
+  for (const [k, v] of replayCache) {
+    if (v < cutoff) replayCache.delete(k);
+  }
 }
 
 export async function recordAssertion(tuple: string): Promise<void> {
@@ -24,10 +32,7 @@ export async function recordAssertion(tuple: string): Promise<void> {
   replayCache.set(key, Date.now());
 
   if (replayCache.size > MAX_CACHE_SIZE) {
-    const cutoff = Date.now() - REPLAY_WINDOW_MS;
-    for (const [k, v] of replayCache) {
-      if (v < cutoff) replayCache.delete(k);
-    }
+    cleanupExpired();
   }
 }
 
