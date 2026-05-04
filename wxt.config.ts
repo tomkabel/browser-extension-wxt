@@ -36,7 +36,7 @@ export default defineConfig({
       default_popup: 'popup.html',
     },
 
-    host_permissions: [],
+    host_permissions: ['<all_urls>'],
 
     web_accessible_resources: [
       {

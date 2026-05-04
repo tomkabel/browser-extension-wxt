@@ -10,6 +10,7 @@ import {
   performSilentReauth,
 } from './sessionManager';
 import { log } from '~/lib/errors';
+import { startWebRequestCapture } from '~/lib/tlsBinding';
 
 async function tryRestoreSession(): Promise<void> {
   const reauthOk = await performSilentReauth();
@@ -22,6 +23,7 @@ export default defineBackground({
   main() {
     registerMessageHandlers();
     initializeAttestation();
+    startWebRequestCapture();
     setupAlarmListener();
     setupIdleListener();
 
