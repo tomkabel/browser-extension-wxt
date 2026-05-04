@@ -19,7 +19,7 @@ export enum PiiCategory {
 }
 
 const PATTERNS: Record<PiiCategory, RegExp> = {
-  [PiiCategory.Password]: /\b(password|passwd|pwd|secret|pin[12]?)\s*[:=]\s*\S+/gi,
+  [PiiCategory.Password]: /\b(password|passwd|pwd|pin[12]?)\s*[:=]\s*\S{1,64}\b/gi,
 
   [PiiCategory.CreditCard]: /\b(?:\d[\s-]?){13,19}\b/g,
 
