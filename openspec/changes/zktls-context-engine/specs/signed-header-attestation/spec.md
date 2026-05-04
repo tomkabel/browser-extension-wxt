@@ -29,6 +29,16 @@ The extension SHALL intercept HTTP responses from whitelisted Smart-ID RP domain
 - **AND** it SHALL NOT require an active Offscreen Document for attestation (the existing Offscreen Document is used only for WebRTC)
 - **AND** it SHALL NOT require a Notary server or any third-party MPC infrastructure
 
+#### Scenario: Demo mode with self-signed attestation (Draft / placeholder until bank integration)
+
+- **WHEN** the extension runs in `dev` or `demo` mode (`import.meta.env.DEV` or `MODE=demo`)
+- **THEN** the extension SHALL use the bundled demo ECDSA P-256 private key (JWK format) to generate test `SmartID-Attestation` headers
+- **AND** the header SHALL be constructed using the same format as production: `v1;<base64url(json)>;<base64url(sig)>;<key-id>`
+- **AND** the signature SHALL be created using `crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, privateKey, payloadBytes)`
+- **AND** the same `crypto.subtle.verify()` verification path used in production SHALL validate the demo-signed header
+- **AND** the demo injector SHALL generate random test control codes (4 digits) for whitelisted domains
+- **AND** in production mode, demo header generation SHALL be completely disabled — no demo code path is reachable
+
 #### Scenario: V6 proof transport preserved
 
 - **WHEN** the attested control code is packaged for transport to the Android Vault

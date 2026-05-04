@@ -23,12 +23,15 @@ import { withTimeout } from '~/lib/asyncUtils';
 import { createSlidingWindowLimiter, createDomainRateLimiter } from '~/lib/rateLimit/slidingWindow';
 import { isReplayAssertion, recordAssertion } from '~/lib/replayProtection';
 import { TransportManager } from '~/lib/transport';
+import { getAttestationStatus, refreshRpKeys } from './attestationManager';
 import type {
+  AttestedCodePayload,
   CredentialRequestPayload,
   LoginFormDetection,
   MessageType,
   TransactionData,
 } from '~/types';
+import { sortedJsonStringify } from '~/lib/attestation';
 import { log } from '~/lib/errors';
 
 type MessageHandler = (
@@ -408,6 +411,47 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
         usbAvailable: transportManager.isUsbAvailable(),
       },
     };
+  },
+
+  'get-attestation-status': async () => {
+    return { success: true, data: { status: getAttestationStatus() } };
+  },
+
+  'refresh-rp-keys': async () => {
+    return refreshRpKeys();
+  },
+
+  'deliver-attested-code': async (payload) => {
+    const attPayload = payload as AttestedCodePayload;
+    if (!attPayload.controlCode || !attPayload.keyId || !attPayload.signature || !attPayload.rpDomain) {
+      return { success: false, error: 'Missing required attestation fields' };
+    }
+
+    try {
+      await initializeTransportManager();
+      const tm = getTransportManager();
+      if (!tm) {
+        return { success: false, error: 'No transport available to deliver attestation' };
+      }
+
+      const attestationMessage = new TextEncoder().encode(
+        sortedJsonStringify({
+          type: 'attestation',
+          controlCode: attPayload.controlCode,
+          keyId: attPayload.keyId,
+          signature: attPayload.signature,
+          rpDomain: attPayload.rpDomain,
+          sessionId: attPayload.sessionId,
+          timestamp: attPayload.timestamp ?? Math.floor(Date.now() / 1000),
+        }),
+      );
+
+      await tm.send(attestationMessage);
+      log.info('Attestation delivered to device via transport');
+      return { success: true, data: { delivered: true, rpDomain: attPayload.rpDomain } };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : 'Attestation delivery failed' };
+    }
   },
 };
 

@@ -29,6 +29,13 @@ The extension SHALL maintain a set of trusted RP signing public keys (ECDSA P-25
 - **AND** reject any manifest whose signature does not verify (do not apply unverified key updates)
 - **AND** display the update result (success/failure) in the popup
 
+#### Scenario: Demo key material (development/testing)
+
+- **WHEN** the extension is built in development mode
+- **THEN** the bundled `trusted-rp-keys.json` SHALL contain real ECDSA P-256 public keys (4 unique keys for 4 domains + 4 rotation keys), NOT placeholder zeroed keys
+- **AND** each key SHALL have a corresponding private key available in `demoAttestation.ts` (JWK format) for creating test attestation headers
+- **AND** the `KeyStore` SHALL import these public keys via `crypto.subtle.importKey('raw', ...)` with no code path difference from production
+
 #### Scenario: Cross-layer verification
 
 - **WHEN** the extension verifies a signed attestation header using `crypto.subtle.verify()` with ECDSA P-256

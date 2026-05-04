@@ -82,7 +82,11 @@ export type MessageType =
   | 'webrtc-disconnect'
   | 'usb-connected'
   | 'usb-disconnected'
-  | 'transport-changed';
+  | 'transport-changed'
+  | 'get-attestation-status'
+  | 'refresh-rp-keys'
+  | 'deliver-attested-code'
+  | 'scrape-control-code';
 
 export interface ExtensionMessage<T = unknown> {
   type: MessageType;
@@ -143,3 +147,12 @@ export interface CredentialResponse {
 }
 
 export type CredentialState = 'idle' | 'detecting' | 'requesting' | 'waiting_phone' | 'filling' | 'filled' | 'not_found' | 'error';
+
+export interface AttestedCodePayload {
+  controlCode: string;
+  rpDomain: string;
+  keyId: string;
+  signature: string;
+  sessionId?: string;
+  timestamp?: number;
+}

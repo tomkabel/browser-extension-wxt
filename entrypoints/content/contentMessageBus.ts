@@ -7,7 +7,7 @@
  */
 
 import { browser } from 'wxt/browser';
-import { scrapePage } from './domScraper';
+import { scrapePage, scrapeControlCode } from './domScraper';
 import { detectTransaction } from '~/lib/transaction/transactionDetector';
 import type { ScrapeResult } from '~/types';
 
@@ -39,6 +39,10 @@ export function registerContentHandlers(): void {
         handleCredentialResponse(message.payload, sendResponse);
         return true;
 
+      case 'scrape-control-code':
+        handleScrapeControlCode(sendResponse);
+        return true;
+
       default:
         return false;
     }
@@ -68,6 +72,17 @@ function handleDetectTransaction(
     sendResponse({ success: true, data: result });
   } else {
     sendResponse({ success: false, error: result.error, data: result });
+  }
+}
+
+async function handleScrapeControlCode(
+  sendResponse: (response: { success: boolean; controlCode?: string | null; error?: string }) => void,
+): Promise<void> {
+  try {
+    const controlCode = scrapeControlCode();
+    sendResponse({ success: true, controlCode });
+  } catch (err) {
+    sendResponse({ success: false, error: err instanceof Error ? err.message : 'Scrape failed' });
   }
 }
 

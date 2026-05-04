@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "keys": [
+    {
+      "domain": "lhv.ee",
+      "keyId": "lhv-2026q1",
+      "publicKeyHex": "0430ea585698203ec224270620005117658f4a567438a842d336b7edf0821b8602a0379f423d232aa0158ee6c8c06f18c6a083a507be31a21b13df2a2af86bd03b",
+      "notBefore": "2025-06-01T00:00:00Z",
+      "notAfter": "2027-01-01T00:00:00Z"
+    },
+    {
+      "domain": "lhv.ee",
+      "keyId": "lhv-2026q2",
+      "publicKeyHex": "04b8ed46f6a4d9906a456189b6c90515ced1944df8a9c10ca0e55d03159245a55cccf64c249486b07d4f9ce79fdcd39ec6d9b572f3886a14416797bafb249b4367",
+      "notBefore": "2026-01-01T00:00:00Z",
+      "notAfter": "2027-06-01T00:00:00Z"
+    },
+    {
+      "domain": "swedbank.ee",
+      "keyId": "swed-2026q1",
+      "publicKeyHex": "043537574540d492b1f4c64815a9f44ad14f3dc6603f16b0898c5ab92ac6e59c79933aa154b135becc66f90a6b4a871961cdbe56962a212a2a75a9e18b1733f583",
+      "notBefore": "2025-06-01T00:00:00Z",
+      "notAfter": "2027-01-01T00:00:00Z"
+    },
+    {
+      "domain": "swedbank.ee",
+      "keyId": "swed-2026q2",
+      "publicKeyHex": "04219b7e7f04e65941a5aaa0b4b022f1cabf55f1fd575902f1ec18af920717ee92a0fa72b8078a64a63ffbdbba66bc4c3939bcb9bb7e2e51e4820638021b15ddc2",
+      "notBefore": "2026-01-01T00:00:00Z",
+      "notAfter": "2027-06-01T00:00:00Z"
+    },
+    {
+      "domain": "seb.ee",
+      "keyId": "seb-2026q1",
+      "publicKeyHex": "041aa14d1f963bd1263681a802de3f9e4130ca8033cabd74ff5a9522aeb7cedf4749fc6810a375c52eb5c8fd63016ffe2b6a2226db9230d5deccfc20a555a6dc5d",
+      "notBefore": "2025-06-01T00:00:00Z",
+      "notAfter": "2027-01-01T00:00:00Z"
+    },
+    {
+      "domain": "seb.ee",
+      "keyId": "seb-2026q2",
+      "publicKeyHex": "041221d1ba0e1e4941a8da79525123e76177273607b3641319cb3de206b0826c764321cfb61cfc74c4e7fa5587f7b20d0aaeb5faa5b680b277284f618e46b79b0d",
+      "notBefore": "2026-01-01T00:00:00Z",
+      "notAfter": "2027-06-01T00:00:00Z"
+    },
+    {
+      "domain": "tara.ria.ee",
+      "keyId": "tara-2026q1",
+      "publicKeyHex": "04d8a39222eb15d6453958cbc44f58d02fd2b7ea2ce76e5edd42bc788195f0b76c16d2ba3ef416a949728822db70f7c889b31be937385bed0bcd0c8f65284099e6",
+      "notBefore": "2025-06-01T00:00:00Z",
+      "notAfter": "2027-01-01T00:00:00Z"
+    },
+    {
+      "domain": "tara.ria.ee",
+      "keyId": "tara-2026q2",
+      "publicKeyHex": "0475a8cc4ddf82ff3f841901f219444a66f242c4ffc3a26c68fe31dc3d449b67441227ece92be063c1e9ab5c6d586031354b3c7b9a7e3e2c8307b952ab7860ffbd",
+      "notBefore": "2026-01-01T00:00:00Z",
+      "notAfter": "2027-06-01T00:00:00Z"
+    }
+  ]
+}
