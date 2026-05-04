@@ -28,7 +28,7 @@ import {
 import { cachePrfCredentialId, getCachedPrfCredentialId } from '~/lib/crypto/fallbackAuth';
 import { withTimeout } from '~/lib/asyncUtils';
 import { createSlidingWindowLimiter, createDomainRateLimiter } from '~/lib/rateLimit/slidingWindow';
-import { isReplayAssertion, recordAssertion } from '~/lib/replayProtection';
+import { checkAndReserveAssertion } from '~/lib/replayProtection';
 import { TransportManager } from '~/lib/transport';
 import { getAttestationStatus, refreshRpKeys, getDomCode } from './attestationManager';
 import {
@@ -161,10 +161,14 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
     }
 
     try {
-      const response = await browser.tabs.sendMessage(tabId, {
-        type: 'detect-transaction',
-        payload,
-      });
+      const response = await withTimeout(
+        browser.tabs.sendMessage(tabId, {
+          type: 'detect-transaction',
+          payload,
+        }),
+        5000,
+        'Transaction detection timed out',
+      );
       return response;
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : 'Detection failed' };
@@ -268,11 +272,9 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
     }
 
     const assertionTuple = `${credentialId}:${clientDataJSON}:${authenticatorData}`;
-    if (await isReplayAssertion(assertionTuple)) {
+    if (await checkAndReserveAssertion(assertionTuple)) {
       return { success: false, error: 'Assertion replay detected' };
     }
-
-    await recordAssertion(assertionTuple);
 
     const session = await activateSession();
     return {
@@ -350,13 +352,17 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       if (credStatus === 'found' && response.data?.username && response.data?.password) {
         const credBuffer = new TextEncoder().encode(response.data.password as string);
 
-        await browser.tabs.sendMessage(tabId, {
-          type: 'credential-response',
-          payload: {
-            username: response.data.username,
-            password: response.data.password,
-          },
-        });
+        await withTimeout(
+          browser.tabs.sendMessage(tabId, {
+            type: 'credential-response',
+            payload: {
+              username: response.data.username,
+              password: response.data.password,
+            },
+          }),
+          5000,
+          'Credential response timed out',
+        );
 
         credBuffer.fill(0);
       }
@@ -501,7 +507,10 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
     const tabId = sender.tab.id;
 
     try {
-      const origin = new URL(sender.tab.url ?? '').origin;
+      if (!sender.tab.url) {
+        return { success: false, error: 'Cannot determine origin from sender tab' };
+      }
+      const origin = new URL(sender.tab.url).origin;
       if (!origin || origin === 'null') {
         return { success: false, error: 'Cannot determine origin from sender tab' };
       }
