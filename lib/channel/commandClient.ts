@@ -1,7 +1,7 @@
 import { browser } from 'wxt/browser';
+import { CommandType } from '~/types/commands';
 import type {
   CommandState,
-  CommandType,
   ControlCommand,
   ControlResponse,
   PendingCommand,
@@ -180,11 +180,11 @@ export function createCommandClient(
   async function sendAuthenticateTransaction(
     transaction: Record<string, unknown>,
   ): Promise<ControlResponse> {
-    return sendCommand('authenticate_transaction' as CommandType, transaction);
+    return sendCommand(CommandType.AuthenticateTransaction, transaction);
   }
 
   async function sendPing(): Promise<ControlResponse> {
-    return sendCommand('ping' as CommandType, {});
+    return sendCommand(CommandType.Ping, {});
   }
 
   async function sendCredentialRequest(
@@ -193,7 +193,7 @@ export function createCommandClient(
     usernameFieldId: string,
     passwordFieldId: string,
   ): Promise<ControlResponse> {
-    return sendCommand('credential-request' as CommandType, {
+    return sendCommand(CommandType.CredentialRequest, {
       domain,
       url,
       usernameFieldId,
