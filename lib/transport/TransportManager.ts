@@ -38,6 +38,7 @@ export class TransportManager {
     this.webrtcTransport.onDisconnect(() => {
       if (this.activeTransport?.type === 'webrtc') {
         this.emit('status-change', { connected: false });
+        this.switchTransport('usb', 'WebRTC disconnected').catch(() => {});
       }
     });
   }
