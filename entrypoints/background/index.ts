@@ -9,6 +9,7 @@ import {
   restorePersistedSession,
   performSilentReauth,
 } from './sessionManager';
+import { reRegisterOnStartup, updateBadgeCount } from './contentScriptManager';
 import { log } from '~/lib/errors';
 
 async function tryRestoreSession(): Promise<void> {
@@ -16,6 +17,8 @@ async function tryRestoreSession(): Promise<void> {
   if (!reauthOk) {
     await restorePersistedSession();
   }
+  await reRegisterOnStartup();
+  await updateBadgeCount();
 }
 
 export default defineBackground({

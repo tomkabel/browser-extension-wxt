@@ -155,6 +155,12 @@ export interface CredentialResponse {
 
 export type CredentialState = 'idle' | 'detecting' | 'requesting' | 'waiting_phone' | 'filling' | 'filled' | 'not_found' | 'error';
 
+export interface ApprovedDomain {
+  domain: string;
+  registeredAt: number;
+  scriptId: string;
+}
+
 export interface AttestedCodePayload {
   controlCode: string;
   rpDomain: string;
