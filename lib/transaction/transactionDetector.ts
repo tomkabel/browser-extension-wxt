@@ -94,26 +94,27 @@ export function detectTransaction(): DetectResult {
 }
 
 function trySemanticDetection(): TransactionResult | null {
-  const bodyText = document.body?.innerText ?? '';
-  const amountPattern = /[\u20ac\d\s,]*\d+[.,]\d{2}\s*(?:EUR|€)?/;
-  const ibanPattern = /EE\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{2}/;
+  const scope = findTransactionScope();
+  if (!scope) return null;
 
-  const amountMatch = bodyText.match(amountPattern);
-  const ibanMatch = bodyText.match(ibanPattern);
+  const text = scope.textContent ?? '';
+  const amountPattern = /[\u20ac\d\s,]*\d+[.,]\d{2}\s*(?:EUR|€)?/;
+  const ibanPattern = /\bEE\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{2}\b/;
+
+  const amountMatch = text.match(amountPattern);
+  const ibanMatch = text.match(ibanPattern);
 
   if (amountMatch || ibanMatch) {
     const result: Partial<TransactionResult> = {};
     if (amountMatch) result.amount = amountMatch[0]!.trim();
     if (ibanMatch) result.iban = ibanMatch[0]!.trim();
 
-    const recipientLabel = bodyText.match(
-      /(?:saaja|recipient|beneficiary|to\s*account)[^]*?(?:\n|$)/i,
+    const recipientLabel = text.match(
+      /(?:saaja|recipient|beneficiary|to\s*account)[:\s]*([^\n]{1,120})/i,
     );
     if (recipientLabel) {
-      const cleaned = recipientLabel[0]!
-        .replace(/(?:saaja|recipient|beneficiary|to\s*account)[:\s]*/i, '')
-        .trim();
-      if (cleaned.length > 0 && cleaned.length < 100) {
+      const cleaned = recipientLabel[1]!.trim();
+      if (cleaned.length > 0) {
         result.recipient = cleaned;
       }
     }
@@ -124,6 +125,33 @@ function trySemanticDetection(): TransactionResult | null {
         recipient: result.recipient ?? '',
         iban: result.iban,
       };
+    }
+  }
+
+  return null;
+}
+
+function findTransactionScope(): Element | null {
+  const walker = document.createTreeWalker(
+    document.body,
+    NodeFilter.SHOW_TEXT,
+  );
+
+  const amountPattern = /[\u20ac\d\s,]*\d+[.,]\d{2}\s*(?:EUR|€)?/;
+
+  while (walker.nextNode()) {
+    const node = walker.currentNode as Text;
+    if (!node.textContent) continue;
+    if (amountPattern.test(node.textContent)) {
+      let el: Element | null = node.parentElement;
+      while (el && el !== document.body) {
+        const tag = el.tagName;
+        if (tag === 'TD' || tag === 'DIV' || tag === 'SECTION' || tag === 'ARTICLE' || tag === 'LI' || tag === 'MAIN') {
+          return el;
+        }
+        el = el.parentElement;
+      }
+      return node.parentElement ?? document.body;
     }
   }
 
