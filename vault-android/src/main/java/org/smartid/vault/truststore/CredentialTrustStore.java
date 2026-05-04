@@ -31,7 +31,8 @@ public class CredentialTrustStore {
                 .putString("pk:" + credentialId, encoded)
                 .putLong("ts:" + credentialId, System.currentTimeMillis())
                 .apply();
-        Log.i(TAG, "Stored public key for credential: " + credentialId.substring(0, 16) + "...");
+        String label = credentialId.substring(0, Math.min(16, credentialId.length()));
+        Log.i(TAG, "Stored public key for credential: " + label + "...");
     }
 
     public byte[] getPublicKey(String credentialId) {
@@ -51,7 +52,8 @@ public class CredentialTrustStore {
                 .remove("pk:" + credentialId)
                 .remove("ts:" + credentialId)
                 .apply();
-        Log.w(TAG, "Removed credential: " + credentialId.substring(0, 16) + "...");
+        String label = credentialId.substring(0, Math.min(16, credentialId.length()));
+        Log.w(TAG, "Removed credential: " + label + "...");
     }
 
     public boolean hasCredential(String credentialId) {

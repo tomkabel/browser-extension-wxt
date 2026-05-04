@@ -13,6 +13,7 @@ import java.security.spec.ECPoint;
 import java.security.spec.ECParameterSpec;
 import java.security.spec.ECPublicKeySpec;
 import java.security.spec.InvalidKeySpecException;
+import java.security.spec.X509EncodedKeySpec;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -20,18 +21,23 @@ import java.util.Map;
 /**
  * Verifies WebAuthn assertion signatures using stored ECDSA P-256 public keys.
  *
- * The public key is provisioned during Phase 0 pairing (raw uncompressed coordinates),
- * stored in the Android trust-store, and used to verify subsequent assertions.
+ * The public key is provisioned during Phase 0 pairing (raw uncompressed coordinates
+ * or X.509/SPKI encoded), stored in the Android trust-store, and used to verify
+ * subsequent assertions.
  *
  * Signature verification: SHA256withECDSA over authenticatorData || SHA256(clientDataJSON)
  */
 public class WebAuthnVerifier {
     private static final String TAG = "WebAuthnVerifier";
+    private static final int MAX_FAILED_ATTEMPTS = 3;
+    private static final long FAILURE_WINDOW_MS = 300_000;
 
     private final Map<String, StoredCredential> credentialStore;
+    private final Map<String, FailureTracker> failureTracker;
 
     public WebAuthnVerifier() {
         this.credentialStore = new HashMap<>();
+        this.failureTracker = new HashMap<>();
     }
 
     public static class StoredCredential {
@@ -45,6 +51,26 @@ public class WebAuthnVerifier {
             this.publicKeyBytes = publicKeyBytes;
             this.provisionedAt = System.currentTimeMillis();
             this.valid = true;
+        }
+    }
+
+    private static class FailureTracker {
+        int count;
+        long firstFailureAt;
+
+        FailureTracker() {
+            this.count = 0;
+            this.firstFailureAt = System.currentTimeMillis();
+        }
+
+        boolean isThresholdExceeded() {
+            long elapsed = System.currentTimeMillis() - firstFailureAt;
+            if (elapsed > FAILURE_WINDOW_MS) {
+                count = 1;
+                firstFailureAt = System.currentTimeMillis();
+                return false;
+            }
+            return ++count >= MAX_FAILED_ATTEMPTS;
         }
     }
 
@@ -69,24 +95,42 @@ public class WebAuthnVerifier {
     public void storeCredential(String credentialId, byte[] uncompressedPublicKey) {
         StoredCredential credential = new StoredCredential(credentialId, uncompressedPublicKey);
         credentialStore.put(credentialId, credential);
-        Log.i(TAG, "Credential stored: " + credentialId.substring(0, 16) + "...");
+        String label = credentialId.substring(0, Math.min(16, credentialId.length()));
+        Log.i(TAG, "Credential stored: " + label + "...");
     }
 
     public void invalidateCredential(String credentialId) {
         StoredCredential stored = credentialStore.get(credentialId);
         if (stored != null) {
             stored.valid = false;
-            Log.w(TAG, "Credential invalidated: " + credentialId.substring(0, 16) + "...");
+            String label = credentialId.substring(0, Math.min(16, credentialId.length()));
+            Log.w(TAG, "Credential invalidated: " + label + "...");
             logAuditEvent("key_invalidated", credentialId);
         }
     }
 
-    public PublicKey reconstructPublicKey(byte[] uncompressedPublicKey)
+    public PublicKey reconstructPublicKey(byte[] publicKeyInput)
             throws NoSuchAlgorithmException, InvalidKeySpecException {
 
-        if (uncompressedPublicKey.length != 65 || uncompressedPublicKey[0] != 0x04) {
-            throw new IllegalArgumentException("Invalid uncompressed public key format");
+        if (publicKeyInput.length == 65 && publicKeyInput[0] == 0x04) {
+            return reconstructFromUncompressedPoint(publicKeyInput);
         }
+
+        try {
+            X509EncodedKeySpec keySpec = new X509EncodedKeySpec(publicKeyInput);
+            KeyFactory keyFactory = KeyFactory.getInstance("EC");
+            PublicKey key = keyFactory.generatePublic(keySpec);
+            Log.d(TAG, "Public key reconstructed from X.509/SPKI encoding");
+            return key;
+        } catch (Exception e) {
+            throw new IllegalArgumentException(
+                    "Unsupported public key format: length=" + publicKeyInput.length
+                            + " firstByte=0x" + Integer.toHexString(publicKeyInput[0] & 0xFF), e);
+        }
+    }
+
+    private PublicKey reconstructFromUncompressedPoint(byte[] uncompressedPublicKey)
+            throws NoSuchAlgorithmException, InvalidKeySpecException {
 
         byte[] xBytes = Arrays.copyOfRange(uncompressedPublicKey, 1, 33);
         byte[] yBytes = Arrays.copyOfRange(uncompressedPublicKey, 33, 65);
@@ -154,8 +198,21 @@ public class WebAuthnVerifier {
                 return VerificationResult.success();
             } else {
                 logAuditEvent("signature_mismatch", credentialId);
-                invalidateCredential(credentialId);
-                return VerificationResult.failure("Signature verification failed: key invalidated");
+
+                FailureTracker tracker = failureTracker.get(credentialId);
+                if (tracker == null) {
+                    tracker = new FailureTracker();
+                    failureTracker.put(credentialId, tracker);
+                }
+
+                if (tracker.isThresholdExceeded()) {
+                    Log.w(TAG, "Credential " + credentialId.substring(0, Math.min(16, credentialId.length()))
+                            + "... exceeded failure threshold, invalidating");
+                    invalidateCredential(credentialId);
+                    return VerificationResult.failure("Signature verification failed repeatedly: key invalidated");
+                }
+
+                return VerificationResult.failure("Signature verification failed");
             }
         } catch (Exception e) {
             Log.e(TAG, "Assertion verification error", e);

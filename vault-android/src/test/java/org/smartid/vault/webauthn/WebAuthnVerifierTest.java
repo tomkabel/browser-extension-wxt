@@ -34,6 +34,33 @@ public class WebAuthnVerifierTest {
     }
 
     @Test
+    public void reconstructPublicKey_acceptsSpkiFormat() throws Exception {
+        KeyPairGenerator gen = KeyPairGenerator.getInstance("EC");
+        gen.initialize(256);
+        KeyPair keyPair = gen.generateKeyPair();
+
+        byte[] spkiEncoded = keyPair.getPublic().getEncoded();
+
+        java.security.PublicKey reconstructed = verifier.reconstructPublicKey(spkiEncoded);
+        assertNotNull("SPKI-encoded key should reconstruct", reconstructed);
+        assertEquals("EC", reconstructed.getAlgorithm());
+    }
+
+    @Test
+    public void reconstructPublicKey_acceptsRawUncompressedFormat() throws Exception {
+        KeyPairGenerator gen = KeyPairGenerator.getInstance("EC");
+        gen.initialize(256);
+        KeyPair keyPair = gen.generateKeyPair();
+
+        byte[] encoded = keyPair.getPublic().getEncoded();
+        byte[] rawPoint = extractUncompressedPoint(encoded);
+
+        java.security.PublicKey reconstructed = verifier.reconstructPublicKey(rawPoint);
+        assertNotNull("Raw 65-byte key should reconstruct", reconstructed);
+        assertEquals("EC", reconstructed.getAlgorithm());
+    }
+
+    @Test
     public void validAssertionSignaturePasses() throws Exception {
         KeyPairGenerator gen = KeyPairGenerator.getInstance("EC");
         gen.initialize(256);
@@ -128,11 +155,14 @@ public class WebAuthnVerifierTest {
     }
 
     private static byte[] extractUncompressedPoint(byte[] encoded) {
-        if (encoded.length == 91 && encoded[0] == 0x04) {
+        if (encoded.length >= 27 + 64 && encoded[0] == 0x30) {
             byte[] uncompressed = new byte[65];
             uncompressed[0] = 0x04;
-            System.arraycopy(encoded, 27, uncompressed, 1, 64);
+            System.arraycopy(encoded, encoded.length - 64, uncompressed, 1, 64);
             return uncompressed;
+        }
+        if (encoded.length == 65 && encoded[0] == 0x04) {
+            return encoded;
         }
         return encoded;
     }

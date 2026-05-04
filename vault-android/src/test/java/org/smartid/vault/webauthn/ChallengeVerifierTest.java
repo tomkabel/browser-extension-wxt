@@ -164,16 +164,30 @@ public class ChallengeVerifierTest {
     @Test
     public void verifyFull_requiresNonceUniqueness() throws Exception {
         byte[] serialized = createValidSerialized();
+        ChallengeVerifier.ChallengeComponents components = verifier.parseTlvComponents(serialized);
+        byte[] nonceFromTlv = components.sessionNonce;
+
         byte[] challengeHash = MessageDigest.getInstance("SHA-256").digest(serialized);
         String clientDataJsonChallenge = base64UrlEncode(challengeHash);
-        byte[] nonce = new byte[32];
-        Arrays.fill(nonce, (byte) 0xAA);
 
-        ChallengeVerifier.VerificationResult first = verifier.verifyFull(serialized, clientDataJsonChallenge, nonce);
+        ChallengeVerifier.VerificationResult first = verifier.verifyFull(serialized, clientDataJsonChallenge, nonceFromTlv);
         assertTrue("First full verification should pass", first.passed);
 
-        ChallengeVerifier.VerificationResult second = verifier.verifyFull(serialized, clientDataJsonChallenge, nonce);
+        ChallengeVerifier.VerificationResult second = verifier.verifyFull(serialized, clientDataJsonChallenge, nonceFromTlv);
         assertFalse("Replayed nonce should fail full verification", second.passed);
+    }
+
+    @Test
+    public void verifyFull_rejectsMismatchedNonce() throws Exception {
+        byte[] serialized = createValidSerialized();
+        byte[] challengeHash = MessageDigest.getInstance("SHA-256").digest(serialized);
+        String clientDataJsonChallenge = base64UrlEncode(challengeHash);
+
+        byte[] wrongNonce = new byte[32];
+        Arrays.fill(wrongNonce, (byte) 0xFF);
+
+        ChallengeVerifier.VerificationResult result = verifier.verifyFull(serialized, clientDataJsonChallenge, wrongNonce);
+        assertFalse("Mismatched nonce should fail full verification", result.passed);
     }
 
     private static String base64UrlEncode(byte[] data) {

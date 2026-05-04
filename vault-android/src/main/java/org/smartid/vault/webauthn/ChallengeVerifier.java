@@ -15,8 +15,10 @@ import java.util.Map;
  * Recomputes the expected SHA-256 challenge from TLV-serialized components
  * and compares it against the WebAuthn assertion's clientDataJSON.challenge.
  *
- * Verifies the zkTLS proof first, then recomputes Challenge = SHA-256(serialized_bytes).
+ * Verifies the zkTLS proof first, then recomputes Challenge = SHA-256(canonical_serialized).
+ * Uses canonical TLV serialization (parse → re-serialize → hash) to reject malformed inputs.
  * Supports replay prevention via session nonce tracking (LRU, last 100).
+ * Nonce is always extracted from the TLV payload itself, never trusted from out-of-band.
  */
 public class ChallengeVerifier {
     private static final String TAG = "ChallengeVerifier";
@@ -73,7 +75,11 @@ public class ChallengeVerifier {
 
     public ChallengeComponents parseTlvComponents(byte[] serialized) {
         ByteBuffer buf = ByteBuffer.wrap(serialized);
+
         int version = buf.get() & 0xFF;
+        if (version != VERSION) {
+            throw new IllegalArgumentException("Unsupported challenge version: " + version);
+        }
 
         int proofLength = buf.getShort() & 0xFFFF;
         if (proofLength > MAX_PROOF_LENGTH) {
@@ -141,7 +147,9 @@ public class ChallengeVerifier {
             String clientDataJsonChallenge
     ) {
         try {
-            byte[] expectedChallenge = computeChallengeHash(tlvSerializedComponents);
+            ChallengeComponents components = parseTlvComponents(tlvSerializedComponents);
+            byte[] canonical = serializeForHash(components);
+            byte[] expectedChallenge = computeChallengeHash(canonical);
             byte[] actualChallenge = base64UrlDecode(clientDataJsonChallenge);
 
             if (!Arrays.equals(expectedChallenge, actualChallenge)) {
@@ -177,19 +185,34 @@ public class ChallengeVerifier {
             String clientDataJsonChallenge,
             byte[] sessionNonce
     ) {
-        VerificationResult nonceResult = verifyNonceUniqueness(sessionNonce);
-        if (!nonceResult.passed) {
-            logAuditEvent("nonce_replay", nonceResult.reason, null);
-            return nonceResult;
-        }
+        try {
+            ChallengeComponents components = parseTlvComponents(tlvSerializedComponents);
+            byte[] extractedNonce = components.sessionNonce;
 
-        VerificationResult challengeResult = verifyChallenge(
-                tlvSerializedComponents, clientDataJsonChallenge);
-        if (!challengeResult.passed) {
-            logAuditEvent("challenge_mismatch", challengeResult.reason, sessionNonce);
-        }
+            if (!Arrays.equals(extractedNonce, sessionNonce)) {
+                logAuditEvent("nonce_mismatch",
+                        "Session nonce does not match TLV-embedded nonce", null);
+                return VerificationResult.failure(
+                        "Session nonce mismatch with TLV components");
+            }
 
-        return challengeResult;
+            VerificationResult nonceResult = verifyNonceUniqueness(extractedNonce);
+            if (!nonceResult.passed) {
+                logAuditEvent("nonce_replay", nonceResult.reason, null);
+                return nonceResult;
+            }
+
+            VerificationResult challengeResult = verifyChallenge(
+                    tlvSerializedComponents, clientDataJsonChallenge);
+            if (!challengeResult.passed) {
+                logAuditEvent("challenge_mismatch", challengeResult.reason, sessionNonce);
+            }
+
+            return challengeResult;
+        } catch (Exception e) {
+            Log.e(TAG, "Full verification error", e);
+            return VerificationResult.failure("Verification error: " + e.getMessage());
+        }
     }
 
     static byte[] base64UrlDecode(String base64Url) {
@@ -203,7 +226,9 @@ public class ChallengeVerifier {
     }
 
     private void logAuditEvent(String eventType, String details, byte[] sessionNonce) {
-        String sessionHash = sessionNonce != null ? bytesToHex(hashSha256(sessionNonce)).substring(0, 16) : "null";
+        String sessionHash = sessionNonce != null
+                ? bytesToHex(hashSha256(sessionNonce)).substring(0, 16)
+                : "null";
         Log.i(TAG, "AUDIT: type=" + eventType + " reason=" + details + " session=" + sessionHash);
     }
 
