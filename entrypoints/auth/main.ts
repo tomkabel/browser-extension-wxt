@@ -287,9 +287,102 @@ async function handlePrfCreate(saltBase64: string): Promise<void> {
 btnRegister.addEventListener('click', handleRegister);
 btnAuthenticate.addEventListener('click', handleAuthenticate);
 
+async function handlePasskeyCreate(): Promise<void> {
+  status('Creating passkey for SmartID Vault...');
+  log('Passkey creation mode...');
+
+  try {
+    const userId = new Uint8Array(16);
+    crypto.getRandomValues(userId);
+
+    const challenge = new Uint8Array(32);
+    crypto.getRandomValues(challenge);
+
+    const prfSalt = new Uint8Array(32);
+    crypto.getRandomValues(prfSalt);
+
+    const credential = (await navigator.credentials.create({
+      publicKey: {
+        challenge,
+        rp: { id: RELYING_PARTY_ID, name: 'SmartID Vault' },
+        user: {
+          id: userId,
+          name: 'smartid2-vault-user',
+          displayName: 'SmartID Vault',
+        },
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+        authenticatorSelection: {
+          authenticatorAttachment: 'platform',
+          userVerification: 'required',
+          residentKey: 'required',
+        },
+        timeout: 60000,
+        extensions: {
+          prf: { eval: { first: prfSalt } },
+        },
+      },
+    })) as PublicKeyCredential | null;
+
+    if (!credential) {
+      status('Passkey creation cancelled');
+      log('Passkey creation returned null');
+      await reportPasskeyError('Passkey creation cancelled');
+      window.close();
+      return;
+    }
+
+    const response = credential.response as AuthenticatorAttestationResponse;
+    const publicKeyBytes = response.getPublicKey?.() ?? response.getPublicKey();
+
+    const prfEnabled =
+      'prf' in (credential as { prf?: unknown }) &&
+      (credential as { prf?: { enabled?: boolean } }).prf?.enabled === true;
+
+    const relayResult = await chrome.runtime.sendMessage({
+      type: 'passkey-credential-created',
+      payload: {
+        credentialId: bufferToBase64(credential.rawId),
+        publicKeyBytes: publicKeyBytes ? Array.from(new Uint8Array(publicKeyBytes)) : [],
+        prfEnabled,
+      },
+    });
+
+    if (relayResult?.success) {
+      status('Passkey created and verified. Vault is paired.');
+      log('Passkey credential provisioned successfully.');
+    } else {
+      status('Passkey created but relay failed.');
+      log(`ERROR: ${relayResult?.error ?? 'Relay failed'}`);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    status('Passkey creation failed');
+    log(`ERROR: ${message}`);
+    await reportPasskeyError(message);
+  }
+
+  window.close();
+}
+
+async function reportPasskeyError(error: string): Promise<void> {
+  try {
+    await chrome.runtime.sendMessage({
+      type: 'passkey-credential-error',
+      payload: { error },
+    });
+  } catch {
+    // Background may not be listening
+  }
+}
+
 async function init(): Promise<void> {
   const params = new URLSearchParams(window.location.search);
   const mode = params.get('mode');
+
+  if (mode === 'passkey-create') {
+    await handlePasskeyCreate();
+    return;
+  }
 
   if (mode === 'prf-create') {
     const saltB64 = params.get('salt');
