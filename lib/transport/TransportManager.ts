@@ -38,7 +38,10 @@ export class TransportManager {
         this.switchTransport('usb', 'WebRTC disconnected').then((switched) => {
           if (!switched) {
             this.activeTransport = null;
-            this.emit('status-change', { connected: false, reason: 'WebRTC disconnected, USB unavailable' });
+            this.emit('status-change', {
+              connected: false,
+              reason: 'WebRTC disconnected, USB unavailable',
+            });
           }
         });
       }
@@ -113,10 +116,7 @@ export class TransportManager {
     }
   }
 
-  async switchTransport(
-    target: TransportType,
-    reason: string,
-  ): Promise<boolean> {
+  async switchTransport(target: TransportType, reason: string): Promise<boolean> {
     const previous = this.activeTransport?.type ?? null;
     const current = this.activeTransport;
 
@@ -189,11 +189,7 @@ export class TransportManager {
     }, TRANSPORT_CONFIG.usbPollIntervalMs);
   }
 
-  private emitChange(
-    previous: TransportType | null,
-    current: TransportType,
-    reason: string,
-  ): void {
+  private emitChange(previous: TransportType | null, current: TransportType, reason: string): void {
     this.emit('transport-changed', { previous, current, reason } as TransportChangeEvent);
 
     try {

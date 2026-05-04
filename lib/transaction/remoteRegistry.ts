@@ -41,7 +41,7 @@ function compileDetectors(detectors: DeclarativeDetector[]): DeclarativeDetector
 async function fetchRegistry(): Promise<DeclarativeDetector[]> {
   try {
     const response = await fetch(REGISTRY_URL, {
-      headers: { 'Accept': 'application/json' },
+      headers: { Accept: 'application/json' },
       signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) return [];

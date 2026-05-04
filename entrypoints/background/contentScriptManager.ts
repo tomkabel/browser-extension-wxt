@@ -61,7 +61,9 @@ export async function registerForDomain(domain: string, jsFile?: string): Promis
     log.info('[CSM] Registered domain:', domain);
   })();
 
-  const cleanup = () => { registerLock.delete(domain); };
+  const cleanup = () => {
+    registerLock.delete(domain);
+  };
   registerLock.set(domain, promise.then(cleanup, cleanup));
   await promise;
 
@@ -165,7 +167,13 @@ export async function addPendingDomain(
 }
 
 export async function getPendingDomains(): Promise<
-  Array<{ domain: string; url: string; tabId: number; usernameSelector: string; passwordSelector: string }>
+  Array<{
+    domain: string;
+    url: string;
+    tabId: number;
+    usernameSelector: string;
+    passwordSelector: string;
+  }>
 > {
   const stored = (await browser.storage.session.get(PENDING_KEY)) as Record<string, unknown>;
   return (stored[PENDING_KEY] ?? []) as Array<{

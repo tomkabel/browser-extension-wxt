@@ -70,7 +70,13 @@ export function SessionStatus({ expiry }: SessionStatusProps) {
       <div className="p-2 bg-amber-50 rounded-lg border border-amber-200 text-center">
         <p className="text-amber-700 text-xs font-medium">
           Session expiring in{' '}
-          <span className="tabular-nums font-mono font-bold" role="timer" aria-label={`Session expires in ${remaining} seconds`}>{timeDisplay}</span>
+          <span
+            className="tabular-nums font-mono font-bold"
+            role="timer"
+            aria-label={`Session expires in ${remaining} seconds`}
+          >
+            {timeDisplay}
+          </span>
         </p>
       </div>
     );
@@ -80,7 +86,13 @@ export function SessionStatus({ expiry }: SessionStatusProps) {
     <div className="p-2 bg-gray-50 rounded-lg border text-center">
       <p className="text-gray-600 text-xs">
         Session:{' '}
-        <span className="tabular-nums font-mono text-gray-700 font-medium" role="timer" aria-label={`Session expires in ${remaining} seconds`}>{timeDisplay}</span>
+        <span
+          className="tabular-nums font-mono text-gray-700 font-medium"
+          role="timer"
+          aria-label={`Session expires in ${remaining} seconds`}
+        >
+          {timeDisplay}
+        </span>
       </p>
     </div>
   );

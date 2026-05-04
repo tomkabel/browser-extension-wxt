@@ -59,7 +59,11 @@ function processIncomingMessage(data: ArrayBuffer): void {
     const remoteCaps = decodeCapabilities(content);
     if (remoteCaps) {
       negotiatedCaps = intersectCapabilities(
-        { version: CURRENT_PROTOCOL_VERSION, features: SUPPORTED_FEATURES, supportedTransports: SUPPORTED_TRANSPORTS },
+        {
+          version: CURRENT_PROTOCOL_VERSION,
+          features: SUPPORTED_FEATURES,
+          supportedTransports: SUPPORTED_TRANSPORTS,
+        },
         remoteCaps,
       );
       log.info('[Coordinator] Negotiated capabilities:', negotiatedCaps);
@@ -106,7 +110,8 @@ async function performXXHandshake(): Promise<HandshakeResult | null> {
         onTransportDead: async (reason: string) => {
           log.warn(`[Coordinator] Transport dead: ${reason}`);
           try {
-            const { getTransportManager, initializeTransportManager } = await import('./messageHandlers');
+            const { getTransportManager, initializeTransportManager } =
+              await import('./messageHandlers');
             await initializeTransportManager();
             const tm = getTransportManager();
             if (tm) {
@@ -135,7 +140,7 @@ async function performXXHandshake(): Promise<HandshakeResult | null> {
     if (!msg2) return null;
 
     const msg2Content = msg2.subarray(3);
-    const { message: msg2Payload, finished: msg2Done } = handshake.readMessage(msg2Content);
+    const { message: msg2Payload } = handshake.readMessage(msg2Content);
 
     remoteStaticPk = handshake.remoteStaticPublicKey;
 

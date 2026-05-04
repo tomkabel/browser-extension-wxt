@@ -84,8 +84,6 @@ export function intersectCapabilities(
   return {
     version: Math.min(local.version ?? 0, remote.version ?? 0),
     features: localFeatures.filter((f) => remoteFeatures.includes(f)),
-    supportedTransports: localTransports.filter((t) =>
-      remoteTransports.includes(t),
-    ),
+    supportedTransports: localTransports.filter((t) => remoteTransports.includes(t)),
   };
 }

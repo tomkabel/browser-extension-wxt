@@ -31,7 +31,12 @@ describe('CommandClient - Adaptive RTO', () => {
   it('uses adaptive RTO for retransmission', async () => {
     const { client, sendData } = createClient();
 
-    const sendPromise = client.sendCredentialRequest('example.com', 'https://example.com', 'user', 'pass');
+    const sendPromise = client.sendCredentialRequest(
+      'example.com',
+      'https://example.com',
+      'user',
+      'pass',
+    );
 
     await vi.advanceTimersByTimeAsync(10);
 
@@ -41,12 +46,14 @@ describe('CommandClient - Adaptive RTO', () => {
     expect(rttEstimator.getRto()).toBeGreaterThanOrEqual(1000);
 
     // Simulate ACK arriving to resolve the command
-    client.handleIncomingResponse(JSON.stringify({
-      version: 1,
-      sequence: 1,
-      status: 'ok',
-      data: {},
-    }));
+    client.handleIncomingResponse(
+      JSON.stringify({
+        version: 1,
+        sequence: 1,
+        status: 'ok',
+        data: {},
+      }),
+    );
 
     await vi.advanceTimersByTimeAsync(100);
     await expect(sendPromise).resolves.toBeDefined();
@@ -55,7 +62,12 @@ describe('CommandClient - Adaptive RTO', () => {
   it('command succeeds with one retry using adaptive timeout', async () => {
     const { client, sendData } = createClient();
 
-    const sendPromise = client.sendCredentialRequest('example.com', 'https://example.com', 'user', 'pass');
+    const sendPromise = client.sendCredentialRequest(
+      'example.com',
+      'https://example.com',
+      'user',
+      'pass',
+    );
 
     await vi.advanceTimersByTimeAsync(10);
     expect(sendData).toHaveBeenCalledTimes(1);
@@ -65,12 +77,14 @@ describe('CommandClient - Adaptive RTO', () => {
     expect(sendData).toHaveBeenCalledTimes(2);
 
     // Simulate ACK arriving for the retry
-    client.handleIncomingResponse(JSON.stringify({
-      version: 1,
-      sequence: 1,
-      status: 'ok',
-      data: {},
-    }));
+    client.handleIncomingResponse(
+      JSON.stringify({
+        version: 1,
+        sequence: 1,
+        status: 'ok',
+        data: {},
+      }),
+    );
 
     await vi.advanceTimersByTimeAsync(100);
     await expect(sendPromise).resolves.toBeDefined();
@@ -82,17 +96,24 @@ describe('CommandClient - Heartbeat', () => {
   it('idle transport sends ping within 16 seconds', async () => {
     const { client, sendData } = createClient();
 
-    const sendPromise = client.sendCredentialRequest('example.com', 'https://example.com', 'user', 'pass');
+    const sendPromise = client.sendCredentialRequest(
+      'example.com',
+      'https://example.com',
+      'user',
+      'pass',
+    );
 
     await vi.advanceTimersByTimeAsync(10);
 
     // Resolve the credential request
-    client.handleIncomingResponse(JSON.stringify({
-      version: 1,
-      sequence: 1,
-      status: 'ok',
-      data: {},
-    }));
+    client.handleIncomingResponse(
+      JSON.stringify({
+        version: 1,
+        sequence: 1,
+        status: 'ok',
+        data: {},
+      }),
+    );
 
     await vi.advanceTimersByTimeAsync(10);
     await expect(sendPromise).resolves.toBeDefined();
@@ -112,17 +133,24 @@ describe('CommandClient - Heartbeat', () => {
     const { client, sendData } = createClient({ onTransportDead });
 
     // Start heartbeat by sending a command
-    const sendPromise = client.sendCredentialRequest('example.com', 'https://example.com', 'user', 'pass');
+    const sendPromise = client.sendCredentialRequest(
+      'example.com',
+      'https://example.com',
+      'user',
+      'pass',
+    );
 
     await vi.advanceTimersByTimeAsync(10);
 
     // Resolve the credential request so its pending entry is cleaned up
-    client.handleIncomingResponse(JSON.stringify({
-      version: 1,
-      sequence: 1,
-      status: 'ok',
-      data: {},
-    }));
+    client.handleIncomingResponse(
+      JSON.stringify({
+        version: 1,
+        sequence: 1,
+        status: 'ok',
+        data: {},
+      }),
+    );
 
     await vi.advanceTimersByTimeAsync(10);
     await expect(sendPromise).resolves.toBeDefined();

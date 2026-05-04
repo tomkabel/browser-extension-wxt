@@ -40,9 +40,7 @@ describe('transmitCredentialToAndroid', () => {
     const decoded = JSON.parse(new TextDecoder().decode(sentMessage));
     expect(decoded.type).toBe('credential-provision');
     expect(decoded.credentialId).toBe(credentialId);
-    expect(decoded.publicKeyBytes).toBe(
-      btoa(String.fromCharCode(...Array.from(publicKeyBytes))),
-    );
+    expect(decoded.publicKeyBytes).toBe(btoa(String.fromCharCode(...Array.from(publicKeyBytes))));
     expect(decoded.protocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
   });
 
@@ -51,24 +49,20 @@ describe('transmitCredentialToAndroid', () => {
 
     const { transmitCredentialToAndroid } = await import('./pairingCoordinator');
 
-    const result = await transmitCredentialToAndroid(
-      'test-id',
-      new Uint8Array([1, 2, 3]),
-    );
+    const result = await transmitCredentialToAndroid('test-id', new Uint8Array([1, 2, 3]));
 
     expect(result).toBe(false);
     expect(mockSend).not.toHaveBeenCalled();
   });
 
   it('returns false on send failure', async () => {
-    mockGetTransportManager.mockReturnValue({ send: vi.fn().mockRejectedValue(new Error('Transport error')) });
+    mockGetTransportManager.mockReturnValue({
+      send: vi.fn().mockRejectedValue(new Error('Transport error')),
+    });
 
     const { transmitCredentialToAndroid } = await import('./pairingCoordinator');
 
-    const result = await transmitCredentialToAndroid(
-      'test-id',
-      new Uint8Array([1, 2, 3]),
-    );
+    const result = await transmitCredentialToAndroid('test-id', new Uint8Array([1, 2, 3]));
 
     expect(result).toBe(false);
   });

@@ -105,11 +105,14 @@ describe('contentScriptManager', () => {
     it('is idempotent for already approved domains', async () => {
       const { registerForDomain, getApprovedDomains } = await import('./contentScriptManager');
 
-      const callCountBeforeFirst = (chrome.scripting.registerContentScripts as any).mock.calls.length;
+      const callCountBeforeFirst = (chrome.scripting.registerContentScripts as any).mock.calls
+        .length;
       await registerForDomain('example.com');
-      const callCountAfterFirst = (chrome.scripting.registerContentScripts as any).mock.calls.length;
+      const callCountAfterFirst = (chrome.scripting.registerContentScripts as any).mock.calls
+        .length;
       await registerForDomain('example.com');
-      const callCountAfterSecond = (chrome.scripting.registerContentScripts as any).mock.calls.length;
+      const callCountAfterSecond = (chrome.scripting.registerContentScripts as any).mock.calls
+        .length;
 
       const approved = await getApprovedDomains();
       expect(approved).toHaveLength(1);

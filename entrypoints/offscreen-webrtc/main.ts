@@ -43,9 +43,7 @@ function log(message: string): void {
 }
 
 function notifyBackground(type: string, payload?: unknown): void {
-  chrome.runtime
-    .sendMessage({ type, payload })
-    .catch(() => {});
+  chrome.runtime.sendMessage({ type, payload }).catch(() => {});
 }
 
 async function fetchTurnCredentials(): Promise<TurnCredentials | null> {
@@ -81,9 +79,7 @@ function scheduleCredsRefresh(ttlSeconds: number): void {
 }
 
 export function buildIceServers(creds: TurnCredentials | null): RTCIceServer[] {
-  const servers: RTCIceServer[] = [
-    { urls: 'stun:stun.l.google.com:19302' },
-  ];
+  const servers: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }];
 
   if (creds) {
     if (Array.isArray(creds.stunUrls)) {
@@ -116,43 +112,41 @@ function logConnectionMetrics(): void {
   try {
     const stats = pc.getStats();
 
-    stats.then((report) => {
-      let candidateType = 'unknown';
-      let transportProtocol = 'unknown';
-      let rtt: number | undefined;
+    stats
+      .then((report) => {
+        let candidateType = 'unknown';
+        let transportProtocol = 'unknown';
+        let rtt: number | undefined;
 
-      for (const stat of report.values()) {
-        if (
-          stat.type === 'candidate-pair' &&
-          stat.state === 'succeeded' &&
-          stat.nominated
-        ) {
-          rtt = stat.currentRoundTripTime ? stat.currentRoundTripTime * 1000 : undefined;
+        for (const stat of report.values()) {
+          if (stat.type === 'candidate-pair' && stat.state === 'succeeded' && stat.nominated) {
+            rtt = stat.currentRoundTripTime ? stat.currentRoundTripTime * 1000 : undefined;
 
-          const localCandidate = report.get(stat.localCandidateId);
-          if (localCandidate) {
-            const lc = localCandidate as { candidateType?: string; protocol?: string };
-            candidateType = lc.candidateType ?? 'unknown';
-            transportProtocol = lc.protocol ?? 'unknown';
+            const localCandidate = report.get(stat.localCandidateId);
+            if (localCandidate) {
+              const lc = localCandidate as { candidateType?: string; protocol?: string };
+              candidateType = lc.candidateType ?? 'unknown';
+              transportProtocol = lc.protocol ?? 'unknown';
+            }
+            break;
           }
-          break;
         }
-      }
 
-      log(
-        `Connection metrics: type=${candidateType}, protocol=${transportProtocol}, rtt=${rtt?.toFixed(1) ?? 'N/A'}ms`,
-      );
+        log(
+          `Connection metrics: type=${candidateType}, protocol=${transportProtocol}, rtt=${rtt?.toFixed(1) ?? 'N/A'}ms`,
+        );
 
-      if (candidateType === 'relay') {
-        log('Using TURN relay transport');
-      }
+        if (candidateType === 'relay') {
+          log('Using TURN relay transport');
+        }
 
-      notifyBackground('webrtc-metrics', {
-        candidateType,
-        rtt,
-        transportProtocol,
-      });
-    }).catch(() => {});
+        notifyBackground('webrtc-metrics', {
+          candidateType,
+          rtt,
+          transportProtocol,
+        });
+      })
+      .catch(() => {});
   } catch {
     // getStats may not be available
   }
@@ -185,10 +179,12 @@ function setupPeerConnection(relayOnly = false): void {
 
   dataChannel.onmessage = (event: MessageEvent) => {
     if (event.data instanceof ArrayBuffer) {
-      chrome.runtime.sendMessage({
-        type: 'webrtc-data-received',
-        payload: { data: Array.from(new Uint8Array(event.data)) },
-      }).catch(() => {});
+      chrome.runtime
+        .sendMessage({
+          type: 'webrtc-data-received',
+          payload: { data: Array.from(new Uint8Array(event.data)) },
+        })
+        .catch(() => {});
     }
   };
 
@@ -304,11 +300,7 @@ function closePeerConnection(): void {
   }
 }
 
-function connectSignaling(
-  code: string,
-  roomNonce?: number[],
-  extStaticKey?: number[],
-): void {
+function connectSignaling(code: string, roomNonce?: number[], extStaticKey?: number[]): void {
   sasCode = code;
   nonce = roomNonce ?? null;
   extensionStaticKey = extStaticKey ?? null;
@@ -415,11 +407,7 @@ async function generateQrSdp(): Promise<RTCSessionDescriptionInit | null> {
 }
 
 function compressSdp(sdp: string): string {
-  return btoa(
-    new TextEncoder()
-      .encode(sdp)
-      .reduce((acc, b) => acc + String.fromCharCode(b), ''),
-  );
+  return btoa(new TextEncoder().encode(sdp).reduce((acc, b) => acc + String.fromCharCode(b), ''));
 }
 
 function sendData(data: Uint8Array): boolean {
@@ -439,11 +427,11 @@ async function connectWebUsb(): Promise<boolean> {
 
     const device = await navigator.usb.requestDevice({
       filters: [
-        { vendorId: 0x18D1 }, // Google
-        { vendorId: 0x04E8 }, // Samsung
-        { vendorId: 0x22B8 }, // Motorola
-        { vendorId: 0x0FCE }, // Sony
-        { vendorId: 0x2B4C }, // OnePlus
+        { vendorId: 0x18d1 }, // Google
+        { vendorId: 0x04e8 }, // Samsung
+        { vendorId: 0x22b8 }, // Motorola
+        { vendorId: 0x0fce }, // Sony
+        { vendorId: 0x2b4c }, // OnePlus
       ],
     });
 
@@ -474,10 +462,12 @@ async function startUsbReadLoop(device: USBDevice): Promise<void> {
       const result = await device.transferIn(0x81, 16384);
       if (result.data && result.data.byteLength > 0) {
         const data = new Uint8Array(result.data.buffer);
-        chrome.runtime.sendMessage({
-          type: 'webrtc-data-received',
-          payload: { data: Array.from(data) },
-        }).catch(() => {});
+        chrome.runtime
+          .sendMessage({
+            type: 'webrtc-data-received',
+            payload: { data: Array.from(data) },
+          })
+          .catch(() => {});
       }
     } catch (err) {
       log(`USB read error: ${err}`);
@@ -494,7 +484,10 @@ async function startUsbReadLoop(device: USBDevice): Promise<void> {
 async function sendViaUsb(data: Uint8Array): Promise<boolean> {
   if (!usbDevice?.opened) return false;
   try {
-    const buf = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+    const buf = data.buffer.slice(
+      data.byteOffset,
+      data.byteOffset + data.byteLength,
+    ) as ArrayBuffer;
     await usbDevice.transferOut(0x01, buf);
     return true;
   } catch (err) {
@@ -595,10 +588,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         }
         setupPeerConnection();
         const sdp = await generateQrSdp();
-        chrome.runtime.sendMessage({
-          type: 'webrtc-sdp-for-qr',
-          payload: { sasCode, sdp },
-        }).catch(() => {});
+        chrome.runtime
+          .sendMessage({
+            type: 'webrtc-sdp-for-qr',
+            payload: { sasCode, sdp },
+          })
+          .catch(() => {});
         connectSignaling(sasCode, nonce ?? undefined, extensionStaticKey ?? undefined);
       })().catch((err) => log(`Start pairing error: ${err}`));
       sendResponse({ success: true });
@@ -617,7 +612,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       }
       if (message.payload?.data && dataChannel && backpressureQueue) {
         const data = new Uint8Array(message.payload.data as number[]);
-        backpressureQueue.send(data, dataChannel).catch((err) => log(`Backpressure send error: ${err}`));
+        backpressureQueue
+          .send(data, dataChannel)
+          .catch((err) => log(`Backpressure send error: ${err}`));
       } else if (message.payload?.data) {
         sendData(new Uint8Array(message.payload.data as number[]));
       }

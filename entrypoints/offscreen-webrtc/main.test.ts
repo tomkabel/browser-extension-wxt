@@ -50,9 +50,7 @@ describe('buildIceServers', () => {
     });
     expect(stunServers.length).toBeGreaterThanOrEqual(2);
 
-    const turnServers = servers.filter(
-      (s: RTCIceServer) => s.username && s.credential,
-    );
+    const turnServers = servers.filter((s: RTCIceServer) => s.username && s.credential);
     expect(turnServers).toHaveLength(1);
     expect(turnServers[0]!.username).toBe('testuser');
     expect(turnServers[0]!.credential).toBe('testpass');
@@ -61,9 +59,7 @@ describe('buildIceServers', () => {
   it('sets the correct TURN URLs', () => {
     const servers = buildIceServers(defaultStun);
 
-    const turnServer = servers.find(
-      (s: RTCIceServer) => s.username && s.credential,
-    )!;
+    const turnServer = servers.find((s: RTCIceServer) => s.username && s.credential)!;
     const urls = Array.isArray(turnServer.urls) ? turnServer.urls : [turnServer.urls];
     expect(urls).toContain('turn:smartid2-turn.fly.dev:3478');
   });
@@ -71,10 +67,7 @@ describe('buildIceServers', () => {
   it('handles multiple TURN URLs', () => {
     const multiUrlCreds = {
       ...defaultStun,
-      urls: [
-        'turn:smartid2-turn.fly.dev:3478',
-        'turns:smartid2-turn.fly.dev:5349',
-      ],
+      urls: ['turn:smartid2-turn.fly.dev:3478', 'turns:smartid2-turn.fly.dev:5349'],
     };
 
     const servers = buildIceServers(multiUrlCreds);
@@ -122,7 +115,10 @@ describe('buildIceServers', () => {
     const servers = buildIceServers({ ...defaultStun, stunUrls: [] });
     const customStun = servers.filter((s) => {
       const urls = Array.isArray(s.urls) ? s.urls : [s.urls];
-      return urls.some((u) => typeof u === 'string' && u !== 'stun:stun.l.google.com:19302' && u.startsWith('stun:'));
+      return urls.some(
+        (u) =>
+          typeof u === 'string' && u !== 'stun:stun.l.google.com:19302' && u.startsWith('stun:'),
+      );
     });
     expect(customStun).toHaveLength(0);
   });
@@ -158,10 +154,13 @@ describe('data channel configuration', () => {
       id: 0,
     });
 
-    expect(createDataChannel).toHaveBeenCalledWith('smartid2', expect.objectContaining({
-      ordered: true,
-      maxPacketLifeTime: 3000,
-    }));
+    expect(createDataChannel).toHaveBeenCalledWith(
+      'smartid2',
+      expect.objectContaining({
+        ordered: true,
+        maxPacketLifeTime: 3000,
+      }),
+    );
     expect(mockDc.binaryType).toBe('arraybuffer');
   });
 });

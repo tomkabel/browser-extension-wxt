@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { detectAccessibilityPrefs, generateNonce, computeCommitment, buildPairingUrl, parsePairingUrl } from './qrCode';
+import {
+  detectAccessibilityPrefs,
+  generateNonce,
+  computeCommitment,
+  buildPairingUrl,
+  parsePairingUrl,
+} from './qrCode';
 
 describe('detectAccessibilityPrefs', () => {
   afterEach(() => {
@@ -37,9 +43,7 @@ describe('detectAccessibilityPrefs', () => {
   });
 
   it('returns false for normal user agent', () => {
-    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(
-      'Mozilla/5.0 Chrome/131.0.0.0',
-    );
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 Chrome/131.0.0.0');
 
     const prefs = detectAccessibilityPrefs();
     expect(prefs.screenReader).toBe(false);

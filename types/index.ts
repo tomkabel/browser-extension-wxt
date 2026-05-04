@@ -163,7 +163,15 @@ export interface CredentialResponse {
   approval_mode?: 'auto' | 'biometric';
 }
 
-export type CredentialState = 'idle' | 'detecting' | 'requesting' | 'waiting_phone' | 'filling' | 'filled' | 'not_found' | 'error';
+export type CredentialState =
+  | 'idle'
+  | 'detecting'
+  | 'requesting'
+  | 'waiting_phone'
+  | 'filling'
+  | 'filled'
+  | 'not_found'
+  | 'error';
 
 export interface ApprovedDomain {
   domain: string;

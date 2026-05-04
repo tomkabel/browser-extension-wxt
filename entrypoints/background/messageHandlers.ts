@@ -36,7 +36,11 @@ import {
   generateSessionNonce,
   serializeChallengeComponents,
 } from '~/lib/webauthn';
-import { startWebRequestCapture, getTlsBindingComponents, buildChallengeProof } from '~/lib/tlsBinding';
+import {
+  startWebRequestCapture,
+  getTlsBindingComponents,
+  buildChallengeProof,
+} from '~/lib/tlsBinding';
 import { isDomainApproved } from './contentScriptManager';
 import type {
   AttestedCodePayload,
@@ -557,11 +561,7 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       } catch {
         pageContent = sender.tab?.url ?? '';
       }
-      const tlsBindingHash = await buildChallengeProof(
-        tabId,
-        controlCode ?? '0000',
-        pageContent,
-      );
+      const tlsBindingHash = await buildChallengeProof(tabId, controlCode ?? '0000', pageContent);
 
       const sessionNonce = generateSessionNonce();
 
@@ -581,11 +581,7 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
         sessionNonce,
       });
 
-      const tlsBinding = await getTlsBindingComponents(
-        tabId,
-        controlCode ?? '0000',
-        pageContent,
-      );
+      const tlsBinding = await getTlsBindingComponents(tabId, controlCode ?? '0000', pageContent);
 
       await browser.storage.session.set({
         'pending:assertion': {
@@ -622,7 +618,10 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
     } catch (err) {
       log.error('Failed to begin challenge assertion:', err);
       resetAuthInProgress('begin-challenge-assertion error');
-      return { success: false, error: err instanceof Error ? err.message : 'Assertion initiation failed' };
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Assertion initiation failed',
+      };
     }
   },
 

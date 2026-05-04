@@ -21,8 +21,7 @@ export enum PiiCategory {
 const PATTERNS: Record<PiiCategory, RegExp> = {
   [PiiCategory.Password]: /\b(password|passwd|pwd|pin[12]?)\s*[:=]\s*\S{1,64}(?=\s|$)/gi,
 
-  [PiiCategory.Iban]:
-    /\b[A-Z]{2}\d{2}\s?(?:\d{4}\s?){2,7}\d{1,4}\b/gi,
+  [PiiCategory.Iban]: /\b[A-Z]{2}\d{2}\s?(?:\d{4}\s?){2,7}\d{1,4}\b/gi,
 
   [PiiCategory.CreditCard]: /\b(?:\d[\s-]?){13,19}\b/g,
 
@@ -39,8 +38,7 @@ const PATTERNS: Record<PiiCategory, RegExp> = {
 
   [PiiCategory.EstonianIdCode]: /\b\d{11}\b(?:\s*[A-Z]{2})?/g,
 
-  [PiiCategory.Passport]:
-    /\b[A-Z]{2}\d{6,8}\b/gi,
+  [PiiCategory.Passport]: /\b[A-Z]{2}\d{6,8}\b/gi,
 };
 
 const REDACTED = '[REDACTED]';

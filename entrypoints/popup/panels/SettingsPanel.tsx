@@ -57,7 +57,9 @@ export function SettingsPanel() {
       </div>
 
       {loadError && (
-        <p className="text-xs text-red-500 text-center py-2" role="alert">{loadError}</p>
+        <p className="text-xs text-red-500 text-center py-2" role="alert">
+          {loadError}
+        </p>
       )}
 
       {approvedDomains.length === 0 ? (
@@ -75,13 +77,13 @@ export function SettingsPanel() {
                   {new Date(d.registeredAt).toLocaleDateString()}
                 </p>
               </div>
-            <button
-              type="button"
-              className="ml-2 px-2.5 py-1 bg-red-100 text-red-700 text-xs rounded-md font-medium hover:bg-red-200 transition-colors shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
-              onClick={() => handleRevoke(d.domain)}
-            >
-              Revoke
-            </button>
+              <button
+                type="button"
+                className="ml-2 px-2.5 py-1 bg-red-100 text-red-700 text-xs rounded-md font-medium hover:bg-red-200 transition-colors shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+                onClick={() => handleRevoke(d.domain)}
+              >
+                Revoke
+              </button>
             </div>
           ))}
         </div>

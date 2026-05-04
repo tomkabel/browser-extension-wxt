@@ -15,7 +15,10 @@ function getExtensionId(): string {
     const hash = crypto.createHash('sha256').update(derBytes).digest();
     const first16 = hash.subarray(0, 16);
     const hex = first16.toString('hex');
-    return hex.split('').map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
+    return hex
+      .split('')
+      .map((c) => String.fromCharCode(97 + parseInt(c, 16)))
+      .join('');
   }
   return 'dev-id';
 }
@@ -54,13 +57,18 @@ test.describe('Accessibility', () => {
     await page.evaluate((d) => {
       window.dispatchEvent(new CustomEvent('wxt:store-update', { detail: d }));
     }, detail);
-    await page.waitForFunction(() => {
-      try {
-        return document.querySelector('[data-testid]') !== null;
-      } catch {
-        return true;
-      }
-    }, { timeout: 5000 }).catch(() => {});
+    await page
+      .waitForFunction(
+        () => {
+          try {
+            return document.querySelector('[data-testid]') !== null;
+          } catch {
+            return true;
+          }
+        },
+        { timeout: 5000 },
+      )
+      .catch(() => {});
   }
 
   test('unpaired popup (PairingPanel) has zero critical/serious violations', async () => {
@@ -146,9 +154,7 @@ test.describe('Accessibility', () => {
       .withRules(['color-contrast'])
       .analyze();
 
-    const contrastViolations = results.violations.filter(
-      (v) => v.id === 'color-contrast',
-    );
+    const contrastViolations = results.violations.filter((v) => v.id === 'color-contrast');
     expect(contrastViolations).toHaveLength(0);
   });
 });

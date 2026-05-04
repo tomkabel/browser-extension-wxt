@@ -17,7 +17,12 @@ export class BackpressureQueue {
   private draining = false;
   private drainGeneration = 0;
 
-  constructor(highWaterMark = 64 * 1024, drainThreshold = 32 * 1024, drainTimeout = 100, rttEstimator?: RttEstimator) {
+  constructor(
+    highWaterMark = 64 * 1024,
+    drainThreshold = 32 * 1024,
+    drainTimeout = 100,
+    rttEstimator?: RttEstimator,
+  ) {
     this.HIGH_WATER_MARK = highWaterMark;
     this.DRAIN_THRESHOLD = drainThreshold;
     this.DRAIN_TIMEOUT = drainTimeout;
@@ -44,7 +49,12 @@ export class BackpressureQueue {
       });
     }
 
-    dc.send(payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.byteLength) as ArrayBuffer);
+    dc.send(
+      payload.buffer.slice(
+        payload.byteOffset,
+        payload.byteOffset + payload.byteLength,
+      ) as ArrayBuffer,
+    );
   }
 
   getQueueLength(): number {
@@ -86,10 +96,21 @@ export class BackpressureQueue {
           const item = this.queue.shift()!;
           this.pendingBytes -= item.payload.byteLength;
           try {
-            dc.send(item.payload.buffer.slice(item.payload.byteOffset, item.payload.byteOffset + item.payload.byteLength) as ArrayBuffer);
+            dc.send(
+              item.payload.buffer.slice(
+                item.payload.byteOffset,
+                item.payload.byteOffset + item.payload.byteLength,
+              ) as ArrayBuffer,
+            );
             item.resolve();
           } catch (err) {
-            item.reject(new ExtensionError(err instanceof Error ? err.message : String(err), 'SEND_FAILED', false));
+            item.reject(
+              new ExtensionError(
+                err instanceof Error ? err.message : String(err),
+                'SEND_FAILED',
+                false,
+              ),
+            );
           }
           continue;
         }
@@ -114,7 +135,6 @@ export class BackpressureQueue {
   private waitForDrainEvent(dc: RTCDataChannel): Promise<void> {
     return new Promise<void>((resolve) => {
       let settled = false;
-      let fallback: ReturnType<typeof setTimeout>;
 
       const finish = () => {
         if (settled) return;
@@ -125,7 +145,7 @@ export class BackpressureQueue {
       };
 
       dc.addEventListener('bufferedamountlow', finish);
-      fallback = setTimeout(finish, this.getDrainTimeout());
+      const fallback = setTimeout(finish, this.getDrainTimeout());
     });
   }
 }

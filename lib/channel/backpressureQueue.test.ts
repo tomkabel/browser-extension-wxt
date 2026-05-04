@@ -2,7 +2,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { BackpressureQueue } from '~/lib/channel/backpressureQueue';
 import { RttEstimator } from '~/lib/channel/rttEstimator';
 
-function createMockDc(bufferedAmount = 0, readyState: RTCDataChannelState = 'open'): RTCDataChannel {
+function createMockDc(
+  bufferedAmount = 0,
+  readyState: RTCDataChannelState = 'open',
+): RTCDataChannel {
   const listeners = new Map<string, Array<() => void>>();
   return {
     bufferedAmount,
@@ -155,9 +158,12 @@ describe('BackpressureQueue', () => {
   it('dc.send error in drain rejects the item promise and continues', async () => {
     const queue = new BackpressureQueue();
     const dc = createMockDc(100 * 1024);
-    dc.send = vi.fn().mockImplementationOnce(() => {
-      throw new Error('Send failed');
-    }).mockImplementationOnce(() => undefined);
+    dc.send = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        throw new Error('Send failed');
+      })
+      .mockImplementationOnce(() => undefined);
     const payload1 = new Uint8Array([1, 2, 3]);
     const payload2 = new Uint8Array([4, 5, 6]);
 

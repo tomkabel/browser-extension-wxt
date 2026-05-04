@@ -34,7 +34,9 @@ describe('UsbTransport', () => {
 
   describe('connect', () => {
     it('connects via offscreen relay on success', async () => {
-      (browser.runtime.sendMessage as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true });
+      (browser.runtime.sendMessage as ReturnType<typeof vi.fn>).mockResolvedValue({
+        success: true,
+      });
 
       await transport.connect();
 
@@ -57,20 +59,26 @@ describe('UsbTransport', () => {
 
   describe('send', () => {
     it('throws when not connected', async () => {
-      await expect(transport.send(new Uint8Array([1, 2, 3]))).rejects.toThrow('USB transport not connected');
+      await expect(transport.send(new Uint8Array([1, 2, 3]))).rejects.toThrow(
+        'USB transport not connected',
+      );
     });
   });
 
   describe('checkAvailability', () => {
     it('returns false when relay is unreachable', async () => {
-      (browser.runtime.sendMessage as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('unreachable'));
+      (browser.runtime.sendMessage as ReturnType<typeof vi.fn>).mockRejectedValue(
+        new Error('unreachable'),
+      );
 
       const available = await transport.checkAvailability();
       expect(available).toBe(false);
     });
 
     it('returns true when relay responds', async () => {
-      (browser.runtime.sendMessage as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true });
+      (browser.runtime.sendMessage as ReturnType<typeof vi.fn>).mockResolvedValue({
+        success: true,
+      });
 
       const available = await transport.checkAvailability();
       expect(available).toBe(true);
@@ -79,7 +87,9 @@ describe('UsbTransport', () => {
 
   describe('disconnect', () => {
     it('cleans up state on disconnect', async () => {
-      (browser.runtime.sendMessage as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true });
+      (browser.runtime.sendMessage as ReturnType<typeof vi.fn>).mockResolvedValue({
+        success: true,
+      });
 
       await transport.disconnect();
       expect(transport.isAvailable()).toBe(false);

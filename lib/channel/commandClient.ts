@@ -237,9 +237,13 @@ export function createCommandClient(
           }
         }, rto);
 
-        signal.addEventListener('abort', () => {
-          clearTimeout(timer);
-        }, { once: true });
+        signal.addEventListener(
+          'abort',
+          () => {
+            clearTimeout(timer);
+          },
+          { once: true },
+        );
       }
 
       attemptSend();
@@ -311,9 +315,7 @@ export function createCommandClient(
     ]);
     return {
       lastSequence:
-        typeof seqStored[STORAGE_KEY_SEQUENCE] === 'number'
-          ? seqStored[STORAGE_KEY_SEQUENCE]
-          : 0,
+        typeof seqStored[STORAGE_KEY_SEQUENCE] === 'number' ? seqStored[STORAGE_KEY_SEQUENCE] : 0,
       messageCount:
         typeof countStored[STORAGE_KEY_MSG_COUNT] === 'number'
           ? countStored[STORAGE_KEY_MSG_COUNT]

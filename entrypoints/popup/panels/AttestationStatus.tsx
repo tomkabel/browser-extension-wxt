@@ -13,7 +13,10 @@ export function AttestationStatus() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const response = await browser.runtime.sendMessage({ type: 'get-attestation-status', payload: {} });
+      const response = await browser.runtime.sendMessage({
+        type: 'get-attestation-status',
+        payload: {},
+      });
       if (response.success) {
         const status = response.data?.status as AttestationStatusType | undefined;
         if (status) {
@@ -97,7 +100,11 @@ export function AttestationStatus() {
         <p className="mt-1 opacity-80">No server attestation header received.</p>
       )}
       {refreshResult && (
-        <p className={`mt-1 ${refreshSuccess === true ? 'text-green-700' : 'text-red-700'}`} role="status" aria-live="polite">
+        <p
+          className={`mt-1 ${refreshSuccess === true ? 'text-green-700' : 'text-red-700'}`}
+          role="status"
+          aria-live="polite"
+        >
           {refreshResult}
         </p>
       )}

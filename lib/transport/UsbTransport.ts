@@ -1,6 +1,5 @@
 import { browser } from 'wxt/browser';
 import { log } from '~/lib/errors';
-import { TRANSPORT_CONFIG } from './config';
 import type { Transport, TransportType } from './types';
 
 const GOOGLE_VENDOR_ID = 0x18d1;
@@ -84,13 +83,13 @@ export class UsbTransport implements Transport {
       throw new Error('USB transport not connected');
     }
 
-      if (this.device) {
-        const endpoint = this.findOutputEndpoint();
-        if (endpoint) {
-          await this.device.transferOut(endpoint.endpointNumber, payload as unknown as BufferSource);
-          return;
-        }
+    if (this.device) {
+      const endpoint = this.findOutputEndpoint();
+      if (endpoint) {
+        await this.device.transferOut(endpoint.endpointNumber, payload as unknown as BufferSource);
+        return;
       }
+    }
 
     await browser.runtime.sendMessage({
       type: 'webrtc-send',

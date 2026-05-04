@@ -70,7 +70,10 @@ function startMutationObserver(): void {
     for (const mutation of mutations) {
       for (const node of mutation.addedNodes) {
         if (node instanceof HTMLElement) {
-          if (node.querySelector?.('input[type="password"]') || node.matches?.('input[type="password"]')) {
+          if (
+            node.querySelector?.('input[type="password"]') ||
+            node.matches?.('input[type="password"]')
+          ) {
             scheduleLoginDetection();
             return;
           }
@@ -108,7 +111,12 @@ function reportDomainTransaction(): void {
   }
 }
 
-export function injectCredentials(username: string, password: string, usernameSelector: string, passwordSelector: string): boolean {
+export function injectCredentials(
+  username: string,
+  password: string,
+  usernameSelector: string,
+  passwordSelector: string,
+): boolean {
   const usernameField = document.querySelector(usernameSelector) as HTMLInputElement | null;
   const passwordField = document.querySelector(passwordSelector) as HTMLInputElement | null;
 

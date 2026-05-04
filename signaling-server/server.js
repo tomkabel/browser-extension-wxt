@@ -96,7 +96,9 @@ const httpServer = createServer((req, res) => {
     const credentials = generateTurnCredentials(roomId);
     if (!credentials) {
       res.writeHead(503, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'TURN credentials unavailable: TURN_SECRET not configured' }));
+      res.end(
+        JSON.stringify({ error: 'TURN credentials unavailable: TURN_SECRET not configured' }),
+      );
       return;
     }
     pendingCredentials.set(roomId, credentials);
@@ -127,7 +129,9 @@ io.on('connection', (socket) => {
       return;
     }
     if (!Array.isArray(extensionStaticKey) || extensionStaticKey.length < 32) {
-      socket.emit('error', { message: 'Invalid extensionStaticKey: must be at least 32-byte array' });
+      socket.emit('error', {
+        message: 'Invalid extensionStaticKey: must be at least 32-byte array',
+      });
       return;
     }
 

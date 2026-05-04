@@ -36,11 +36,7 @@ export async function computeCommitment(
   return toBase64Url(new Uint8Array(hash));
 }
 
-export function buildPairingUrl(
-  sasCode: string,
-  nonce?: Uint8Array,
-  commitment?: string,
-): string {
+export function buildPairingUrl(sasCode: string, nonce?: Uint8Array, commitment?: string): string {
   let url = `${PAIRING_SCHEME}://${sasCode}`;
   if (nonce && commitment) {
     url += `?nonce=${toBase64Url(nonce)}&commitment=${commitment}`;
@@ -175,11 +171,7 @@ export function encodePairingPayload(
 }
 
 function compressSdp(sdp: string): string {
-  return btoa(
-    new TextEncoder()
-      .encode(sdp)
-      .reduce((acc, b) => acc + String.fromCharCode(b), ''),
-  );
+  return btoa(new TextEncoder().encode(sdp).reduce((acc, b) => acc + String.fromCharCode(b), ''));
 }
 
 // First 8 fields only; drops generation, ufrag, network-id (QR code size budget)

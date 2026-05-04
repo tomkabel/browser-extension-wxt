@@ -1,9 +1,6 @@
 import type { Detector, TransactionResult } from './detector';
 import { createLhvDetector } from './detectors/lhvDetector';
-import {
-  findDeclarativeDetector,
-  detectWithDeclarativeSelectors,
-} from './remoteRegistry';
+import { findDeclarativeDetector, detectWithDeclarativeSelectors } from './remoteRegistry';
 
 let detectors: Detector[] | null = null;
 
@@ -113,10 +110,9 @@ function trySemanticDetection(): TransactionResult | null {
       /(?:saaja|recipient|beneficiary|to\s*account)[^]*?(?:\n|$)/i,
     );
     if (recipientLabel) {
-      const cleaned = recipientLabel[0]!.replace(
-        /(?:saaja|recipient|beneficiary|to\s*account)[:\s]*/i,
-        '',
-      ).trim();
+      const cleaned = recipientLabel[0]!
+        .replace(/(?:saaja|recipient|beneficiary|to\s*account)[:\s]*/i, '')
+        .trim();
       if (cleaned.length > 0 && cleaned.length < 100) {
         result.recipient = cleaned;
       }
