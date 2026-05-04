@@ -86,7 +86,12 @@ export type MessageType =
   | 'get-attestation-status'
   | 'refresh-rp-keys'
   | 'deliver-attested-code'
-  | 'scrape-control-code';
+  | 'scrape-control-code'
+  | 'passkey-credential-created'
+  | 'passkey-credential-error'
+  | 'begin-challenge-assertion'
+  | 'assertion-complete'
+  | 'get-cached-credential-id';
 
 export interface ExtensionMessage<T = unknown> {
   type: MessageType;
@@ -115,6 +120,8 @@ export type TransactionState = 'idle' | 'verifying' | 'confirmed' | 'rejected';
 export interface TransactionData {
   amount: string | null;
   recipient: string | null;
+  origin?: string | null;
+  controlCode?: string | null;
 }
 
 export interface PairingPayload {

@@ -42,7 +42,7 @@ export function TransactionPanel() {
     setError(null);
   }, [setTransactionState]);
 
-  const hasData = transactionData.amount || transactionData.recipient;
+  const hasData = transactionData.amount != null || transactionData.recipient != null;
 
   if (transactionState === 'confirmed') {
     return (
@@ -123,6 +123,7 @@ export function TransactionPanel() {
         <div className="text-center py-3">
           <div className="animate-spin h-6 w-6 border-3 border-blue-500 border-t-transparent rounded-full mx-auto mb-2" />
           <p className="text-sm text-gray-500">Waiting for phone verification...</p>
+          <p className="text-xs text-gray-400 mt-1">Challenge-Bound WebAuthn assertion in progress</p>
         </div>
       )}
     </div>

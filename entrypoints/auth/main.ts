@@ -1,8 +1,7 @@
-export {};
+import { bufferToBase64 } from '~/lib/asyncUtils';
 
 const EXTENSION_ID = chrome.runtime.id;
 const RELYING_PARTY_ID = EXTENSION_ID;
-const CREDENTIAL_STORAGE_KEY = 'mfa:credential';
 
 const statusEl = document.getElementById('status')!;
 const logEl = document.getElementById('log')!;
@@ -11,7 +10,6 @@ const btnAuthenticate = document.getElementById('btn-authenticate') as HTMLButto
 
 let existingCredential: { id: string; rawId: string } | null = null;
 
-// Rate limiting for auth page attempts
 const AUTH_ATTEMPT_WINDOW_MS = 60_000;
 const AUTH_ATTEMPT_MAX = 3;
 const attemptTimestamps: number[] = [];
@@ -48,24 +46,21 @@ function base64ToBuffer(base64: string): ArrayBuffer {
   return bytes.buffer;
 }
 
-function bufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]!);
-  }
-  return btoa(binary);
-}
-
 function setButtonsEnabled(enabled: boolean): void {
   btnRegister.disabled = !enabled;
   btnAuthenticate.disabled = !enabled;
 }
 
+function getPublicKeyFromResponse(response: AuthenticatorAttestationResponse): ArrayBuffer | null {
+  if (typeof response.getPublicKey !== 'function') return null;
+  const pk = response.getPublicKey();
+  return pk ?? null;
+}
+
 async function loadExistingCredential(): Promise<boolean> {
   try {
-    const result = await chrome.storage.local.get(CREDENTIAL_STORAGE_KEY);
-    const stored = result[CREDENTIAL_STORAGE_KEY];
+    const result = await chrome.storage.local.get('mfa:credential');
+    const stored = result['mfa:credential'];
     if (stored && typeof stored.id === 'string' && typeof stored.rawId === 'string') {
       existingCredential = { id: stored.id, rawId: stored.rawId };
       status('Credential found. Ready to authenticate.');
@@ -75,7 +70,6 @@ async function loadExistingCredential(): Promise<boolean> {
       return true;
     }
   } catch {
-    // credential not found
   }
   existingCredential = null;
   status('No credential registered. Register a new credential to continue.');
@@ -134,7 +128,7 @@ async function handleRegister(): Promise<void> {
       rawId: bufferToBase64(credential.rawId),
     };
 
-    await chrome.storage.local.set({ [CREDENTIAL_STORAGE_KEY]: stored });
+    await chrome.storage.local.set({ 'mfa:credential': stored });
 
     existingCredential = { id: stored.id, rawId: stored.rawId };
     status('Credential registered successfully. You can now authenticate.');
@@ -257,9 +251,8 @@ async function handlePrfCreate(saltBase64: string): Promise<void> {
       throw new Error('Credential creation cancelled');
     }
 
-    const prfEnabled =
-      'prf' in (credential as { prf?: unknown }) &&
-      (credential as { prf?: { enabled?: boolean } }).prf?.enabled === true;
+    const extResults = (credential.getClientExtensionResults?.() ?? {}) as { prf?: { enabled?: boolean } };
+    const prfEnabled = extResults.prf?.enabled === true;
 
     const relayResult = await chrome.runtime.sendMessage({
       type: 'prf-credential-created',
@@ -287,9 +280,229 @@ async function handlePrfCreate(saltBase64: string): Promise<void> {
 btnRegister.addEventListener('click', handleRegister);
 btnAuthenticate.addEventListener('click', handleAuthenticate);
 
+async function handlePasskeyCreate(): Promise<void> {
+  status('Creating passkey for SmartID Vault...');
+  log('Passkey creation mode...');
+
+  try {
+    const userId = new Uint8Array(16);
+    crypto.getRandomValues(userId);
+
+    const challenge = new Uint8Array(32);
+    crypto.getRandomValues(challenge);
+
+    const prfSalt = new Uint8Array(32);
+    crypto.getRandomValues(prfSalt);
+
+    const credential = (await navigator.credentials.create({
+      publicKey: {
+        challenge,
+        rp: { id: RELYING_PARTY_ID, name: 'SmartID Vault' },
+        user: {
+          id: userId,
+          name: 'smartid2-vault-user',
+          displayName: 'SmartID Vault',
+        },
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+        authenticatorSelection: {
+          authenticatorAttachment: 'platform',
+          userVerification: 'required',
+          residentKey: 'required',
+        },
+        timeout: 60000,
+        extensions: {
+          prf: { eval: { first: prfSalt } },
+        } as AuthenticationExtensionsClientInputs,
+      },
+    })) as PublicKeyCredential | null;
+
+    if (!credential) {
+      status('Passkey creation cancelled');
+      log('Passkey creation returned null');
+      await reportPasskeyError('Passkey creation cancelled');
+      window.close();
+      return;
+    }
+
+    const response = credential.response as AuthenticatorAttestationResponse;
+    const rawKey = getPublicKeyFromResponse(response);
+    const publicKeyBytes = rawKey ? Array.from(new Uint8Array(rawKey)) : [];
+
+    if (publicKeyBytes.length === 0) {
+      status('Passkey creation failed: missing attestation public key');
+      log('ERROR: Attestation response has no public key');
+      await reportPasskeyError('Missing attestation public key');
+      window.close();
+      return;
+    }
+
+    const extResults = (credential.getClientExtensionResults?.() ?? {}) as { prf?: { enabled?: boolean } };
+    const prfEnabled = extResults.prf?.enabled === true;
+
+    const relayResult = await chrome.runtime.sendMessage({
+      type: 'passkey-credential-created',
+      payload: {
+        credentialId: bufferToBase64(credential.rawId),
+        publicKeyBytes,
+        prfEnabled,
+        prfSalt: Array.from(prfSalt),
+      },
+    });
+
+    if (relayResult?.success) {
+      status('Passkey created and verified. Vault is paired.');
+      log('Passkey credential provisioned successfully.');
+    } else {
+      status('Passkey created but relay failed.');
+      log(`ERROR: ${relayResult?.error ?? 'Relay failed'}`);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    status('Passkey creation failed');
+    log(`ERROR: ${message}`);
+    await reportPasskeyError(message);
+  }
+
+  window.close();
+}
+
+async function reportPasskeyError(error: string): Promise<void> {
+  try {
+    await chrome.runtime.sendMessage({
+      type: 'passkey-credential-error',
+      payload: { error },
+    });
+  } catch {
+  }
+}
+
+async function handleChallengeAssert(): Promise<void> {
+  status('Preparing challenge-bound assertion...');
+  log('Challenge assertion mode...');
+
+  try {
+    const stored = await chrome.storage.session.get('pending:assertion');
+    const pending = stored['pending:assertion'] as {
+      derivedChallenge: number[];
+      tlvComponents: number[];
+      sessionNonce: number[];
+      origin: string;
+      controlCode: string;
+      rpId: string;
+    } | undefined;
+
+    if (!pending) {
+      status('No pending assertion found');
+      log('ERROR: No pending assertion context in session storage');
+      window.close();
+      return;
+    }
+
+    status('Reading cached passkey...');
+    const cachedResult = await chrome.runtime.sendMessage({ type: 'get-cached-credential-id', payload: {} }) as
+      { success: boolean; data?: { credentialId?: string; rawId?: number[] } };
+
+    const rawId = cachedResult?.data?.rawId;
+    const challenge = new Uint8Array(pending.derivedChallenge);
+
+    const publicKey: PublicKeyCredentialRequestOptions = {
+      challenge,
+      rpId: pending.rpId,
+      userVerification: 'required',
+      timeout: 60000,
+    };
+
+    if (rawId && rawId.length > 0) {
+      publicKey.allowCredentials = [
+        {
+          id: new Uint8Array(rawId).buffer,
+          type: 'public-key',
+        },
+      ];
+    }
+
+    status('Waiting for biometric verification...');
+    log('Prompting for fingerprint/Face ID...');
+
+    const assertion = (await navigator.credentials.get({
+      publicKey,
+    })) as PublicKeyCredential | null;
+
+    if (!assertion) {
+      status('Biometric verification cancelled');
+      log('Assertion was cancelled by user');
+
+      await chrome.runtime.sendMessage({
+        type: 'assertion-complete',
+        payload: {
+          status: 'cancelled',
+        },
+      });
+
+      window.close();
+      return;
+    }
+
+    const response = assertion.response as AuthenticatorAssertionResponse;
+
+    status('Assertion captured. Sending to vault...');
+    log('Assertion data captured, transmitting to background...');
+
+    const relayResult = await chrome.runtime.sendMessage({
+      type: 'assertion-complete',
+      payload: {
+        status: 'verified',
+        credentialId: bufferToBase64(assertion.rawId),
+        tlvComponents: pending.tlvComponents,
+        sessionNonce: pending.sessionNonce,
+        origin: pending.origin,
+        controlCode: pending.controlCode,
+        authenticatorData: Array.from(new Uint8Array(response.authenticatorData)),
+        signature: Array.from(new Uint8Array(response.signature)),
+        clientDataJSON: Array.from(new Uint8Array(response.clientDataJSON)),
+        rawId: Array.from(new Uint8Array(assertion.rawId)),
+      },
+    });
+
+    if (relayResult?.success) {
+      status('Transaction verified via Challenge-Bound WebAuthn');
+      log('Assertion transmitted to Android Vault successfully');
+    } else {
+      status('Verification relay failed');
+      log(`ERROR: ${relayResult?.error ?? 'Relay failed'}`);
+
+      await chrome.runtime.sendMessage({
+        type: 'assertion-complete',
+        payload: { status: 'error', error: relayResult?.error ?? 'Transmission failed' },
+      });
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    status(`Assertion failed: ${message}`);
+    log(`ERROR: ${message}`);
+
+    await chrome.runtime.sendMessage({
+      type: 'assertion-complete',
+      payload: { status: 'error', error: message },
+    }).catch(() => {});
+  }
+
+  window.close();
+}
+
 async function init(): Promise<void> {
   const params = new URLSearchParams(window.location.search);
   const mode = params.get('mode');
+
+  if (mode === 'challenge-assert') {
+    await handleChallengeAssert();
+    return;
+  }
+
+  if (mode === 'passkey-create') {
+    await handlePasskeyCreate();
+    return;
+  }
 
   if (mode === 'prf-create') {
     const saltB64 = params.get('salt');
