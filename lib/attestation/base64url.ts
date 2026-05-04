@@ -25,6 +25,14 @@ export function sortedJsonStringify(obj: Record<string, unknown>): string {
   const keys = Object.keys(obj).sort();
   const parts = keys.map((key) => {
     const val = obj[key];
+    if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
+      return `${JSON.stringify(key)}:${sortedJsonStringify(val as Record<string, unknown>)}`;
+    }
+    if (Array.isArray(val)) {
+      return `${JSON.stringify(key)}:${JSON.stringify(val.map((v) =>
+        v !== null && typeof v === 'object' ? JSON.parse(sortedJsonStringify(v as Record<string, unknown>)) : v,
+      ))}`;
+    }
     return `${JSON.stringify(key)}:${JSON.stringify(val)}`;
   });
   return `{${parts.join(',')}}`;
