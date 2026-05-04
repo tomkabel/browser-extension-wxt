@@ -115,7 +115,6 @@ export function createCommandClient(
           pendingTimeouts.delete(response.sequence);
         }
       }
-      return;
     }
 
     const entry = pending.get(response.sequence);
@@ -263,6 +262,11 @@ export function createCommandClient(
   async function sendPing(): Promise<ControlResponse> {
     if (pendingPingSeq !== null) {
       return Promise.reject(new Error('A ping command is already in-flight'));
+    }
+    for (const entry of pending.values()) {
+      if (entry.command.command === CommandType.Ping) {
+        return Promise.reject(new Error('A ping command is already in-flight'));
+      }
     }
     return sendCommand(CommandType.Ping, { ts: performance.now() });
   }

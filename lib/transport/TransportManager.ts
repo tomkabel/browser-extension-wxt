@@ -29,9 +29,7 @@ export class TransportManager {
 
     this.usbTransport.onDisconnect(() => {
       if (this.activeTransport?.type === 'usb') {
-        this.switchTransport('webrtc', 'USB disconnected').catch(() => {
-          // fallback failed — no active transport
-        });
+        this.switchTransport('webrtc', 'USB disconnected').catch(() => {});
       }
     });
 
@@ -61,7 +59,6 @@ export class TransportManager {
       }
 
       this.startUsbPolling();
-      this.startHostAvailabilityCheck();
     } finally {
       this.connecting = false;
     }
@@ -105,10 +102,6 @@ export class TransportManager {
       clearInterval(this.usbPollTimer);
       this.usbPollTimer = null;
     }
-    if (this.hostCheckTimer) {
-      clearInterval(this.hostCheckTimer);
-      this.hostCheckTimer = null;
-    }
 
     if (this.activeTransport) {
       await this.activeTransport.disconnect();
@@ -125,9 +118,8 @@ export class TransportManager {
     if (target === 'usb' && this.usbAvailable) {
       try {
         await this.usbTransport.connect();
-        if (current && current.type === 'webrtc') {
-          // Flush pending data while WebRTC is still the active transport
-          await current.send(new Uint8Array(0));
+        if (current && current.type !== 'usb') {
+          await current.disconnect();
         }
         this.activeTransport = this.usbTransport;
         if (this.messageCallback) {
@@ -136,7 +128,7 @@ export class TransportManager {
         this.emitChange(previous, 'usb', reason);
         return;
       } catch {
-        // USB connect or flush failed, stay on current
+        // USB connect failed, stay on current
       }
     }
 
@@ -188,12 +180,6 @@ export class TransportManager {
         }
       }
     }, TRANSPORT_CONFIG.usbPollIntervalMs);
-  }
-
-  private startHostAvailabilityCheck(): void {
-    this.hostCheckTimer = setInterval(async () => {
-      this.usbAvailable = await this.checkUsbAvailability();
-    }, TRANSPORT_CONFIG.hostAvailabilityCheckIntervalMs);
   }
 
   private emitChange(

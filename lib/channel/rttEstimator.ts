@@ -1,27 +1,23 @@
-const ALPHA = 0.125;
-const BETA = 0.25;
-const INITIAL_RTO = 1000;
-const MIN_RTO = 1000;
-const MAX_RTO = 60000;
-const CLOCK_GRANULARITY = 100;
-
 export class RttEstimator {
-  private srtt = 0;
-  private rttvar = 0;
-  private rto = INITIAL_RTO;
+  private rttAvg = 200;
+  private rttVar = 100;
+  private readonly alpha = 0.125;
+  private readonly beta = 0.25;
 
   updateRtt(sample: number): void {
-    if (this.srtt === 0) {
-      this.srtt = sample;
-      this.rttvar = sample / 2;
-    } else {
-      this.rttvar = (1 - BETA) * this.rttvar + BETA * Math.abs(this.srtt - sample);
-      this.srtt = (1 - ALPHA) * this.srtt + ALPHA * sample;
-    }
-    this.rto = Math.min(MAX_RTO, Math.max(MIN_RTO, this.srtt + Math.max(CLOCK_GRANULARITY, 4 * this.rttvar)));
+    this.rttVar = (1 - this.beta) * this.rttVar + this.beta * Math.abs(sample - this.rttAvg);
+    this.rttAvg = (1 - this.alpha) * this.rttAvg + this.alpha * sample;
   }
 
   getRto(): number {
-    return this.rto;
+    return Math.max(this.rttAvg + 4 * this.rttVar, 1000);
+  }
+
+  getRttAvg(): number {
+    return this.rttAvg;
+  }
+
+  getRttVar(): number {
+    return this.rttVar;
   }
 }

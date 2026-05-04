@@ -25,15 +25,28 @@ import { isReplayAssertion, recordAssertion } from '~/lib/replayProtection';
 import { TransportManager } from '~/lib/transport';
 import { getAttestationStatus, refreshRpKeys, getDomCode } from './attestationManager';
 import { deriveChallenge, generateSessionNonce, serializeChallengeComponents } from '~/lib/webauthn';
+import { startWebRequestCapture, getTlsBindingComponents, buildChallengeProof } from '~/lib/tlsBinding';
+import { isDomainApproved } from './contentScriptManager';
 import type {
   AttestedCodePayload,
   CredentialRequestPayload,
   LoginFormDetection,
   MessageType,
   TransactionData,
+  UnapprovedLoginForm,
 } from '~/types';
 import { sortedJsonStringify } from '~/lib/attestation';
 import { log } from '~/lib/errors';
+import {
+  addPendingDomain,
+  removePendingDomain,
+  getPendingDomains,
+  getApprovedDomains,
+  isDomainDeniedInSession,
+  addDeniedDomain,
+  registerForDomain,
+} from './contentScriptManager';
+import { transmitCredentialToAndroid } from './pairingCoordinator';
 
 type MessageHandler = (
   payload: unknown,
@@ -134,12 +147,17 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
   },
 
   'start-pairing': async (payload) => {
-    const { sasCode } = payload as { sasCode: string; pairingUrl: string };
+    const { sasCode, nonce } = payload as {
+      sasCode: string;
+      pairingUrl: string;
+      nonce?: number[];
+    };
     if (!sasCode || !/^\d{6}$/.test(sasCode)) {
       return { success: false, error: 'Invalid SAS code' };
     }
 
-    const result = await startPairing(sasCode);
+    const nonceBytes = nonce ? new Uint8Array(nonce) : undefined;
+    const result = await startPairing(sasCode, nonceBytes);
     return result;
   },
 
@@ -257,11 +275,11 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
     }
 
     const assertionTuple = `${credentialId}:${clientDataJSON}:${authenticatorData}`;
-    if (isReplayAssertion(assertionTuple)) {
+    if (await isReplayAssertion(assertionTuple)) {
       return { success: false, error: 'Assertion replay detected' };
     }
 
-    recordAssertion(assertionTuple);
+    await recordAssertion(assertionTuple);
 
     const session = await activateSession();
     return {
@@ -432,7 +450,6 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
 
     log.info('Passkey credential created:', credentialId.slice(0, 16) + '...');
 
-    const { transmitCredentialToAndroid } = await import('./pairingCoordinator');
     const transmitted = await transmitCredentialToAndroid(
       credentialId,
       new Uint8Array(publicKeyBytes),
@@ -481,12 +498,24 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
     return { success: true, data: { credentialId, rawId: Array.from(rawId) } };
   },
 
+  'check-domain-approved': async (payload) => {
+    const { domain } = payload as { domain: string };
+    const approved = await isDomainApproved(domain);
+    return { success: true, data: { approved } };
+  },
+
   'begin-challenge-assertion': async (payload, sender) => {
     const { amount, recipient } = payload as { amount?: string | null; recipient?: string | null };
+
+    if (authInProgress) {
+      return { success: false, error: 'Authentication already in progress' };
+    }
 
     if (!sender.tab?.id) {
       return { success: false, error: 'No sender tab' };
     }
+
+    const tabId = sender.tab.id;
 
     try {
       const origin = new URL(sender.tab.url ?? '').origin;
@@ -494,28 +523,50 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
         return { success: false, error: 'Cannot determine origin from sender tab' };
       }
 
-      const controlCode = await getDomCode(sender.tab.id);
+      const controlCode = await getDomCode(tabId);
 
-      const proofBytes = new Uint8Array(64);
-      crypto.getRandomValues(proofBytes);
+      let pageContent = '';
+      try {
+        const domResponse = await withTimeout(
+          browser.tabs.sendMessage(tabId, { type: 'scrape-control-code', payload: {} }),
+          2000,
+          'Page content request timed out',
+        );
+        if (domResponse?.success && domResponse?.data?.text) {
+          pageContent = domResponse.data.text as string;
+        }
+      } catch {
+        pageContent = sender.tab?.url ?? '';
+      }
+      const tlsBindingHash = await buildChallengeProof(
+        tabId,
+        controlCode ?? '0000',
+        pageContent,
+      );
 
       const sessionNonce = generateSessionNonce();
 
       const tlvComponents = serializeChallengeComponents({
-        zkTlsProof: proofBytes,
+        tlsBinding: tlsBindingHash,
         origin,
         controlCode: controlCode ?? '0000',
         sessionNonce,
       });
 
       const derivedChallenge = await deriveChallenge({
-        zkTlsProof: proofBytes,
+        tlsBinding: tlsBindingHash,
         origin,
         controlCode: controlCode ?? '0000',
         sessionNonce,
       });
 
       const rpId = chrome.runtime.id;
+
+      const tlsBinding = await getTlsBindingComponents(
+        tabId,
+        controlCode ?? '0000',
+        pageContent,
+      );
 
       await browser.storage.session.set({
         'pending:assertion': {
@@ -525,11 +576,18 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
           origin,
           controlCode: controlCode ?? '0000',
           rpId,
+          secFetchSite: tlsBinding.secFetchSite,
+          contentHash: tlsBinding.contentHash,
           transactionData: { amount: amount ?? null, recipient: recipient ?? null },
         },
       });
 
-      const authUrl = chrome.runtime.getURL('auth.html?mode=challenge-assert');
+      authInProgress = true;
+
+      const challengeB64 = btoa(String.fromCharCode(...Array.from(derivedChallenge)));
+      const authUrl = chrome.runtime.getURL(
+        `auth.html?mode=challenge-assert&challenge=${encodeURIComponent(challengeB64)}`,
+      );
       await browser.tabs.create({ url: authUrl, active: false });
 
       return {
@@ -542,7 +600,60 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
     }
   },
 
+  'login-form-detected-unapproved': async (payload, sender) => {
+    const detection = payload as UnapprovedLoginForm;
+    if (!detection.domain || !detection.usernameSelector || !detection.passwordSelector) {
+      return { success: false, error: 'Incomplete login form detection data' };
+    }
+
+    const tabId = sender.tab?.id;
+    if (!tabId) return { success: false, error: 'No sender tab' };
+
+    if (await isDomainDeniedInSession(detection.domain)) {
+      return { success: true, data: { ignored: true } };
+    }
+
+    await addPendingDomain(detection.domain, detection.url, tabId, {
+      usernameSelector: detection.usernameSelector,
+      passwordSelector: detection.passwordSelector,
+    });
+
+    log.info('[BG] Unapproved domain detected:', detection.domain);
+    return { success: true, data: { pending: true } };
+  },
+
+  'domain-approved': async (payload) => {
+    const { domain } = payload as { domain: string };
+    try {
+      await registerForDomain(domain);
+      await removePendingDomain(domain);
+      log.info('[BG] Domain approved:', domain);
+      return { success: true, data: { domain } };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : 'Registration failed' };
+    }
+  },
+
+  'domain-denied': async (payload) => {
+    const { domain } = payload as { domain: string };
+    await addDeniedDomain(domain);
+    await removePendingDomain(domain);
+    log.info('[BG] Domain denied:', domain);
+    return { success: true, data: { domain } };
+  },
+
+  'get-approved-domains': async () => {
+    const domains = await getApprovedDomains();
+    return { success: true, data: { domains } };
+  },
+
+  'get-pending-domains': async () => {
+    const pending = await getPendingDomains();
+    return { success: true, data: { pending } };
+  },
+
   'assertion-complete': async (payload) => {
+    authInProgress = false;
     const data = payload as {
       status: string;
       error?: string;
@@ -654,7 +765,14 @@ async function getTabIdFromSender(sender: chrome.runtime.MessageSender): Promise
   return tabs[0]?.id ?? null;
 }
 
+let tlsBindingCaptured = false;
+
 export function registerMessageHandlers(): void {
+  if (!tlsBindingCaptured) {
+    startWebRequestCapture();
+    tlsBindingCaptured = true;
+  }
+
   browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (!isValidMessage(message)) {
       sendResponse({ success: false, error: 'Invalid message format' });
@@ -697,6 +815,12 @@ const credentialRateLimiter = createDomainRateLimiter(CREDENTIAL_RATE_LIMIT_MS);
 
 let transportManager: TransportManager | null = null;
 let transportManagerInitPromise: Promise<void> | null = null;
+
+let authInProgress = false;
+
+export function clearAuthInProgress(): void {
+  authInProgress = false;
+}
 
 export function getTransportManager(): TransportManager | null {
   return transportManager;

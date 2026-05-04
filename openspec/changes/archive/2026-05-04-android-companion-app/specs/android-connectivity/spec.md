@@ -1,4 +1,4 @@
-## MODIFIED Requirements — Android companion app aligned with ARCHITECTURE.md
+## MODIFIED Requirements
 
 ### Requirement: WebRTC client
 
@@ -24,13 +24,13 @@ The Android app SHALL receive FCM high-priority pushes and start a transient for
 
 ### Requirement: Emoji SAS confirmation
 
-The Android app SHALL display a 3-emoji SAS after completing the Noise XX handshake, with Match/No Match buttons for user confirmation.
+The Android app SHALL display a 4-emoji SAS after completing the Noise XX handshake, with Match/No Match buttons for user confirmation.
 
 #### Scenario: Emoji SAS displayed after handshake
 
 - **WHEN** the Noise XX handshake completes on the phone
-- **AND** the phone derives the 3-emoji SAS from `SHA-256(encryption_key)`
-- **THEN** the phone SHALL display the 3 emoji prominently with "Do these match your laptop screen?"
+- **AND** the phone derives the 4-emoji SAS from `SHA-256(chainingKey || qrCodePublicKey)` — binding the SAS to the QR public key prevents MITM at QR printing stage
+- **THEN** the phone SHALL display the 4 emoji prominently with "Do these match your laptop screen?"
 - **AND** provide "Yes, Match" and "No, Cancel" buttons
 - **AND** only complete pairing after user confirms "Yes, Match"
 
@@ -39,6 +39,14 @@ The Android app SHALL display a 3-emoji SAS after completing the Noise XX handsh
 - **WHEN** TalkBack or another screen reader is active
 - **THEN** the phone SHALL display the 6-digit numeric SAS instead of emoji
 - **AND** provide a "Confirm" button
+
+#### Scenario: Increased SAS entropy from 4 emoji
+
+- **GIVEN** the emoji palette contains 64 emoji (6 bits each)
+- **WHEN** 4 emoji are selected (24 bits total)
+- **THEN** the SAS space SHALL be 64⁴ = 16.7 million combinations
+- **AND** the 6-digit numeric fallback SHALL be 1 million combinations
+- **AND** both SHALL be verified in constant-time human verification
 
 ### Requirement: Context-aware biometric prompt
 

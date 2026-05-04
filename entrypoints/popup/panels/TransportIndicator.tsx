@@ -52,9 +52,9 @@ export function TransportIndicator() {
 
   if (!activeTransport) {
     return (
-      <div className="flex items-center gap-2 text-xs">
-        <span className="text-gray-400">⚪</span>
-        <span className="text-gray-400">No transport</span>
+      <div className="flex items-center gap-2 text-xs" role="status" aria-live="polite">
+        <span className="text-gray-500" aria-hidden="true">⚪</span>
+        <span className="text-gray-500">No transport</span>
       </div>
     );
   }
@@ -64,11 +64,11 @@ export function TransportIndicator() {
   const statusColor = activeTransport === 'usb' ? 'text-green-600' : 'text-blue-600';
 
   return (
-    <div className="flex items-center gap-2 text-xs">
-      <span className={statusColor}>{icon}</span>
+    <div className="flex items-center gap-2 text-xs" role="status" aria-live="polite">
+      <span className={statusColor} aria-hidden="true">{icon}</span>
       <span className={statusColor}>{label}</span>
       {usbAvailable && activeTransport !== 'usb' && (
-        <span className="text-gray-400">(USB available)</span>
+        <span className="text-gray-500">(USB available)</span>
       )}
 
       {showToast && transportChangeMessage && (

@@ -1,2 +1,16 @@
 schema: spec-driven
 created: 2026-05-04
+updated: 2026-05-04
+specs:
+  - specs/dynamic-script-registration
+  - specs/domain-permission-prompt
+  - specs/approved-domains-manager
+  - specs/persistent-domain-whitelist
+context: |
+  Universal content script injection with matches: ["*://*/*"] replacing hardcoded
+  domain list. Self-destruct pattern: script unregisters after 3s if no login form
+  detected. Dynamic registration via chrome.scripting.registerContentScripts for
+  approved domains with domain permission prompt on first visit. Approved domains
+  persisted in chrome.storage.sync and re-registered on extension restart. Settings
+  panel lists approved domains with Revoke. The scripting permission is added to
+  the manifest.

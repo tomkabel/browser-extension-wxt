@@ -1,11 +1,3 @@
-/**
- * Content script entry with proper WXT lifecycle cleanup.
- * - Uses ctx.addEventListener for automatic cleanup on wxt:locationchange
- * - Uses ctx.onInvalidated for context invalidation handling
- * - Rate limiter cleanup interval is properly managed
- * - Uses document_idle for timing (not document_end)
- */
-
 import { defineContentScript } from 'wxt/utils/define-content-script';
 import { browser } from 'wxt/browser';
 import { registerContentHandlers } from './contentMessageBus';
@@ -17,17 +9,51 @@ import { log } from '~/lib/errors';
 let loginFormEmitted = false;
 let loginDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 let observer: MutationObserver | null = null;
+let contentInitDone = false;
+let checkedApproval = false;
+let isApprovedDomain = false;
+
+function getRegistrableDomain(hostname: string): string {
+  const parts = hostname.split('.');
+  if (parts.length >= 2) {
+    return parts.slice(-2).join('.');
+  }
+  return hostname;
+}
+
+async function checkDynamicApproval(domain: string): Promise<boolean> {
+  try {
+    const response = await browser.runtime.sendMessage({
+      type: 'check-domain-approved',
+      payload: { domain },
+    });
+    const data = response as { success?: boolean; data?: { approved?: boolean } } | undefined;
+    return !!data?.data?.approved;
+  } catch {
+    return false;
+  }
+}
 
 function emitLoginForm(): void {
   const detection = detectLoginForm();
   if (!detection) return;
 
-  log.info('[Content] Login form detected:', detection.domain);
   loginFormEmitted = true;
+
+  if (isApprovedDomain) {
+    log.info('[Content] Login form detected on approved domain:', detection.domain);
+    browser.runtime
+      .sendMessage({
+        type: 'detect-login-form',
+        payload: detection,
+      })
+      .catch(() => {});
+    return;
+  }
 
   browser.runtime
     .sendMessage({
-      type: 'detect-login-form',
+      type: 'login-form-detected-unapproved',
       payload: detection,
     })
     .catch(() => {});
@@ -70,6 +96,18 @@ function stopMutationObserver(): void {
   }
 }
 
+function reportDomainTransaction(): void {
+  const result = detectTransaction();
+  if (result.success && result.transaction) {
+    browser.runtime
+      .sendMessage({
+        type: 'detect-transaction',
+        payload: result.transaction,
+      })
+      .catch(() => {});
+  }
+}
+
 export function injectCredentials(username: string, password: string, usernameSelector: string, passwordSelector: string): boolean {
   const usernameField = document.querySelector(usernameSelector) as HTMLInputElement | null;
   const passwordField = document.querySelector(passwordSelector) as HTMLInputElement | null;
@@ -94,41 +132,58 @@ export function injectCredentials(username: string, password: string, usernameSe
 }
 
 export default defineContentScript({
-  matches: ['*://*.lhv.ee/*', '*://*.youtube.tomabel.ee/*'],
+  matches: ['*://*/*'],
   runAt: 'document_idle',
+  excludeMatches: [
+    '*://*.google.com/*',
+    '*://*.github.com/*',
+    '*://*.stackoverflow.com/*',
+    '*://*.youtube.com/*',
+    '*://localhost:*/*',
+    '*://127.0.0.1:*/*',
+  ],
 
   main(ctx) {
-    log.info('[Content] Script starting');
+    if (contentInitDone) return;
+    contentInitDone = true;
+
+    const hostname = window.location.hostname;
+    const registrableDomain = getRegistrableDomain(hostname);
 
     registerContentHandlers();
     startCleanupInterval();
-
-    function reportTransaction() {
-      const result = detectTransaction();
-      if (result.success && result.transaction) {
-        browser.runtime
-          .sendMessage({
-            type: 'detect-transaction',
-            payload: result.transaction,
-          })
-          .catch(() => {});
-      }
-    }
 
     browser.runtime
       .sendMessage({
         type: 'tab-domain-changed',
         payload: {
-          domain: window.location.hostname,
+          domain: hostname,
           url: window.location.href,
         },
       })
       .catch(() => {});
 
-    setTimeout(reportTransaction, 1000);
+    checkDynamicApproval(registrableDomain).then((approved) => {
+      checkedApproval = true;
+      isApprovedDomain = approved;
+      log.info('[Content] Domain:', hostname, approved ? '(approved)' : '(unapproved)');
+
+      if (approved) {
+        setTimeout(reportDomainTransaction, 1000);
+      }
+
+      setTimeout(() => {
+        if (!loginFormEmitted) emitLoginForm();
+      }, 1500);
+    });
+
     setTimeout(() => {
+      if (!checkedApproval) {
+        isApprovedDomain = false;
+        checkedApproval = true;
+      }
       if (!loginFormEmitted) emitLoginForm();
-    }, 1500);
+    }, 2000);
 
     startMutationObserver();
 
@@ -149,10 +204,15 @@ export default defineContentScript({
             },
           })
           .catch(() => {});
-        setTimeout(reportTransaction, 1000);
-        setTimeout(() => {
-          if (!loginFormEmitted) emitLoginForm();
-        }, 1500);
+        checkDynamicApproval(getRegistrableDomain(url.hostname)).then((approved) => {
+          isApprovedDomain = approved;
+          if (approved) {
+            setTimeout(reportDomainTransaction, 1000);
+          }
+          setTimeout(() => {
+            if (!loginFormEmitted) emitLoginForm();
+          }, 1500);
+        });
       }
     });
 
@@ -160,6 +220,7 @@ export default defineContentScript({
       log.info('[Content] Context invalidated, cleaning up');
       stopCleanupInterval();
       stopMutationObserver();
+      contentInitDone = false;
     });
 
     log.info('[Content] Script initialized');

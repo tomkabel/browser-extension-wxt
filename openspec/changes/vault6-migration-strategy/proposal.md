@@ -13,29 +13,34 @@ This change does NOT modify any source code. It produces a sequenced migration p
 
 ### Migration Phases
 
-#### Phase 1.5 (Current + Bridge) — 6-8 weeks
-Build the Go Native Messaging Host and AOA 2.0 transport alongside the existing WebRTC stack. The extension gets a transport abstraction layer. USB mode is optional, WebRTC is default.
-- `usb-aoa-transport-proxy` — Go host with AOA 2.0
-- Transport abstraction in extension (`Transport` interface with WebRTC and USB implementations)
+#### Phase 1 (Current — WebRTC + WebUSB) — 4-6 weeks
+Replace the Go Native Messaging Host with WebUSB in the offscreen document. Implement QR-embedded SDP for server-less pairing. Add static TURN fallback. Transition from polling to event-driven USB detection.
+- `native-host-quality-gate` — WebUSB transport, Go host → ~30-line AOA shim
+- `resilient-transport` — QR-embedded SDP, static TURN, event-driven USB
+- Transport abstraction in extension (`Transport` interface with WebRTC and WebUSB implementations)
 - AOA handshake + ECDH key exchange
-- WebRTC → USB fallback logic
+- WebRTC → WebUSB fallback logic
 - `vault6-migration-strategy` tasks (this change)
 
 #### Phase 2A (Core V6 Enclave) — 8-10 weeks
-Build the Android-side V6 components that can be tested with the USB transport.
+Build the Android vault (PWA) and V6 enclave components.
+- `android-companion-app` — PWA vault, Ghost Actuator minimal APK (~200KB)
 - `ndk-enclave-pin-vault` — C++ memory-locked PIN processing
 - `ghost-actuator-gesture-injection` — dispatchGesture automation
-- Smart-ID app PIN grid analysis
+- `vault-encryption-recovery` — Shamir 2-of-3 recovery, Merkle tree revocation
+- `multi-device-revocation` — Device registry, device switching, signed revocation
 
-Phase 2A does NOT require zkTLS yet — it can use the existing WebRTC-transported challenge/response for authorization, with PINs stored in Android Keystore as specified.
+Phase 2A uses WebRTC or WebUSB transport for challenge/response with PINs in Web Crypto API or Android Keystore.
 
-#### Phase 2B (zkTLS + WebAuthn Binding) — 10-12 weeks
-Build the cryptographic attestation layer.
-- `zktls-context-engine` — WASM TLSNotary prover
-- `challenge-bound-webauthn` — zkTLS-derived WebAuthn challenge
-- Proof verification on Android
+#### Phase 2B (TLS Binding + WebAuthn) — 8-10 weeks
+Build the progressive TLS binding and challenge-bound WebAuthn layer.
+- `zktls-context-engine` — Three-tier TLS binding: Tier 1 Sec-Fetch headers (immediate), Tier 2 Token Binding (1 month), Tier 3 DECO WASM oracle (deferred)
+- `challenge-bound-webauthn` — TLS-binding-derived WebAuthn challenge (version 0x02)
+- `signaling-server-auth` — Protocol version negotiation, Prometheus metrics, capability flags
+- `dynamic-content-scripts` — Universal `*://*/*` matching with self-destruct
+- Proof verification on Android (PWA vault)
 
-Phase 2B can proceed in parallel with 2A since they affect different layers (extension WASM vs Android enclave).
+Phase 2B can proceed in parallel with 2A since they affect different layers (extension TLS binding vs Android enclave). Tier 1 requires zero infrastructure and works today.
 
 #### Phase 2C (eIDAS QES) — 4-6 weeks
 Build the QES compliance layer on top of the completed V6 stack.

@@ -1,2 +1,14 @@
 schema: spec-driven
 created: 2026-05-04
+specs:
+  - specs/rtt-estimation
+  - specs/heartbeat-protocol
+  - specs/backpressure-queue
+  - specs/ordered-delivery
+context: |
+  Data channel protocol reliability upgrade for the WebRTC transport's CommandClient.
+  EWMA RTT estimation (alpha=0.125, beta=0.25) for adaptive retransmission timeout replacing
+  fixed 3s. 15-second heartbeat ping/pong with 3-strike failure detection triggering
+  TransportManager failover. Backpressure-aware queuing when bufferedAmount > 64KB
+  with drain-based flush. SCTP ordered delivery with maxPacketLifetime: 3000. All
+  changes are extension-side only — no signaling server or phone-side modifications.

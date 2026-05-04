@@ -1,20 +1,3 @@
-/**
- * PII (Personally Identifiable Information) Filter.
- *
- * CRITICAL: This MUST run before ANY data is stored or transmitted.
- * - Redacts credit card numbers (Visa, MC, AMEX, with or without separators)
- * - Redacts SSNs, email addresses, phone numbers
- * - Redacts password-like patterns and credential leaks
- *
- * IMPORTANT: This filter operates on innerText (plain text, not HTML).
- *   It CANNOT filter password <input> values because innerText never
- *   contains input value attributes. DOM scraping on banking pages is
- *   inherently insecure — sensitive fields MUST be excluded at the
- *   extraction layer, not redacted post-hoc.
- *
- * This is a best-effort approach — we err on the side of caution.
- */
-
 export interface FilteredContent {
   text: string;
   hasRedactions: boolean;
@@ -30,10 +13,13 @@ export enum PiiCategory {
   Phone = 'phone',
   Name = 'name',
   Address = 'address',
+  EstonianIdCode = 'estonian_id_code',
+  Iban = 'iban',
+  Passport = 'passport',
 }
 
 const PATTERNS: Record<PiiCategory, RegExp> = {
-  [PiiCategory.Password]: /\b(password|passwd|pwd|secret)\s*[:=]\s*\S+/gi,
+  [PiiCategory.Password]: /\b(password|passwd|pwd|pin[12]?)\s*[:=]\s*\S{1,64}\b/gi,
 
   [PiiCategory.CreditCard]: /\b(?:\d[\s-]?){13,19}\b/g,
 
@@ -47,6 +33,14 @@ const PATTERNS: Record<PiiCategory, RegExp> = {
 
   [PiiCategory.Address]:
     /\b\d+\s+[A-Z][a-z]+\s+(Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Drive|Dr|Lane|Ln|Way|Court|Ct)\b/gi,
+
+  [PiiCategory.EstonianIdCode]: /\b\d{11}\b(?:\s*[A-Z]{2})?/g,
+
+  [PiiCategory.Iban]:
+    /\b[A-Z]{2}\d{2}\s?(?:\d{4}\s?){2,7}\d{1,4}\b/g,
+
+  [PiiCategory.Passport]:
+    /\b([A-Z]{1,2}\d{6,8}|[A-Z]{2}\d{7}|EE\d{8})\b/g,
 };
 
 const REDACTED = '[REDACTED]';
@@ -73,16 +67,36 @@ function isValidCardNumber(digits: string): boolean {
   return luhnCheck(cleaned);
 }
 
+function isValidEstonianIdCode(digits: string): boolean {
+  const cleaned = digits.replace(/\D/g, '');
+  if (cleaned.length !== 11) return false;
+  const multipliers1 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 1];
+  const multipliers2 = [3, 4, 5, 6, 7, 8, 9, 1, 2, 3];
+  let sum = 0;
+  for (let i = 0; i < 10; i++) {
+    sum += parseInt(cleaned[i]!, 10) * multipliers1[i]!;
+  }
+  let check = sum % 11;
+  if (check === 10) {
+    sum = 0;
+    for (let i = 0; i < 10; i++) {
+      sum += parseInt(cleaned[i]!, 10) * multipliers2[i]!;
+    }
+    check = sum % 11;
+    if (check === 10) check = 0;
+  }
+  return check === parseInt(cleaned[10]!, 10);
+}
+
 export function filterPii(text: string): FilteredContent {
   let result = text;
   const categories = new Set<PiiCategory>();
   let redactionCount = 0;
 
-  for (const [category, pattern] of Object.entries(PATTERNS)) {
+  for (const [categoryName, pattern] of Object.entries(PATTERNS)) {
+    const category = categoryName as PiiCategory;
     const matches = result.match(pattern);
-    if (!matches || matches.length === 0) {
-      continue;
-    }
+    if (!matches || matches.length === 0) continue;
 
     if (category === PiiCategory.CreditCard) {
       let count = 0;
@@ -97,8 +111,21 @@ export function filterPii(text: string): FilteredContent {
         categories.add(PiiCategory.CreditCard);
         redactionCount += count;
       }
+    } else if (category === PiiCategory.EstonianIdCode) {
+      let count = 0;
+      result = result.replace(pattern, (match) => {
+        if (isValidEstonianIdCode(match)) {
+          count++;
+          return REDACTED;
+        }
+        return match;
+      });
+      if (count > 0) {
+        categories.add(PiiCategory.EstonianIdCode);
+        redactionCount += count;
+      }
     } else {
-      categories.add(category as PiiCategory);
+      categories.add(category);
       redactionCount += matches.length;
       result = result.replace(pattern, REDACTED);
     }
@@ -131,7 +158,6 @@ export function filterDomContent(
   options: Partial<DomFilterOptions> = {},
 ): { text: string; filtered: boolean } {
   const opts = { ...DEFAULT_OPTIONS, ...options };
-
   const piiResult = filterPii(text);
 
   let finalText = piiResult.text;
