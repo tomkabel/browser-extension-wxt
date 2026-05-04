@@ -45,7 +45,6 @@ test.describe('Accessibility', () => {
 
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .disableRules(['color-contrast'])
       .analyze();
 
     const criticalSerious = results.violations.filter(
@@ -70,7 +69,6 @@ test.describe('Accessibility', () => {
 
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .disableRules(['color-contrast'])
       .analyze();
 
     const criticalSerious = results.violations.filter(
@@ -97,7 +95,6 @@ test.describe('Accessibility', () => {
 
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .disableRules(['color-contrast'])
       .analyze();
 
     const criticalSerious = results.violations.filter(
@@ -123,7 +120,6 @@ test.describe('Accessibility', () => {
 
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .disableRules(['color-contrast'])
       .analyze();
 
     const criticalSerious = results.violations.filter(
