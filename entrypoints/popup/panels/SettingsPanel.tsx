@@ -6,6 +6,7 @@ export function SettingsPanel() {
   const approvedDomains = useAppStore((s) => s.approvedDomains);
   const setApprovedDomains = useAppStore((s) => s.setApprovedDomains);
   const setShowSettings = useAppStore((s) => s.setShowSettings);
+  const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -24,6 +25,8 @@ export function SettingsPanel() {
         }
       } catch {
         if (mounted) setLoadError('Failed to connect to background worker');
+      } finally {
+        if (mounted) setLoading(false);
       }
     }
     load();
@@ -57,10 +60,14 @@ export function SettingsPanel() {
       </div>
 
       {loadError && (
-        <p className="text-xs text-red-500 text-center py-2" role="alert">{loadError}</p>
+        <p className="text-xs text-red-500 text-center py-2" role="alert">
+          {loadError}
+        </p>
       )}
 
-      {approvedDomains.length === 0 ? (
+      {loading ? (
+        <p className="text-sm text-gray-400 text-center py-4">Loading...</p>
+      ) : approvedDomains.length === 0 ? (
         <p className="text-sm text-gray-400 text-center py-4">No approved domains</p>
       ) : (
         <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -75,13 +82,13 @@ export function SettingsPanel() {
                   {new Date(d.registeredAt).toLocaleDateString()}
                 </p>
               </div>
-            <button
-              type="button"
-              className="ml-2 px-2.5 py-1 bg-red-100 text-red-700 text-xs rounded-md font-medium hover:bg-red-200 transition-colors shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
-              onClick={() => handleRevoke(d.domain)}
-            >
-              Revoke
-            </button>
+              <button
+                type="button"
+                className="ml-2 px-2.5 py-1 bg-red-100 text-red-700 text-xs rounded-md font-medium hover:bg-red-200 transition-colors shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+                onClick={() => handleRevoke(d.domain)}
+              >
+                Revoke
+              </button>
             </div>
           ))}
         </div>

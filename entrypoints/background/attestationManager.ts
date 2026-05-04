@@ -1,5 +1,13 @@
 import { browser } from 'wxt/browser';
-import { KeyStore, WHITELISTED_RP_DOMAINS, createVerifier, refreshKeyManifest, logAuditEvent, AuditEventType, isDemoMode } from '~/lib/attestation';
+import {
+  KeyStore,
+  WHITELISTED_RP_DOMAINS,
+  createVerifier,
+  refreshKeyManifest,
+  logAuditEvent,
+  AuditEventType,
+  isDemoMode,
+} from '~/lib/attestation';
 import type { AttestationStatus } from '~/lib/attestation';
 import { log } from '~/lib/errors';
 import { withTimeout } from '~/lib/asyncUtils';
@@ -13,7 +21,9 @@ let attestationMutex: Promise<void> = Promise.resolve();
 
 async function withAttestationLock<T>(fn: () => Promise<T>): Promise<T> {
   let release: () => void;
-  const next = new Promise<void>((resolve) => { release = resolve; });
+  const next = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   await attestationMutex;
   attestationMutex = next;
   try {
@@ -45,9 +55,10 @@ export async function initializeAttestation(): Promise<void> {
     log.info('Running in DEMO mode — attestation headers will be generated locally for testing');
     console.warn(
       '⚠️  DEMO MODE: Attestation private keys are embedded in the extension source. ' +
-      'Do NOT distribute this build — demo keys can be extracted to forge attestation headers.',
+        'Do NOT distribute this build — demo keys can be extracted to forge attestation headers.',
     );
-    const { createDemoAttestationHeader: createHeader } = await import('~/lib/attestation/demoAttestation');
+    const { createDemoAttestationHeader: createHeader } =
+      await import('~/lib/attestation/demoAttestation');
     setupDemoAttestationInjector(createHeader);
   } else {
     refreshKeyManifest(keyStore).then((result) => {
@@ -61,7 +72,12 @@ export async function initializeAttestation(): Promise<void> {
 }
 
 async function setupDemoAttestationInjector(
-  createHeader: (code: string, domain: string, keyId: string, sessionId?: string) => Promise<string | null>,
+  createHeader: (
+    code: string,
+    domain: string,
+    keyId: string,
+    sessionId?: string,
+  ) => Promise<string | null>,
 ): Promise<void> {
   (browser.webRequest.onBeforeRequest as any).addListener(
     (details: any) => injectDemoAttestation(details, createHeader),
@@ -73,7 +89,12 @@ async function setupDemoAttestationInjector(
 
 function injectDemoAttestation(
   details: any,
-  createHeader: (code: string, domain: string, keyId: string, sessionId?: string) => Promise<string | null>,
+  createHeader: (
+    code: string,
+    domain: string,
+    keyId: string,
+    sessionId?: string,
+  ) => Promise<string | null>,
 ): void {
   if (!verifier) return;
 
@@ -92,7 +113,9 @@ function injectDemoAttestation(
   const testKeyId = `${prefix}-2026q1`;
   const sessionId = `demo-${Date.now()}`;
 
-  const domCodePromise = details.tabId ? getDomCode(details.tabId) : Promise.resolve(null as string | null);
+  const domCodePromise = details.tabId
+    ? getDomCode(details.tabId)
+    : Promise.resolve(null as string | null);
 
   withAttestationLock(async () => {
     const domCode = await domCodePromise;
@@ -103,7 +126,12 @@ function injectDemoAttestation(
 }
 
 async function processDemoAttestation(
-  createHeader: (code: string, domain: string, keyId: string, sessionId?: string) => Promise<string | null>,
+  createHeader: (
+    code: string,
+    domain: string,
+    keyId: string,
+    sessionId?: string,
+  ) => Promise<string | null>,
   code: string,
   domain: string,
   keyId: string,
@@ -143,9 +171,7 @@ function setupWebRequestListener(): void {
   log.info(`WebRequest listener registered for ${WHITELISTED_RP_DOMAINS.length} RP domains`);
 }
 
-function handleHeadersReceived(
-  details: any,
-): void {
+function handleHeadersReceived(details: any): void {
   if (!details.responseHeaders || !verifier || !keyStore) return;
 
   const attestationHeader = details.responseHeaders.find(
@@ -198,10 +224,10 @@ async function processAttestationHeader(
 
 export async function getDomCode(tabId: number): Promise<string | null> {
   try {
-    const response = await withTimeout(
+    const response = (await withTimeout(
       browser.tabs.sendMessage(tabId, { type: 'scrape-control-code', payload: {} }),
       1000,
-    ) as { success: boolean; controlCode?: string | null; error?: string };
+    )) as { success: boolean; controlCode?: string | null; error?: string };
 
     if (response?.success && response.controlCode) {
       return response.controlCode;

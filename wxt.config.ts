@@ -9,13 +9,7 @@ const SIGNALING_URL = env.VITE_SIGNALING_URL || 'https://smartid2-signaling.fly.
 const SIGNALING_WS_URL = SIGNALING_URL.replace(/^https?/, (match) =>
   match === 'https' ? 'wss' : 'ws',
 );
-const CSP_CONNECT_SRC = [
-  "'self'",
-  SIGNALING_URL,
-  SIGNALING_WS_URL,
-]
-  .filter(Boolean)
-  .join(' ');
+const CSP_CONNECT_SRC = ["'self'", SIGNALING_URL, SIGNALING_WS_URL].filter(Boolean).join(' ');
 const CSP = `connect-src ${CSP_CONNECT_SRC}`;
 
 export default defineConfig({
@@ -36,7 +30,7 @@ export default defineConfig({
       default_popup: 'popup.html',
     },
 
-    host_permissions: ['*://*/*'],
+    host_permissions: ['http://*/*', 'https://*/*'],
 
     web_accessible_resources: [
       {
