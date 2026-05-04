@@ -92,8 +92,11 @@ function injectDemoAttestation(
   const testKeyId = `${prefix}-2026q1`;
   const sessionId = `demo-${Date.now()}`;
 
+  const domCodePromise = details.tabId ? getDomCode(details.tabId) : Promise.resolve(null as string | null);
+
   withAttestationLock(async () => {
-    await processDemoAttestation(createHeader, testCode, rpDomain, testKeyId, sessionId, details.tabId);
+    const domCode = await domCodePromise;
+    await processDemoAttestation(createHeader, testCode, rpDomain, testKeyId, sessionId, domCode);
   }).catch((err) => {
     log.warn('[Demo] Attestation processing failed:', err);
   });
@@ -105,7 +108,7 @@ async function processDemoAttestation(
   domain: string,
   keyId: string,
   sessionId: string,
-  tabId?: number,
+  domCode: string | null,
 ): Promise<void> {
   const header = await createHeader(code, domain, keyId, sessionId);
   if (!header) return;
@@ -121,7 +124,6 @@ async function processDemoAttestation(
     mode: 'demo',
   });
 
-  const domCode = tabId ? await getDomCode(tabId) : null;
   currentAttestationStatus = verifier.verifyControlCode(attestedCode, domCode);
   log.info(`[Demo] Attestation verified for ${domain}: code ${attestedCode.controlCode}`);
 }
@@ -156,8 +158,11 @@ function handleHeadersReceived(
 
   const tabId = details.tabId;
 
+  const domCodePromise = tabId ? getDomCode(tabId) : Promise.resolve(null as string | null);
+
   withAttestationLock(async () => {
-    await processAttestationHeader(attestationHeader!.value!, rpDomain, tabId);
+    const domCode = await domCodePromise;
+    await processAttestationHeader(attestationHeader!.value!, rpDomain, domCode);
   }).catch((err) => {
     log.warn('Header processing failed:', err);
   });
@@ -166,7 +171,7 @@ function handleHeadersReceived(
 async function processAttestationHeader(
   rawValue: string,
   rpDomain: string,
-  tabId?: number,
+  domCode: string | null,
 ): Promise<void> {
   if (!verifier) return;
 
@@ -184,7 +189,6 @@ async function processAttestationHeader(
     await logAuditEvent(AuditEventType.AttestationFailed, { rpDomain });
   }
 
-  const domCode = tabId ? await getDomCode(tabId) : null;
   currentAttestationStatus = verifier.verifyControlCode(attestedCode, domCode);
 
   if (attestedCode) {
@@ -196,7 +200,7 @@ async function getDomCode(tabId: number): Promise<string | null> {
   try {
     const response = await withTimeout(
       browser.tabs.sendMessage(tabId, { type: 'scrape-control-code', payload: {} }),
-      3000,
+      1000,
     ) as { success: boolean; controlCode?: string | null; error?: string };
 
     if (response?.success && response.controlCode) {
