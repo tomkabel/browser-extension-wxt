@@ -41,7 +41,7 @@ test.describe('Accessibility', () => {
     await page.waitForTimeout(1000);
   }
 
-  test('unpaired popup (PairingPanel) has zero critical/serious violations (8.1)', async ({ browser }) => {
+  test('unpaired popup (PairingPanel) has zero critical/serious violations (8.1)', async () => {
     const page = await context.newPage();
     await openPopup(page);
 
@@ -55,7 +55,7 @@ test.describe('Accessibility', () => {
     expect(criticalSerious).toHaveLength(0);
   });
 
-  test('auth panel has zero critical/serious violations (8.2)', async ({ browser }) => {
+  test('auth panel has zero critical/serious violations (8.2)', async () => {
     const page = await context.newPage();
     await openPopup(page);
 
@@ -79,7 +79,7 @@ test.describe('Accessibility', () => {
     expect(criticalSerious).toHaveLength(0);
   });
 
-  test('transaction panel has zero critical/serious violations (8.3)', async ({ browser }) => {
+  test('transaction panel has zero critical/serious violations (8.3)', async () => {
     const page = await context.newPage();
     await openPopup(page);
 
@@ -105,7 +105,7 @@ test.describe('Accessibility', () => {
     expect(criticalSerious).toHaveLength(0);
   });
 
-  test('credential panel states have zero critical/serious violations (8.4)', async ({ browser }) => {
+  test('credential panel states have zero critical/serious violations (8.4)', async () => {
     const page = await context.newPage();
     await openPopup(page);
 
@@ -130,7 +130,7 @@ test.describe('Accessibility', () => {
     expect(criticalSerious).toHaveLength(0);
   });
 
-  test('color contrast audit passes for all visible text (6.1, 6.2)', async ({ browser }) => {
+  test('color contrast audit passes for all visible text (6.1, 6.2)', async () => {
     const page = await context.newPage();
     await openPopup(page);
 
