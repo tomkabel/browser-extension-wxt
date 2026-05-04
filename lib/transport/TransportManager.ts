@@ -115,7 +115,7 @@ export class TransportManager {
     }
   }
 
-  private async switchTransport(
+  async switchTransport(
     target: TransportType,
     reason: string,
   ): Promise<void> {
