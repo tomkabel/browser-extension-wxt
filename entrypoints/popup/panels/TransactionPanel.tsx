@@ -42,7 +42,7 @@ export function TransactionPanel() {
     setError(null);
   }, [setTransactionState]);
 
-  const hasData = transactionData.amount || transactionData.recipient;
+  const hasData = transactionData.amount != null || transactionData.recipient != null;
 
   if (transactionState === 'confirmed') {
     return (

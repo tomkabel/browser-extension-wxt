@@ -328,6 +328,14 @@ async function handlePasskeyCreate(): Promise<void> {
     const rawKey = getPublicKeyFromResponse(response);
     const publicKeyBytes = rawKey ? Array.from(new Uint8Array(rawKey)) : [];
 
+    if (publicKeyBytes.length === 0) {
+      status('Passkey creation failed: missing attestation public key');
+      log('ERROR: Attestation response has no public key');
+      await reportPasskeyError('Missing attestation public key');
+      window.close();
+      return;
+    }
+
     const extResults = (credential.getClientExtensionResults?.() ?? {}) as { prf?: { enabled?: boolean } };
     const prfEnabled = extResults.prf?.enabled === true;
 
@@ -337,6 +345,7 @@ async function handlePasskeyCreate(): Promise<void> {
         credentialId: bufferToBase64(credential.rawId),
         publicKeyBytes,
         prfEnabled,
+        prfSalt: Array.from(prfSalt),
       },
     });
 

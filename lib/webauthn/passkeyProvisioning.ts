@@ -79,7 +79,10 @@ export async function createPasskeyCredential(
 
     const response = credential.response as AuthenticatorAttestationResponse;
     const rawKey = getPublicKeyFromResponse(response);
-    const publicKeyBytes = rawKey ? new Uint8Array(rawKey) : new Uint8Array(0);
+    if (!rawKey) {
+      return { success: false, error: 'Public key not available from attestation response' };
+    }
+    const publicKeyBytes = new Uint8Array(rawKey);
 
     const extResults = (credential.getClientExtensionResults?.() ?? {}) as PrfExtensionResult;
     const prfEnabled = extResults.prf?.enabled === true;

@@ -131,10 +131,9 @@ describe('passkeyProvisioning', () => {
 
     const result = await createPasskeyCredential('example.com', 'Test');
 
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.publicKeyBytes.length).toBe(0);
-      expect(result.prfEnabled).toBe(false);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error).toContain('Public key');
     }
   });
 });

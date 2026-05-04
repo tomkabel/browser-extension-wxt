@@ -1,4 +1,4 @@
-import { withTimeout, bufferToBase64, uint8ArrayToArrayBuffer } from '~/lib/asyncUtils';
+import { withTimeout, bufferToBase64 } from '~/lib/asyncUtils';
 
 const ASSERTION_TIMEOUT_MS = 60_000;
 const ASSERTION_WRAPPER_SLACK_MS = 10_000;
@@ -30,15 +30,15 @@ export interface AssertionRequestError {
 
 export type AssertionRequestOutcome = AssertionRequestResult | AssertionRequestError;
 
-function uint8ArrayToWebAuthnBuffer(uint8: Uint8Array): ArrayBuffer {
-  return uint8ArrayToArrayBuffer(uint8);
+function bufferSource(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
 
 export async function createAssertionRequest(
   options: AssertionRequestOptions,
 ): Promise<AssertionRequestOutcome> {
   const publicKey: PublicKeyCredentialRequestOptions = {
-    challenge: uint8ArrayToWebAuthnBuffer(options.challenge),
+    challenge: bufferSource(options.challenge),
     rpId: options.rpId,
     userVerification: 'required',
     timeout: ASSERTION_TIMEOUT_MS,
@@ -47,7 +47,7 @@ export async function createAssertionRequest(
   if (options.allowCredentialId) {
     publicKey.allowCredentials = [
       {
-        id: uint8ArrayToWebAuthnBuffer(options.allowCredentialId),
+        id: bufferSource(options.allowCredentialId),
         type: 'public-key',
       },
     ];

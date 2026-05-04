@@ -120,6 +120,8 @@ export type TransactionState = 'idle' | 'verifying' | 'confirmed' | 'rejected';
 export interface TransactionData {
   amount: string | null;
   recipient: string | null;
+  origin?: string | null;
+  controlCode?: string | null;
 }
 
 export interface PairingPayload {

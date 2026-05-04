@@ -119,7 +119,7 @@ export const useAppStore = create<AppStore>((set) => ({
   setSessionRemaining: (remaining) => set({ sessionRemaining: remaining }),
 
   transactionState: 'idle',
-  transactionData: { amount: null, recipient: null },
+  transactionData: { amount: null, recipient: null, origin: null, controlCode: null },
 
   setTransactionState: (state) => set({ transactionState: state }),
   setTransactionData: (data) => set({ transactionData: data }),

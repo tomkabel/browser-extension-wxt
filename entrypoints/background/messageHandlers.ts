@@ -17,7 +17,7 @@ import {
   setPrfSalt,
   setPrfAvailable,
 } from './sessionManager';
-import { confirmSasMatch, rejectSasMatch, getCommandClient } from './pairingCoordinator';
+import { confirmSasMatch, rejectSasMatch, getCommandClient, clearPendingRemoteKey, getPendingRemoteKey, fallbackToPrfOnly } from './pairingCoordinator';
 import { cachePrfCredentialId, getCachedPrfCredentialId } from '~/lib/crypto/fallbackAuth';
 import { withTimeout } from '~/lib/asyncUtils';
 import { createSlidingWindowLimiter, createDomainRateLimiter } from '~/lib/rateLimit/slidingWindow';
@@ -423,10 +423,11 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
   },
 
   'passkey-credential-created': async (payload) => {
-    const { credentialId, publicKeyBytes, prfEnabled } = payload as {
+    const { credentialId, publicKeyBytes, prfEnabled, prfSalt } = payload as {
       credentialId: string;
       publicKeyBytes: number[];
       prfEnabled: boolean;
+      prfSalt?: number[];
     };
 
     log.info('Passkey credential created:', credentialId.slice(0, 16) + '...');
@@ -438,24 +439,36 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
     );
 
     if (!transmitted) {
-      log.warn('Credential public key transmission failed, falling back to PRF-only');
+      log.warn('Credential public key transmission failed');
     }
 
     if (prfEnabled) {
       try {
         await cachePrfCredentialId(credentialId);
+        if (prfSalt) {
+          await setPrfSalt(new Uint8Array(prfSalt));
+        }
         log.info('PRF credential cached from passkey provisioning');
       } catch (err) {
         log.warn('Failed to cache PRF credential:', err);
       }
     }
 
+    clearPendingRemoteKey();
     return { success: transmitted, data: { credentialId, transmitted } };
   },
 
   'passkey-credential-error': async (payload) => {
     const { error } = payload as { error: string };
     log.warn('Passkey credential creation failed:', error);
+
+    const remotePk = getPendingRemoteKey();
+    if (remotePk) {
+      log.info('Attempting PRF-only fallback after passkey creation failure');
+      await fallbackToPrfOnly(remotePk);
+      clearPendingRemoteKey();
+    }
+
     return { success: false, error: 'Passkey creation failed, PRF-only fallback activated' };
   },
 
@@ -519,7 +532,10 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       const authUrl = chrome.runtime.getURL('auth.html?mode=challenge-assert');
       await browser.tabs.create({ url: authUrl, active: false });
 
-      return { success: true, data: { status: 'pending' } };
+      return {
+        success: true,
+        data: { status: 'pending', origin, controlCode: controlCode ?? '0000' },
+      };
     } catch (err) {
       log.error('Failed to begin challenge assertion:', err);
       return { success: false, error: err instanceof Error ? err.message : 'Assertion initiation failed' };

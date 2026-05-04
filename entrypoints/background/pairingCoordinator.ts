@@ -247,9 +247,8 @@ export async function confirmSasMatch(): Promise<boolean> {
       } catch (err) {
         log.warn('[Coordinator] Failed to open passkey creation page:', err);
         await fallbackToPrfOnly(pendingRemoteStaticPk);
+        pendingRemoteStaticPk = null;
       }
-
-      pendingRemoteStaticPk = null;
 
       return true;
     }
@@ -288,6 +287,16 @@ async function fallbackToPrfOnly(remoteStaticPk: Uint8Array): Promise<void> {
   }
 }
 
+export function clearPendingRemoteKey(): void {
+  pendingRemoteStaticPk = null;
+}
+
+export function getPendingRemoteKey(): Uint8Array | null {
+  return pendingRemoteStaticPk;
+}
+
+export { fallbackToPrfOnly };
+
 export async function transmitCredentialToAndroid(
   credentialId: string,
   publicKeyBytes: Uint8Array,
@@ -301,11 +310,12 @@ export async function transmitCredentialToAndroid(
       return false;
     }
 
+    const publicKeyB64 = btoa(String.fromCharCode(...Array.from(publicKeyBytes)));
     const message = new TextEncoder().encode(
       JSON.stringify({
         type: 'credential-provision',
         credentialId,
-        publicKeyBytes: Array.from(publicKeyBytes),
+        publicKeyBytes: publicKeyB64,
       }),
     );
 

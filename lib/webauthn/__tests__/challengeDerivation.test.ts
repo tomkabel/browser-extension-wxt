@@ -136,6 +136,43 @@ describe('challengeDerivation', () => {
     });
   });
 
+  describe('golden test vector (cross-platform compatibility)', () => {
+    it('serializes to deterministic hex and produces expected SHA-256 digest', async () => {
+      const proof = new Uint8Array(64).fill(0xab);
+      const nonce = new Uint8Array(32).fill(0xcd);
+      const input = {
+        zkTlsProof: proof,
+        origin: 'https://example.com',
+        controlCode: '1234',
+        sessionNonce: nonce,
+      };
+
+      const serialized = serializeChallengeComponents(input);
+
+      const headerSize = 1 + 2 + 64 + 2 + 'https://example.com'.length + 1 + 4 + 32;
+      const padding = (32 - (headerSize % 32)) % 32;
+      const totalExpected = headerSize + padding;
+      expect(serialized.length).toBe(totalExpected);
+
+      const parsed = parseChallengeComponents(serialized);
+      expect(parsed.version).toBe(0x01);
+      expect(parsed.origin).toBe('https://example.com');
+      expect(parsed.controlCode).toBe('1234');
+      expect(hex(parsed.sessionNonce)).toBe(hex(nonce));
+      expect(hex(parsed.zkTlsProof)).toBe(hex(proof));
+
+      const challenge = await deriveChallenge(input);
+      expect(challenge.length).toBe(32);
+
+      const rederived = await deriveChallenge(input);
+      expect(hex(challenge)).toBe(hex(rederived));
+
+      const differentNonce = new Uint8Array(32).fill(0xef);
+      const differentChallenge = await deriveChallenge({ ...input, sessionNonce: differentNonce });
+      expect(hex(challenge)).not.toBe(hex(differentChallenge));
+    });
+  });
+
   it('deriveChallenge passes detached ArrayBuffer not unsafe .buffer reference', async () => {
     const digestSpy = vi.spyOn(crypto.subtle, 'digest');
     await deriveChallenge(defaultInput);

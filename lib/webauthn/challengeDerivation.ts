@@ -87,8 +87,14 @@ export function parseChallengeComponents(serialized: Uint8Array): ChallengeCompo
 
   const version = serialized[offset];
   if (version === undefined) throw new Error('Truncated: missing version byte');
+  if (version !== VERSION) {
+    throw new Error(`Unsupported challenge version: ${version}`);
+  }
   offset += 1;
 
+  if (offset + 2 > serialized.length) {
+    throw new Error('Truncated: missing zkTLS proof length');
+  }
   const proofLength = (serialized[offset]! << 8) | serialized[offset + 1]!;
   offset += 2;
 
@@ -98,6 +104,9 @@ export function parseChallengeComponents(serialized: Uint8Array): ChallengeCompo
   const zkTlsProof = serialized.slice(offset, offset + proofLength);
   offset += proofLength;
 
+  if (offset + 2 > serialized.length) {
+    throw new Error('Truncated: missing origin length');
+  }
   const originLength = (serialized[offset]! << 8) | serialized[offset + 1]!;
   offset += 2;
 

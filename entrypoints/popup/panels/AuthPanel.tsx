@@ -80,7 +80,7 @@ export function AuthPanel() {
   }, [assertionStatus, setAssertionStatus, setAssertionError]);
 
   const handleAuthenticate = useCallback(async () => {
-    if (transactionData.amount || transactionData.recipient) {
+    if (transactionData.amount != null || transactionData.recipient != null) {
       setAssertionStatus('pending');
       setAssertionError(null);
 
@@ -94,7 +94,17 @@ export function AuthPanel() {
           },
         });
 
-        if (!response.success) {
+        if (response.success && response.data) {
+          const updateOrigin = response.data.origin as string | undefined;
+          const updateControlCode = response.data.controlCode as string | undefined;
+          if (updateOrigin || updateControlCode) {
+            useAppStore.getState().setTransactionData({
+              ...useAppStore.getState().transactionData,
+              origin: updateOrigin ?? null,
+              controlCode: updateControlCode ?? null,
+            });
+          }
+        } else {
           setAssertionStatus('error');
           setAssertionError(response.error ?? 'Failed to start assertion');
         }
@@ -157,7 +167,7 @@ export function AuthPanel() {
     }
   };
 
-  const hasTransactionContext = !!transactionData.amount || !!transactionData.recipient;
+  const hasTransactionContext = transactionData.amount != null || transactionData.recipient != null;
 
   if (checking) {
     return (
@@ -230,7 +240,7 @@ export function AuthPanel() {
       {hasTransactionContext && (
         <div className="mb-4 p-3 bg-gray-50 rounded-lg border space-y-2">
           <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Transaction Context</p>
-          {transactionData.recipient && (
+          {transactionData.recipient != null && (
             <div className="flex justify-between items-center">
               <span className="text-xs text-gray-500">Recipient</span>
               <span className="text-sm font-mono font-medium text-gray-800 truncate max-w-[180px]">
@@ -238,11 +248,27 @@ export function AuthPanel() {
               </span>
             </div>
           )}
-          {transactionData.amount && (
+          {transactionData.amount != null && (
             <div className="flex justify-between items-center">
               <span className="text-xs text-gray-500">Amount</span>
               <span className="text-sm font-mono font-bold text-gray-800">
                 {transactionData.amount}
+              </span>
+            </div>
+          )}
+          {transactionData.origin != null && (
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-gray-500">Origin</span>
+              <span className="text-sm font-mono text-gray-800 truncate max-w-[180px]">
+                {transactionData.origin}
+              </span>
+            </div>
+          )}
+          {transactionData.controlCode != null && (
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-gray-500">Control Code</span>
+              <span className="text-sm font-mono font-medium text-gray-800">
+                {transactionData.controlCode}
               </span>
             </div>
           )}
