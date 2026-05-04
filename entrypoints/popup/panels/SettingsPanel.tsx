@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { browser } from 'wxt/browser';
 import { useAppStore } from '~/lib/store';
 
@@ -6,16 +6,24 @@ export function SettingsPanel() {
   const approvedDomains = useAppStore((s) => s.approvedDomains);
   const setApprovedDomains = useAppStore((s) => s.setApprovedDomains);
   const setShowSettings = useAppStore((s) => s.setShowSettings);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
     async function load() {
-      const response = await browser.runtime.sendMessage({
-        type: 'get-approved-domains',
-        payload: null,
-      });
-      if (mounted && response.success) {
-        setApprovedDomains(response.data.domains);
+      try {
+        const response = await browser.runtime.sendMessage({
+          type: 'get-approved-domains',
+          payload: null,
+        });
+        if (!mounted) return;
+        if (response.success) {
+          setApprovedDomains(response.data.domains);
+        } else {
+          setLoadError(response.error ?? 'Failed to load domains');
+        }
+      } catch {
+        if (mounted) setLoadError('Failed to connect to background worker');
       }
     }
     load();
@@ -47,6 +55,10 @@ export function SettingsPanel() {
           Back
         </button>
       </div>
+
+      {loadError && (
+        <p className="text-xs text-red-500 text-center py-2" role="alert">{loadError}</p>
+      )}
 
       {approvedDomains.length === 0 ? (
         <p className="text-sm text-gray-400 text-center py-4">No approved domains</p>
