@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { CredentialState, PairingState, SessionState, TransactionData, TransactionState } from '~/types';
 import type { TransportType } from '~/lib/transport/types';
+import type { AttestationStatus } from '~/lib/attestation';
 
 export type TransportStatusType = TransportType | null;
 
@@ -70,6 +71,9 @@ export interface AppStore {
   setActiveTransport: (transport: TransportStatusType) => void;
   setUsbAvailable: (available: boolean) => void;
   setTransportChangeMessage: (message: string | null) => void;
+
+  attestation: AttestationStatus;
+  setAttestation: (status: AttestationStatus) => void;
 }
 
 export const useAppStore = create<AppStore>((set) => ({
@@ -131,4 +135,7 @@ export const useAppStore = create<AppStore>((set) => ({
   setActiveTransport: (transport) => set({ activeTransport: transport }),
   setUsbAvailable: (available) => set({ usbAvailable: available }),
   setTransportChangeMessage: (message) => set({ transportChangeMessage: message }),
+
+  attestation: { type: 'not_applicable' },
+  setAttestation: (status) => set({ attestation: status }),
 }));

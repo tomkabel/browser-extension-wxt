@@ -46,9 +46,21 @@ The replacement — `SmartID-Attestation` response header signed with ECDSA P-25
 
 PHASE 2 — Core V6 capability. This is the Layer 1 defense that mathematically eliminates RAT/DOM manipulation attacks. No longer blocked on TLSNotary licensing or WASM compilation feasibility. Can be implemented and tested independently; transport layer (usb-aoa-transport-proxy) needed only for Android-side verification.
 
+## Demo Mode
+
+Bank coordination to add the `SmartID-Attestation` header is NOT feasible during development. Instead, the extension supports a **demo mode** (activated by `import.meta.env.DEV` or `MODE=demo`) where:
+
+1. Real ECDSA P-256 key pairs are generated and bundled in `trusted-rp-keys.json`
+2. A `demoAttestation.ts` utility creates locally-signed headers using the private key via Web Crypto API
+3. The attestation manager auto-injects demo attestation headers for whitelisted domains in dev mode
+4. All crypto operations are identical to production — the same `crypto.subtle.verify()` code path is exercised
+5. End-to-end unit tests verify the entire pipeline: key generation → signing → parsing → verification → cross-reference
+
+This provides the same security guarantees for testing. In production, the private key is replaced with the bank's actual signing key, and the header source switches from local generation to server-signed headers.
+
 ## Dependencies
 
-- Requires: Banks add `SmartID-Attestation` response header to their Smart-ID login endpoints (trivial — one line of server configuration)
+- Requires: Banks add `SmartID-Attestation` response header to their Smart-ID login endpoints (trivial — one line of server configuration). For demo: self-signed headers via `demoAttestation.ts`
 - Blocking: `challenge-bound-webauthn` (needs the attested control code as challenge input)
 - Related: `usb-aoa-transport-proxy` (transport for proof delivery to Android)
 - Not blocked on: TLSNotary licensing, WASM compilation, Notary server deployment, SharedArrayBuffer availability

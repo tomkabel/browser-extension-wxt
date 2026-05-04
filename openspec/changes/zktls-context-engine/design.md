@@ -183,6 +183,20 @@ Trust chain:
 
 This bootstrap model avoids any external trust anchor (no CA, no DNSSEC) and ensures the extension only accepts manifest updates signed by a key it already trusts.
 
+## Demo Mode Implementation
+
+Since bank coordination is not feasible for development, the attestation system includes a demo mode:
+
+- **Activation**: `import.meta.env.DEV` (development) or `MODE=demo` environment
+- **Key material**: 4 unique ECDSA P-256 key pairs (one per whitelisted domain) plus 4 rotation keys, generated and bundled in `trusted-rp-keys.json`
+- **Private key storage**: JWK format embedded in `demoAttestation.ts` for Web Crypto API compatibility
+- **Header injection**: In demo mode, `attestationManager.ts` activates an `onBeforeRequest` listener that generates test `SmartID-Attestation` headers for URLs containing matching domains
+- **Verification path**: The same `crypto.subtle.verify()` code used in production verifies the demo-signed headers — no code path differences
+- **Test coverage**: 6 end-to-end crypto tests validate the full pipeline (key import → sign → parse → verify → cross-reference → timestamp validation)
+- **Production switch**: Replace `trusted-rp-keys.json` with bank-provided public keys, disable demo injector, enable manifest refresh from update server
+
+The demo mode exercises every code path used in production except the manifest refresh/download path (which requires the update server).
+
 ## Risks / Trade-offs
 
 - [Risk] Bank must add a response header — This requires coordination with each of the 4 whitelisted RPs. However, the implementation cost per bank is trivial: add one response header on the Smart-ID login endpoint. This is substantially simpler than deploying a Notary server or modifying TLS behavior.

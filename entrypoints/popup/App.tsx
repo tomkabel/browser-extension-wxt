@@ -2,6 +2,7 @@ import { Suspense, lazy } from 'react';
 import './style.css';
 import { useAppStore } from '~/lib/store';
 import { ErrorBoundary } from './ErrorBoundary';
+import { AttestationStatus } from './panels/AttestationStatus';
 
 const PairingPanel = lazy(() =>
   import('./panels/PairingPanel').then((m) => ({ default: m.PairingPanel })),
@@ -83,6 +84,9 @@ function PopupApp() {
       <div className="space-y-3">
         <ErrorBoundary>
           <PanelRouter />
+        </ErrorBoundary>
+        <ErrorBoundary>
+          <AttestationStatus />
         </ErrorBoundary>
       </div>
 

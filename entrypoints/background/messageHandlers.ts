@@ -23,6 +23,7 @@ import { withTimeout } from '~/lib/asyncUtils';
 import { createSlidingWindowLimiter, createDomainRateLimiter } from '~/lib/rateLimit/slidingWindow';
 import { isReplayAssertion, recordAssertion } from '~/lib/replayProtection';
 import { TransportManager } from '~/lib/transport';
+import { getAttestationStatus, refreshRpKeys } from './attestationManager';
 import type {
   CredentialRequestPayload,
   LoginFormDetection,
@@ -408,6 +409,20 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
         usbAvailable: transportManager.isUsbAvailable(),
       },
     };
+  },
+
+  'get-attestation-status': async () => {
+    return { success: true, data: { status: getAttestationStatus() } };
+  },
+
+  'refresh-rp-keys': async () => {
+    return refreshRpKeys();
+  },
+
+  'deliver-attested-code': async (payload) => {
+    const { controlCode } = payload as { controlCode: string; rpDomain: string };
+    log.info('Attested control code prepared for delivery:', controlCode);
+    return { success: true, data: { accepted: true } };
   },
 };
 

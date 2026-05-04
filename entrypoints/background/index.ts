@@ -2,6 +2,7 @@ import { defineBackground } from 'wxt/utils/define-background';
 import { browser } from 'wxt/browser';
 import { registerMessageHandlers } from './messageHandlers';
 import { registerKeepalivePort } from './offscreenWebrtc';
+import { initializeAttestation } from './attestationManager';
 import {
   setupAlarmListener,
   setupIdleListener,
@@ -20,6 +21,7 @@ async function tryRestoreSession(): Promise<void> {
 export default defineBackground({
   main() {
     registerMessageHandlers();
+    initializeAttestation();
     setupAlarmListener();
     setupIdleListener();
 
