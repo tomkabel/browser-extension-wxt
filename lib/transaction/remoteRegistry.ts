@@ -6,6 +6,7 @@ export interface DeclarativeDetector {
   selectors: DetectorSelectors;
   expects: string[];
   controlCode?: ControlCodeSelector;
+  compiledPattern?: RegExp;
 }
 
 export interface DetectorSelectors {
@@ -27,6 +28,16 @@ const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 let cachedDetectors: DeclarativeDetector[] | null = null;
 let cacheTimestamp = 0;
 
+function compileDetectors(detectors: DeclarativeDetector[]): DeclarativeDetector[] {
+  return detectors.map((d) => {
+    try {
+      return { ...d, compiledPattern: new RegExp(d.urlPattern) };
+    } catch {
+      return { ...d, compiledPattern: undefined };
+    }
+  });
+}
+
 async function fetchRegistry(): Promise<DeclarativeDetector[]> {
   try {
     const response = await fetch(REGISTRY_URL, {
@@ -38,7 +49,7 @@ async function fetchRegistry(): Promise<DeclarativeDetector[]> {
       version?: number;
       detectors?: DeclarativeDetector[];
     };
-    return data.detectors ?? [];
+    return data.detectors ? compileDetectors(data.detectors) : [];
   } catch {
     return [];
   }
@@ -52,7 +63,7 @@ export async function initializeRegistry(): Promise<void> {
         detectors: DeclarativeDetector[];
         timestamp: number;
       };
-      cachedDetectors = parsed.detectors;
+      cachedDetectors = compileDetectors(parsed.detectors);
       cacheTimestamp = parsed.timestamp;
     }
   } catch {
@@ -79,13 +90,8 @@ export function findDeclarativeDetector(url: string): DeclarativeDetector | null
   if (!cachedDetectors) return null;
 
   for (const detector of cachedDetectors) {
-    try {
-      const pattern = new RegExp(detector.urlPattern);
-      if (pattern.test(url)) {
-        return detector;
-      }
-    } catch {
-      continue;
+    if (detector.compiledPattern?.test(url)) {
+      return detector;
     }
   }
   return null;
