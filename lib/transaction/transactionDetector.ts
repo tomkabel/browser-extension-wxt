@@ -2,6 +2,8 @@ import type { Detector, TransactionResult } from './detector';
 import { createLhvDetector } from './detectors/lhvDetector';
 import { findDeclarativeDetector, detectWithDeclarativeSelectors } from './remoteRegistry';
 
+const AMOUNT_PATTERN = /[\u20ac\d\s,]*\d+[.,]\d{2}\s*(?:EUR|€)?/;
+
 let detectors: Detector[] | null = null;
 
 function getDetectors(): Detector[] {
@@ -97,11 +99,10 @@ function trySemanticDetection(): TransactionResult | null {
   const scope = findTransactionScope();
   if (!scope) return null;
 
-  const text = scope.textContent ?? '';
-  const amountPattern = /[\u20ac\d\s,]*\d+[.,]\d{2}\s*(?:EUR|€)?/;
+  const text = scope instanceof HTMLElement ? (scope.innerText ?? scope.textContent ?? '') : (scope.textContent ?? '');
   const ibanPattern = /\bEE\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{2}\b/;
 
-  const amountMatch = text.match(amountPattern);
+  const amountMatch = text.match(AMOUNT_PATTERN);
   const ibanMatch = text.match(ibanPattern);
 
   if (amountMatch || ibanMatch) {
@@ -110,7 +111,7 @@ function trySemanticDetection(): TransactionResult | null {
     if (ibanMatch) result.iban = ibanMatch[0]!.trim();
 
     const recipientLabel = text.match(
-      /(?:saaja|recipient|beneficiary|to\s*account)[:\s]*([^\n]{1,120})/i,
+      /(?:saaja|recipient|beneficiary|to\s*account)[:\s]*([^\n]{1,120})(?=\s*(?:viitenumber|selgitus|amount|sum|iban|\||$))/i,
     );
     if (recipientLabel) {
       const cleaned = recipientLabel[1]!.trim();
@@ -135,14 +136,23 @@ function findTransactionScope(): Element | null {
   const walker = document.createTreeWalker(
     document.body,
     NodeFilter.SHOW_TEXT,
+    {
+      acceptNode: (node) => {
+        const el = node.parentElement;
+        if (!el) return NodeFilter.FILTER_REJECT;
+        const tag = el.tagName;
+        if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT' || tag === 'TEMPLATE') return NodeFilter.FILTER_REJECT;
+        if (el.offsetParent === null && tag !== 'BODY' && tag !== 'HTML') return NodeFilter.FILTER_REJECT;
+        if (el.closest('[aria-hidden="true"]')) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    },
   );
-
-  const amountPattern = /[\u20ac\d\s,]*\d+[.,]\d{2}\s*(?:EUR|€)?/;
 
   while (walker.nextNode()) {
     const node = walker.currentNode as Text;
     if (!node.textContent) continue;
-    if (amountPattern.test(node.textContent)) {
+    if (AMOUNT_PATTERN.test(node.textContent)) {
       let el: Element | null = node.parentElement;
       while (el && el !== document.body) {
         const tag = el.tagName;
@@ -151,7 +161,7 @@ function findTransactionScope(): Element | null {
         }
         el = el.parentElement;
       }
-      return node.parentElement ?? document.body;
+      return null;
     }
   }
 

@@ -51,6 +51,7 @@ export default defineBackground({
     browser.runtime.onStartup.addListener(async () => {
       log.info('Service worker starting');
       await tryRestoreSession();
+      initializeRegistry().then(() => log.info('Remote detector registry initialized'));
     });
 
     log.info('Background service worker ready');

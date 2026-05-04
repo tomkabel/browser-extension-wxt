@@ -33,13 +33,47 @@ function extractCleanText(element: Element): string | null {
 const REGISTRY_URL = 'https://raw.githubusercontent.com/smartid2/registry/main/detectors.json';
 const CACHE_KEY = 'registry:detectors';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const MAX_PATTERN_LENGTH = 500;
+
+function hasNestedQuantifier(pattern: string): boolean {
+  return /\([^)]*[+*][^)]*\)\s*[+*]/.test(pattern);
+}
 
 let cachedDetectors: DeclarativeDetector[] | null = null;
 let cacheTimestamp = 0;
+let initPromise: Promise<void> | null = null;
+
+const ALLOWED_EXPECT_VALUES = new Set(['amount', 'recipient', 'iban']);
+
+function isValidDetector(d: Record<string, unknown>): boolean {
+  if (typeof d.domain !== 'string' || d.domain.length === 0) return false;
+  if (typeof d.urlPattern !== 'string' || d.urlPattern.length === 0) return false;
+  if (!Array.isArray(d.expects) || d.expects.length === 0) return false;
+  if (!d.expects.every((e) => typeof e === 'string' && ALLOWED_EXPECT_VALUES.has(e))) return false;
+  if (!d.selectors || typeof d.selectors !== 'object') return false;
+  const sels = d.selectors as Record<string, unknown>;
+  if (!Array.isArray(sels.amount) || sels.amount.length === 0) return false;
+  if (!Array.isArray(sels.recipient) || sels.recipient.length === 0) return false;
+  return true;
+}
+
+function isSafeUrlPattern(pattern: string): boolean {
+  if (pattern.length > MAX_PATTERN_LENGTH) return false;
+  if (hasNestedQuantifier(pattern)) return false;
+  try {
+    new RegExp(pattern);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function compileDetectors(detectors: DeclarativeDetector[]): DeclarativeDetector[] {
   return detectors.map((d) => {
     try {
+      if (!isSafeUrlPattern(d.urlPattern)) {
+        return { ...d, compiledPattern: undefined };
+      }
       return { ...d, compiledPattern: new RegExp(d.urlPattern) };
     } catch {
       return { ...d, compiledPattern: undefined };
@@ -54,17 +88,24 @@ async function fetchRegistry(): Promise<DeclarativeDetector[]> {
       signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) return [];
-    const data = (await response.json()) as {
+    const raw = (await response.json()) as {
       version?: number;
-      detectors?: DeclarativeDetector[];
+      detectors?: unknown[];
     };
-    return data.detectors ? compileDetectors(data.detectors) : [];
+    if (!Array.isArray(raw.detectors)) return [];
+    const valid: DeclarativeDetector[] = [];
+    for (const d of raw.detectors) {
+      if (d && typeof d === 'object' && isValidDetector(d as Record<string, unknown>)) {
+        valid.push(d as unknown as DeclarativeDetector);
+      }
+    }
+    return valid.length > 0 ? compileDetectors(valid) : [];
   } catch {
     return [];
   }
 }
 
-export async function initializeRegistry(): Promise<void> {
+export async function loadCached(): Promise<void> {
   try {
     const stored = await chrome.storage.local.get(CACHE_KEY);
     if (stored[CACHE_KEY]) {
@@ -78,20 +119,32 @@ export async function initializeRegistry(): Promise<void> {
   } catch {
     // no cache
   }
+}
 
-  if (Date.now() - cacheTimestamp > CACHE_TTL_MS) {
-    const fresh = await fetchRegistry();
-    if (fresh.length > 0) {
-      cachedDetectors = fresh;
-      cacheTimestamp = Date.now();
-      try {
-        await chrome.storage.local.set({
-          [CACHE_KEY]: { detectors: fresh, timestamp: cacheTimestamp },
-        });
-      } catch {
-        // storage unavailable
+export async function initializeRegistry(): Promise<void> {
+  if (initPromise) return initPromise;
+  initPromise = (async () => {
+    await loadCached();
+
+    if (Date.now() - cacheTimestamp > CACHE_TTL_MS) {
+      const fresh = await fetchRegistry();
+      if (fresh.length > 0) {
+        cachedDetectors = fresh;
+        cacheTimestamp = Date.now();
+        try {
+          await chrome.storage.local.set({
+            [CACHE_KEY]: { detectors: fresh, timestamp: cacheTimestamp },
+          });
+        } catch {
+          // storage unavailable
+        }
       }
     }
+  })();
+  try {
+    await initPromise;
+  } finally {
+    initPromise = null;
   }
 }
 
