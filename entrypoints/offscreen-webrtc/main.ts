@@ -513,14 +513,27 @@ async function startUsbReadLoop(device: USBDevice): Promise<void> {
   }
 }
 
+function findUsbOutputEndpoint(device: USBDevice): USBEndpoint | undefined {
+  for (const iface of device.configuration?.interfaces ?? []) {
+    for (const alt of iface.alternates) {
+      for (const ep of alt.endpoints) {
+        if (ep.direction === 'out') return ep;
+      }
+    }
+  }
+  return undefined;
+}
+
 async function sendViaUsb(data: Uint8Array): Promise<boolean> {
   if (!usbDevice?.opened) return false;
+  const endpoint = findUsbOutputEndpoint(usbDevice);
+  if (!endpoint) return false;
   try {
     const buf = data.buffer.slice(
       data.byteOffset,
       data.byteOffset + data.byteLength,
     ) as ArrayBuffer;
-    await usbDevice.transferOut(0x01, buf);
+    await usbDevice.transferOut(endpoint.endpointNumber, buf);
     return true;
   } catch (err) {
     log(`USB send error: ${err}`);
