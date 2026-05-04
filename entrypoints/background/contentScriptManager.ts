@@ -89,10 +89,17 @@ export async function reRegisterOnStartup(): Promise<void> {
   if (domains.length === 0) return;
 
   log.info('[CSM] Re-registering', domains.length, 'approved domains on startup');
+
+  let registeredScripts: chrome.scripting.RegisteredContentScript[] = [];
+  try {
+    registeredScripts = await chrome.scripting.getRegisteredContentScripts();
+  } catch {
+    log.warn('[CSM] Failed to get registered scripts, will attempt registration');
+  }
+
   for (const entry of domains) {
     try {
-      const registered = await chrome.scripting.getRegisteredContentScripts();
-      const alreadyRegistered = registered.some((s) => s.id === entry.scriptId);
+      const alreadyRegistered = registeredScripts.some((s) => s.id === entry.scriptId);
       if (alreadyRegistered) continue;
 
       await chrome.scripting.registerContentScripts([
@@ -108,17 +115,6 @@ export async function reRegisterOnStartup(): Promise<void> {
     } catch (err) {
       log.warn('[CSM] Failed to re-register script for', entry.domain, err);
     }
-  }
-}
-
-export async function isScriptRegistered(domain: string): Promise<boolean> {
-  const hash = await sha256Hex(domain);
-  const scriptId = scriptIdForDomain(domain, hash);
-  try {
-    const registered = await chrome.scripting.getRegisteredContentScripts();
-    return registered.some((s) => s.id === scriptId);
-  } catch {
-    return false;
   }
 }
 
@@ -149,7 +145,13 @@ export async function addPendingDomain(
 }
 
 export async function getPendingDomains(): Promise<
-  Array<{ domain: string; url: string; tabId: number; usernameSelector: string; passwordSelector: string }>
+  Array<{
+    domain: string;
+    url: string;
+    tabId: number;
+    usernameSelector: string;
+    passwordSelector: string;
+  }>
 > {
   const stored = (await browser.storage.session.get(PENDING_KEY)) as Record<string, unknown>;
   return (stored[PENDING_KEY] ?? []) as Array<{
