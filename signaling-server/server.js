@@ -44,13 +44,20 @@ function scheduleCleanup(roomId, room) {
 
 function verifyCommitment(metadata, commitment) {
   if (!commitment || typeof commitment !== 'string') return false;
+  if (!metadata.extensionStaticKey || !Array.isArray(metadata.extensionStaticKey)) return false;
+  if (!metadata.nonce || !Array.isArray(metadata.nonce)) return false;
+  if (metadata.nonce.length !== 32) return false;
+
   const hash = createHash('sha256');
   const extKey = Buffer.from(metadata.extensionStaticKey);
   const nonceBuf = Buffer.from(metadata.nonce);
   const sasBuf = Buffer.from(metadata.sasCode, 'utf-8');
   hash.update(Buffer.concat([extKey, nonceBuf, sasBuf]));
   const expected = hash.digest('base64url');
-  return timingSafeEqual(Buffer.from(commitment), Buffer.from(expected));
+  const commitmentBuf = Buffer.from(commitment);
+  const expectedBuf = Buffer.from(expected);
+  if (commitmentBuf.length !== expectedBuf.length) return false;
+  return timingSafeEqual(commitmentBuf, expectedBuf);
 }
 
 function isValidSasCode(sasCode) {
@@ -110,8 +117,16 @@ const io = new Server(httpServer, {
 io.on('connection', (socket) => {
   socket.on('register-room', (data) => {
     const { sasCode, nonce, extensionStaticKey, roomId } = data;
-    if (!sasCode || !isValidSasCode(sasCode) || !nonce || !extensionStaticKey || !roomId) {
+    if (!sasCode || !isValidSasCode(sasCode) || !roomId) {
       socket.emit('error', { message: 'Invalid register-room data' });
+      return;
+    }
+    if (!Array.isArray(nonce) || nonce.length !== 32) {
+      socket.emit('error', { message: 'Invalid nonce: must be 32-byte array' });
+      return;
+    }
+    if (!Array.isArray(extensionStaticKey) || extensionStaticKey.length < 32) {
+      socket.emit('error', { message: 'Invalid extensionStaticKey: must be at least 32-byte array' });
       return;
     }
 
