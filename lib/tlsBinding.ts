@@ -1,17 +1,11 @@
 import { browser } from 'wxt/browser';
+import { log } from '~/lib/errors';
 
 interface SecFetchHeaders {
   site: string;
   mode: string;
   dest: string;
   user: string;
-}
-
-interface PageAttestation {
-  secFetch: SecFetchHeaders;
-  contentHash: string;
-  controlCode: string;
-  origin: string;
 }
 
 const tabSecFetchCache = new Map<number, SecFetchHeaders>();
@@ -25,36 +19,43 @@ function computeContentHash(text: string): Promise<string> {
 }
 
 export function startWebRequestCapture(): void {
+  if (!browser.webRequest?.onBeforeSendHeaders) {
+    log.warn('[tlsBinding] webRequest API unavailable');
+    return;
+  }
+
   try {
-    if (!browser.webRequest?.onBeforeSendHeaders) return;
-    (browser.webRequest.onBeforeSendHeaders as any).addListener(
-    (details: { type: string; tabId?: number; requestHeaders?: Array<{ name: string; value?: string }> }) => {
-      if (details.type !== 'main_frame' || !details.tabId) return;
-      const headers: Record<string, string> = {};
-      for (const h of details.requestHeaders ?? []) {
-        const key = h.name.toLowerCase();
-        if (key.startsWith('sec-fetch-')) {
-          headers[key] = h.value ?? '';
+    browser.webRequest.onBeforeSendHeaders.addListener(
+      (details) => {
+        if (details.type !== 'main_frame' || !details.tabId) return undefined;
+        const headers: Record<string, string> = {};
+        for (const h of details.requestHeaders ?? []) {
+          const key = h.name.toLowerCase();
+          if (key.startsWith('sec-fetch-')) {
+            headers[key] = h.value ?? '';
+          }
         }
-      }
-      if (headers['sec-fetch-site']) {
-        tabSecFetchCache.set(details.tabId, {
-          site: headers['sec-fetch-site'] ?? '',
-          mode: headers['sec-fetch-mode'] ?? '',
-          dest: headers['sec-fetch-dest'] ?? '',
-          user: headers['sec-fetch-user'] ?? '',
-        });
-      }
-    },
+        if (headers['sec-fetch-site']) {
+          tabSecFetchCache.set(details.tabId, {
+            site: headers['sec-fetch-site'] ?? '',
+            mode: headers['sec-fetch-mode'] ?? '',
+            dest: headers['sec-fetch-dest'] ?? '',
+            user: headers['sec-fetch-user'] ?? '',
+          });
+        }
+        return undefined;
+      },
       { urls: ['*://*/*'], types: ['main_frame'] },
       ['requestHeaders', 'extraHeaders'],
     );
 
-    browser.tabs.onRemoved.addListener((tabId) => {
+    browser.tabs.onRemoved.addListener((tabId: number) => {
       tabSecFetchCache.delete(tabId);
     });
-  } catch {
-    // webRequest API not available (test environment or restricted context)
+
+    log.info('[tlsBinding] WebRequest capture started');
+  } catch (err) {
+    log.error('[tlsBinding] Failed to start WebRequest capture:', err);
   }
 }
 
