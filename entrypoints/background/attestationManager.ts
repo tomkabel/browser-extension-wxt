@@ -2,11 +2,26 @@ import { browser } from 'wxt/browser';
 import { KeyStore, WHITELISTED_RP_DOMAINS, createVerifier, refreshKeyManifest, logAuditEvent, AuditEventType, createDemoAttestationHeader, isDemoMode } from '~/lib/attestation';
 import type { AttestationStatus } from '~/lib/attestation';
 import { log } from '~/lib/errors';
+import { withTimeout } from '~/lib/asyncUtils';
 import bundledManifest from '~/lib/attestation/trusted-rp-keys.json';
 
 let keyStore: KeyStore | null = null;
 let verifier: ReturnType<typeof createVerifier> | null = null;
 let currentAttestationStatus: AttestationStatus = { type: 'not_applicable' };
+
+let attestationMutex: Promise<void> = Promise.resolve();
+
+async function withAttestationLock<T>(fn: () => Promise<T>): Promise<T> {
+  let release: () => void;
+  const next = new Promise<void>((resolve) => { release = resolve; });
+  await attestationMutex;
+  attestationMutex = next;
+  try {
+    return await fn();
+  } finally {
+    release!();
+  }
+}
 
 export function getAttestationStatus(): AttestationStatus {
   return currentAttestationStatus;
@@ -28,6 +43,10 @@ export async function initializeAttestation(): Promise<void> {
 
   if (isDemoMode()) {
     log.info('Running in DEMO mode — attestation headers will be generated locally for testing');
+    console.warn(
+      '⚠️  DEMO MODE: Attestation private keys are embedded in the extension source. ' +
+      'Do NOT distribute this build — demo keys can be extracted to forge attestation headers.',
+    );
     setupDemoAttestationInjector();
   } else {
     refreshKeyManifest(keyStore).then((result) => {
@@ -47,7 +66,7 @@ async function setupDemoAttestationInjector(): Promise<void> {
     extraInfoSpec: string[],
   ) => void)(
     injectDemoAttestation,
-    { urls: ['<all_urls>'], types: ['main_frame'] },
+    { urls: WHITELISTED_RP_DOMAINS.map((d) => `*://*.${d}/*`), types: ['main_frame'] },
     [],
   );
   log.info('Demo attestation injector active');
@@ -73,7 +92,9 @@ function injectDemoAttestation(
   const testKeyId = `${prefix}-2026q1`;
   const sessionId = `demo-${Date.now()}`;
 
-  processDemoAttestation(testCode, rpDomain, testKeyId, sessionId).catch((err) => {
+  withAttestationLock(async () => {
+    await processDemoAttestation(testCode, rpDomain, testKeyId, sessionId, details.tabId);
+  }).catch((err) => {
     log.warn('[Demo] Attestation processing failed:', err);
   });
 }
@@ -83,22 +104,25 @@ async function processDemoAttestation(
   domain: string,
   keyId: string,
   sessionId: string,
+  tabId?: number,
 ): Promise<void> {
   const header = await createDemoAttestationHeader(code, domain, keyId, sessionId);
   if (!header) return;
 
   if (!verifier) return;
   const attestedCode = await verifier.verifyHeader(header, domain);
-  if (attestedCode) {
-    await logAuditEvent(AuditEventType.AttestationVerified, {
-      rpDomain: domain,
-      code: attestedCode.controlCode,
-      keyId: attestedCode.keyId,
-      mode: 'demo',
-    });
-    currentAttestationStatus = verifier.verifyControlCode(attestedCode, null);
-    log.info(`[Demo] Attestation verified for ${domain}: code ${attestedCode.controlCode}`);
-  }
+  if (!attestedCode) return;
+
+  await logAuditEvent(AuditEventType.AttestationVerified, {
+    rpDomain: domain,
+    code: attestedCode.controlCode,
+    keyId: attestedCode.keyId,
+    mode: 'demo',
+  });
+
+  const domCode = tabId ? await getDomCode(tabId) : null;
+  currentAttestationStatus = verifier.verifyControlCode(attestedCode, domCode);
+  log.info(`[Demo] Attestation verified for ${domain}: code ${attestedCode.controlCode}`);
 }
 
 function setupWebRequestListener(): void {
@@ -133,7 +157,11 @@ function handleHeadersReceived(
   const rpDomain = extractRpDomain(details.url);
   if (!rpDomain) return;
 
-  processAttestationHeader(attestationHeader.value, rpDomain).catch((err) => {
+  const tabId = details.tabId;
+
+  withAttestationLock(async () => {
+    await processAttestationHeader(attestationHeader!.value!, rpDomain, tabId);
+  }).catch((err) => {
     log.warn('Header processing failed:', err);
   });
 }
@@ -141,6 +169,7 @@ function handleHeadersReceived(
 async function processAttestationHeader(
   rawValue: string,
   rpDomain: string,
+  tabId?: number,
 ): Promise<void> {
   if (!verifier) return;
 
@@ -158,10 +187,27 @@ async function processAttestationHeader(
     await logAuditEvent(AuditEventType.AttestationFailed, { rpDomain });
   }
 
-  currentAttestationStatus = verifier.verifyControlCode(attestedCode, null);
+  const domCode = tabId ? await getDomCode(tabId) : null;
+  currentAttestationStatus = verifier.verifyControlCode(attestedCode, domCode);
 
   if (attestedCode) {
     log.info('Attested control code:', attestedCode.controlCode);
+  }
+}
+
+async function getDomCode(tabId: number): Promise<string | null> {
+  try {
+    const response = await withTimeout(
+      browser.tabs.sendMessage(tabId, { type: 'scrape-control-code', payload: {} }),
+      3000,
+    ) as { success: boolean; controlCode?: string | null; error?: string };
+
+    if (response?.success && response.controlCode) {
+      return response.controlCode;
+    }
+    return null;
+  } catch {
+    return null;
   }
 }
 
@@ -169,7 +215,7 @@ function extractRpDomain(url: string): string | null {
   try {
     const parsed = new URL(url);
     for (const domain of WHITELISTED_RP_DOMAINS) {
-      if (parsed.hostname.endsWith(domain)) return domain;
+      if (parsed.hostname === domain || parsed.hostname.endsWith('.' + domain)) return domain;
     }
     return null;
   } catch {
