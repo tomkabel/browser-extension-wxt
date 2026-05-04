@@ -1,2 +1,13 @@
 schema: spec-driven
 created: 2026-05-04
+specs:
+  - specs/noise-handshake-benchmark
+  - specs/encryption-throughput-benchmark
+  - specs/command-client-benchmark
+  - specs/memory-pressure-benchmark
+context: |
+  Performance baselines for Noise handshake speed, encryption throughput, CommandClient
+  latency, and memory pressure under repeated credential cycles. Uses Vitest + tinybench
+  in an isolated performance/ directory. CI job enforces budgets: XX < 200ms p95,
+  IK < 150ms p95, encrypt 1KB < 1ms, encrypt 1MB < 50ms, CommandClient > 100 msg/s,
+  memory < 10KB per cycle. Budgets calibrated against CI runner baselines.

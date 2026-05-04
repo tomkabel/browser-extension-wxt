@@ -1,2 +1,14 @@
 schema: spec-driven
 created: 2026-05-04
+specs:
+  - specs/assertion-request
+  - specs/auth-page
+  - specs/challenge-derivation
+  - specs/pairing-coordinator
+context: |
+  Fixes 4 TypeScript 5.6 BufferSource type errors in lib/webauthn/ that block
+  tsc --noEmit. Wires createAssertionRequest() into entrypoints/auth/main.ts replacing
+  inline WebAuthn calls. Implements transmitCredentialToAndroid() in pairingCoordinator
+  for passkey public key transmission over the active transport. Adds assertion state
+  to Zustand store. Removes dead dynamic import in messageHandlers.ts. Unblocks the
+  challenge-bound-webauthn flow from being executable.

@@ -1,19 +1,19 @@
 schema: spec-driven
 created: 2026-05-01
+updated: 2026-05-04
 specs:
   - specs/ice-candidate-waterfall
   - specs/turn-server-deployment
   - specs/connection-resilience
   - specs/webrtc-signaling
-  - openspec/specs/offscreen-document-lifecycle
 context: |
   Phase 2 — Resilient Transport: ICE candidate waterfall (mDNS → TURN/UDP → TURN/TCP 443).
-  Deploy coturn with ephemeral HMAC credentials. Connection state machine
-  with automatic retry and exponential backoff. Offscreen document lifecycle
-  keeps WebRTC alive across SW sleep/wake cycles.
+  Deploy coturn with ephemeral HMAC credentials + static TURN fallback. Connection state
+  machine with automatic retry and exponential backoff. QR-embedded SDP offer for
+  server-less WebRTC Perfect Negotiation (eliminates signaling server from pairing
+  critical path). Event-driven USB detection replaces 2-second polling. Offscreen
+  document lifecycle keeps WebRTC alive across SW sleep/wake cycles.
   V6 Alignment: WebRTC becomes the secondary/fallback transport in V6. The primary
-    transport is USB AOA 2.0 via a Go Native Messaging Host. TURN/STUN infrastructure
-    is still needed for the WebRTC fallback path. The ICE candidate waterfall and
-    connection resilience logic are adapted into the Transport abstraction layer
-    that unifies WebRTC + USB behind a common interface. Keep building this for
-    Phase 1; it directly feeds into the Transport abstraction in Phase 1.5.
+    transport is USB AOA 2.0 via WebUSB (replacing Go Native Messaging Host). TURN/STUN
+    infrastructure is still needed for the WebRTC fallback path. The QR SDP approach
+    eliminates the signaling server dependency for pairing.
