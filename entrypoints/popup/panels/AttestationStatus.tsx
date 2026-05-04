@@ -73,7 +73,7 @@ export function AttestationStatus() {
         <span className="font-semibold">{statusLabels[attestation.type] ?? attestation.type}</span>
         <button
           type="button"
-          className="text-xs underline opacity-70 hover:opacity-100 disabled:opacity-40"
+          className="text-xs underline opacity-70 hover:opacity-100 disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
           onClick={handleRefresh}
           disabled={refreshing}
         >
@@ -97,7 +97,7 @@ export function AttestationStatus() {
         <p className="mt-1 opacity-80">No server attestation header received.</p>
       )}
       {refreshResult && (
-        <p className={`mt-1 ${refreshSuccess === true ? 'text-green-700' : 'text-red-700'}`}>
+        <p className={`mt-1 ${refreshSuccess === true ? 'text-green-700' : 'text-red-700'}`} role="status" aria-live="polite">
           {refreshResult}
         </p>
       )}

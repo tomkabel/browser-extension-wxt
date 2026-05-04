@@ -1,2 +1,21 @@
 schema: spec-driven
 created: 2026-05-04
+updated: 2026-05-04
+specs:
+  - specs/aria-roles-labels
+  - specs/heading-hierarchy
+  - specs/focus-management
+  - specs/keyboard-navigation
+  - specs/color-contrast
+  - specs/reduced-motion
+  - specs/a11y-tests
+context: |
+  WCAG 2.1 AA compliance for the popup UI. ARIA roles, labels, and live regions
+  on all interactive and status elements. Proper heading hierarchy (h1 → h2 → h3).
+  Focus management on panel transitions (programmatic focus with preventScroll: true).
+  Keyboard operability (Tab, Enter/Space, Escape) with visible focus indicators.
+  Color contrast audit and remediation (4.5:1 normal, 3:1 large). prefers-reduced-motion
+  support. SAS enhancement: 4 emoji instead of 3 (24-bit entropy, ~16.7M combinations)
+  with QR public key binding to prevent MITM at QR printing stage. Numeric 6-digit
+  fallback for screen reader compatibility. Playwright + @axe-core/playwright
+  automated accessibility tests in E2E suite.

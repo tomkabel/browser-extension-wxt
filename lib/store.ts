@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { CredentialState, PairingState, SessionState, TransactionData, TransactionState } from '~/types';
+import type { CredentialState, PairingState, SessionState, TransactionData, TransactionState, ApprovedDomain } from '~/types';
 import type { TransportType } from '~/lib/transport/types';
 import type { AttestationStatus } from '~/lib/attestation';
 
@@ -81,6 +81,14 @@ export interface AppStore {
   assertionError: string | null;
   setAssertionStatus: (status: AssertionStatus) => void;
   setAssertionError: (error: string | null) => void;
+
+  pendingDomains: Array<{ domain: string; url: string }>;
+  approvedDomains: ApprovedDomain[];
+  showSettings: boolean;
+
+  setPendingDomains: (domains: Array<{ domain: string; url: string }>) => void;
+  setApprovedDomains: (domains: ApprovedDomain[]) => void;
+  setShowSettings: (show: boolean) => void;
 }
 
 export const useAppStore = create<AppStore>((set) => ({
@@ -150,4 +158,12 @@ export const useAppStore = create<AppStore>((set) => ({
   assertionError: null,
   setAssertionStatus: (status) => set({ assertionStatus: status }),
   setAssertionError: (error) => set({ assertionError: error }),
+
+  pendingDomains: [],
+  approvedDomains: [],
+  showSettings: false,
+
+  setPendingDomains: (domains) => set({ pendingDomains: domains }),
+  setApprovedDomains: (domains) => set({ approvedDomains: domains }),
+  setShowSettings: (show) => set({ showSettings: show }),
 }));

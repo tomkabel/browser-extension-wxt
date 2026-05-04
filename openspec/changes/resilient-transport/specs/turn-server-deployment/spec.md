@@ -32,3 +32,25 @@ The signaling server SHALL expose a `/turn-credentials` endpoint that returns ti
 - **THEN** the signaling server SHALL return `{ username, password, ttl, urls: [...] }`
 - **AND** the username SHALL be an HMAC of `{timestamp}:{roomId}`
 - **AND** the password SHALL be the base64-encoded HMAC output
+
+### Requirement: Static TURN credential fallback
+
+The extension SHALL embed a long-lived TURN credential as a fallback when the signaling server is unreachable.
+
+#### Scenario: Static credential used when signaling server down
+
+- **WHEN** the offscreen document fails to fetch TURN credentials (network error, timeout, or 5xx)
+- **THEN** it SHALL fall back to the static embedded TURN credential
+- **AND** the static credential SHALL be valid for 45 days with 15-day overlap window
+
+#### Scenario: Static credential rotation
+
+- **WHEN** a new extension version is published (Chrome Web Store auto-update)
+- **THEN** the static TURN credential SHALL be rotated
+- **AND** the old credential SHALL remain valid until its TTL expires
+
+#### Scenario: Static credential never preferred
+
+- **WHEN** the signaling server is reachable and returns valid ephemeral credentials
+- **THEN** the static credential SHALL NOT be used
+- **AND** the ephemeral credentials SHALL always be preferred

@@ -1,8 +1,11 @@
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useEffect, useRef } from 'react';
+import { browser } from 'wxt/browser';
 import './style.css';
 import { useAppStore } from '~/lib/store';
 import { ErrorBoundary } from './ErrorBoundary';
 import { AttestationStatus } from './panels/AttestationStatus';
+import { DomainPermissionPrompt } from './panels/DomainPermissionPrompt';
+import { SettingsPanel } from './panels/SettingsPanel';
 
 const PairingPanel = lazy(() =>
   import('./panels/PairingPanel').then((m) => ({ default: m.PairingPanel })),
@@ -23,6 +26,11 @@ function PanelRouter() {
   const pairingState = useAppStore((s) => s.pairingState);
   const sessionState = useAppStore((s) => s.sessionState);
   const credentialState = useAppStore((s) => s.credentialState);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    headingRef.current?.focus({ preventScroll: true });
+  }, [pairingState, sessionState, credentialState]);
 
   if (
     pairingState === 'unpaired' ||
@@ -32,7 +40,7 @@ function PanelRouter() {
   ) {
     return (
       <Suspense fallback={<LoadingFallback />}>
-        <PairingPanel />
+        <PairingPanel ref={headingRef} />
       </Suspense>
     );
   }
@@ -41,7 +49,7 @@ function PanelRouter() {
     if (credentialState && credentialState !== 'idle') {
       return (
         <Suspense fallback={<LoadingFallback />}>
-          <CredentialPanel />
+          <CredentialPanel ref={headingRef} />
         </Suspense>
       );
     }
@@ -49,45 +57,89 @@ function PanelRouter() {
     if (sessionState === 'active' || sessionState === 'expiring') {
       return (
         <Suspense fallback={<LoadingFallback />}>
-          <TransactionPanel />
+          <TransactionPanel ref={headingRef} />
         </Suspense>
       );
     }
 
     return (
       <Suspense fallback={<LoadingFallback />}>
-        <AuthPanel />
+        <AuthPanel ref={headingRef} />
       </Suspense>
     );
   }
 
   return (
     <div className="p-4 text-center">
-      <p className="text-sm text-gray-500">Loading...</p>
+      <p className="text-sm text-gray-600">Loading...</p>
     </div>
   );
 }
 
 function PopupApp() {
+  const showSettings = useAppStore((s) => s.showSettings);
+  const setShowSettings = useAppStore((s) => s.setShowSettings);
+  const setPendingDomains = useAppStore((s) => s.setPendingDomains);
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadPendingDomains() {
+      const response = await browser.runtime.sendMessage({
+        type: 'get-pending-domains',
+        payload: null,
+      });
+      if (mounted && response.success && response.data) {
+        const pending = (response.data.pending as Array<{ domain: string; url: string }>) ?? [];
+        setPendingDomains(pending);
+      }
+    }
+    loadPendingDomains();
+    return () => {
+      mounted = false;
+    };
+  }, [setPendingDomains]);
+
   return (
     <div className="w-96 p-4 bg-white">
       <div className="flex items-center gap-3 mb-4 pb-3 border-b">
         <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
           <span className="text-white font-bold text-xs">S2</span>
         </div>
-        <div>
+        <div className="flex-1">
           <h1 className="text-lg font-bold text-gray-800">SmartID2</h1>
           <p className="text-xs text-gray-500">Secure Transaction Verification</p>
         </div>
+        <button
+          type="button"
+          className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+          onClick={() => setShowSettings(!showSettings)}
+          title="Settings"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </button>
       </div>
 
       <div className="space-y-3">
-        <ErrorBoundary>
-          <PanelRouter />
-        </ErrorBoundary>
-        <ErrorBoundary>
-          <AttestationStatus />
-        </ErrorBoundary>
+        {showSettings ? (
+          <ErrorBoundary>
+            <SettingsPanel />
+          </ErrorBoundary>
+        ) : (
+          <>
+            <ErrorBoundary>
+              <DomainPermissionPrompt />
+            </ErrorBoundary>
+            <ErrorBoundary>
+              <PanelRouter />
+            </ErrorBoundary>
+            <ErrorBoundary>
+              <AttestationStatus />
+            </ErrorBoundary>
+          </>
+        )}
       </div>
 
       <div className="mt-4 pt-3 border-t text-center">

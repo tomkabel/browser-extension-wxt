@@ -164,7 +164,7 @@ export function encodePairingPayload(
   };
 
   if (sdpOffer) {
-    payload.s = encodeSdp(sdpOffer);
+    payload.s = compressSdp(sdpOffer);
   }
 
   if (iceCandidates && iceCandidates.length > 0) {
@@ -174,13 +174,12 @@ export function encodePairingPayload(
   return JSON.stringify(payload);
 }
 
-function encodeSdp(sdp: string): string {
-  const bytes = new TextEncoder().encode(sdp);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]!);
-  }
-  return btoa(binary);
+function compressSdp(sdp: string): string {
+  return btoa(
+    new TextEncoder()
+      .encode(sdp)
+      .reduce((acc, b) => acc + String.fromCharCode(b), ''),
+  );
 }
 
 // First 8 fields only; drops generation, ufrag, network-id (QR code size budget)

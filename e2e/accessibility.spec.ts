@@ -1,6 +1,7 @@
 import { test, expect, type Page, type BrowserContext } from '@playwright/test';
 import path from 'node:path';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import AxeBuilder from '@axe-core/playwright';
 
 const EXTENSION_DIR = path.resolve('.output/chrome-mv3');
@@ -8,7 +9,15 @@ const EXTENSION_DIR = path.resolve('.output/chrome-mv3');
 function getExtensionId(): string {
   const manifestPath = path.join(EXTENSION_DIR, 'manifest.json');
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
-  return manifest.extension_id || manifest.key?.slice(0, 32).replace(/[^a-z]/gi, '') || 'dev-id';
+  if (manifest.extension_id) return manifest.extension_id;
+  if (manifest.key) {
+    const derBytes = Buffer.from(manifest.key, 'base64');
+    const hash = crypto.createHash('sha256').update(derBytes).digest();
+    const first16 = hash.subarray(0, 16);
+    const hex = first16.toString('hex');
+    return hex.split('').map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
+  }
+  return 'dev-id';
 }
 
 let context: BrowserContext;
@@ -38,10 +47,23 @@ test.describe('Accessibility', () => {
     } catch (err) {
       console.warn('Popup navigation failed, aXe results may be unreliable:', err);
     }
-    await page.waitForTimeout(1000);
+    await page.waitForSelector('#root', { timeout: 10000 }).catch(() => {});
   }
 
-  test('unpaired popup (PairingPanel) has zero critical/serious violations', async ({ browser }) => {
+  async function setStoreState(page: Page, detail: Record<string, unknown>): Promise<void> {
+    await page.evaluate((d) => {
+      window.dispatchEvent(new CustomEvent('wxt:store-update', { detail: d }));
+    }, detail);
+    await page.waitForFunction(() => {
+      try {
+        return document.querySelector('[data-testid]') !== null;
+      } catch {
+        return true;
+      }
+    }, { timeout: 5000 }).catch(() => {});
+  }
+
+  test('unpaired popup (PairingPanel) has zero critical/serious violations', async () => {
     const page = await context.newPage();
     await openPopup(page);
 
@@ -55,19 +77,14 @@ test.describe('Accessibility', () => {
     expect(criticalSerious).toHaveLength(0);
   });
 
-  test('auth panel has zero critical/serious violations', async ({ browser }) => {
+  test('auth panel has zero critical/serious violations', async () => {
     const page = await context.newPage();
     await openPopup(page);
 
-    await page.evaluate(() => {
-      window.dispatchEvent(new CustomEvent('wxt:store-update', {
-        detail: {
-          pairingState: 'paired',
-          sessionState: 'none',
-        },
-      }));
+    await setStoreState(page, {
+      pairingState: 'paired',
+      sessionState: 'none',
     });
-    await page.waitForTimeout(500);
 
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
@@ -79,21 +96,16 @@ test.describe('Accessibility', () => {
     expect(criticalSerious).toHaveLength(0);
   });
 
-  test('transaction panel has zero critical/serious violations', async ({ browser }) => {
+  test('transaction panel has zero critical/serious violations', async () => {
     const page = await context.newPage();
     await openPopup(page);
 
-    await page.evaluate(() => {
-      window.dispatchEvent(new CustomEvent('wxt:store-update', {
-        detail: {
-          pairingState: 'paired',
-          sessionState: 'active',
-          transactionData: { amount: '€10.00', recipient: 'Test User' },
-          transactionState: 'verifying',
-        },
-      }));
+    await setStoreState(page, {
+      pairingState: 'paired',
+      sessionState: 'active',
+      transactionData: { amount: '€10.00', recipient: 'Test User' },
+      transactionState: 'verifying',
     });
-    await page.waitForTimeout(500);
 
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
@@ -105,20 +117,15 @@ test.describe('Accessibility', () => {
     expect(criticalSerious).toHaveLength(0);
   });
 
-  test('credential panel states have zero critical/serious violations', async ({ browser }) => {
+  test('credential panel states have zero critical/serious violations', async () => {
     const page = await context.newPage();
     await openPopup(page);
 
-    await page.evaluate(() => {
-      window.dispatchEvent(new CustomEvent('wxt:store-update', {
-        detail: {
-          pairingState: 'paired',
-          credentialState: 'requesting',
-          credentialDomain: 'example.com',
-        },
-      }));
+    await setStoreState(page, {
+      pairingState: 'paired',
+      credentialState: 'requesting',
+      credentialDomain: 'example.com',
     });
-    await page.waitForTimeout(500);
 
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
@@ -130,7 +137,7 @@ test.describe('Accessibility', () => {
     expect(criticalSerious).toHaveLength(0);
   });
 
-  test('color contrast audit passes for all visible text', async ({ browser }) => {
+  test('color contrast audit passes for all visible text', async () => {
     const page = await context.newPage();
     await openPopup(page);
 

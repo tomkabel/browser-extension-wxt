@@ -3,21 +3,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('wxt/browser', () => ({
   browser: {
     runtime: {
+      sendMessage: vi.fn(),
       connectNative: vi.fn(),
     },
   },
 }));
-
-const mockPort = {
-  postMessage: vi.fn(),
-  disconnect: vi.fn(),
-  onMessage: {
-    addListener: vi.fn(),
-  },
-  onDisconnect: {
-    addListener: vi.fn(),
-  },
-};
 
 const { browser } = await import('wxt/browser');
 
@@ -26,9 +16,7 @@ describe('UsbTransport', () => {
   let transport: import('./UsbTransport').UsbTransport;
 
   beforeEach(async () => {
-    vi.clearAllMocks();
-    (browser.runtime.connectNative as ReturnType<typeof vi.fn>).mockReturnValue(mockPort);
-    mockPort.postMessage.mockReset();
+    vi.resetAllMocks();
     const mod = await import('./UsbTransport');
     UsbTransport = mod.UsbTransport;
     transport = new UsbTransport();
@@ -45,37 +33,25 @@ describe('UsbTransport', () => {
   });
 
   describe('connect', () => {
-    it('connects to native host and returns on success', async () => {
-      mockPort.postMessage.mockResolvedValue(undefined);
+    it('connects via offscreen relay on success', async () => {
+      (browser.runtime.sendMessage as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true });
 
-      const connectPromise = transport.connect();
+      await transport.connect();
 
-      const connectHandler = mockPort.onMessage.addListener.mock.calls[0]?.[0];
-      expect(connectHandler).toBeDefined();
-
-      const disconnectHandler = mockPort.onDisconnect.addListener.mock.calls[0]?.[0];
-      expect(disconnectHandler).toBeDefined();
-
-      const messageHandler = mockPort.onMessage.addListener.mock.calls[0]?.[0];
-      if (messageHandler) {
-        messageHandler({ id: 'req_1', success: true, type: 'connect' });
-      }
-
-      await connectPromise;
       expect(transport.isAvailable()).toBe(true);
+      expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'webrtc-connect-usb' }),
+      );
     });
 
-    it('throws on native host connect failure', async () => {
-      mockPort.postMessage.mockResolvedValue(undefined);
+    it('throws on offscreen relay failure', async () => {
+      (browser.runtime.sendMessage as ReturnType<typeof vi.fn>).mockResolvedValue({
+        success: false,
+        error: 'USB device not found',
+      });
 
-      const connectPromise = transport.connect();
-
-      const messageHandler = mockPort.onMessage.addListener.mock.calls[0]?.[0];
-      if (messageHandler) {
-        messageHandler({ id: 'req_1', success: false, error: 'USB device not found', type: 'connect' });
-      }
-
-      await expect(connectPromise).rejects.toThrow('USB device not found');
+      await expect(transport.connect()).rejects.toThrow('USB device not found');
+      expect(transport.isAvailable()).toBe(false);
     });
   });
 
@@ -86,40 +62,24 @@ describe('UsbTransport', () => {
   });
 
   describe('checkAvailability', () => {
-    it('returns false when port is not connected', async () => {
+    it('returns false when relay is unreachable', async () => {
+      (browser.runtime.sendMessage as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('unreachable'));
+
       const available = await transport.checkAvailability();
       expect(available).toBe(false);
     });
-  });
 
-  describe('onDisconnect callback', () => {
-    it('fires onDisconnect when native host disconnects', async () => {
-      mockPort.postMessage.mockResolvedValue(undefined);
+    it('returns true when relay responds', async () => {
+      (browser.runtime.sendMessage as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true });
 
-      const connectPromise = transport.connect();
-      const messageHandler = mockPort.onMessage.addListener.mock.calls[0]?.[0];
-      if (messageHandler) {
-        messageHandler({ id: 'req_1', success: true, type: 'connect' });
-      }
-      await connectPromise;
-
-      const disconnectSpy = vi.fn();
-      transport.onDisconnect(disconnectSpy);
-
-      const addListenerCalls = mockPort.onDisconnect.addListener.mock.calls;
-      expect(addListenerCalls.length).toBeGreaterThanOrEqual(1);
-
-      const disconnectHandler = addListenerCalls[0]?.[0];
-      if (disconnectHandler) {
-        disconnectHandler();
-      }
-      expect(disconnectSpy).toHaveBeenCalled();
+      const available = await transport.checkAvailability();
+      expect(available).toBe(true);
     });
   });
 
   describe('disconnect', () => {
     it('cleans up state on disconnect', async () => {
-      mockPort.postMessage.mockResolvedValue(undefined);
+      (browser.runtime.sendMessage as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true });
 
       await transport.disconnect();
       expect(transport.isAvailable()).toBe(false);
