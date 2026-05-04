@@ -19,7 +19,6 @@ export class TransportManager {
   private usbAvailable = false;
   private connecting = false;
   private usbPollTimer: ReturnType<typeof setInterval> | null = null;
-  private hostCheckTimer: ReturnType<typeof setInterval> | null = null;
   private listeners: Map<string, Array<(data: unknown) => void>> = new Map();
   private messageCallback: ((data: Uint8Array) => void) | null = null;
 

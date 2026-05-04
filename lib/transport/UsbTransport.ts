@@ -1,14 +1,7 @@
 import { browser } from 'wxt/browser';
 import { log } from '~/lib/errors';
+import { ANDROID_VENDOR_IDS } from './vendorIds';
 import type { Transport, TransportType } from './types';
-
-const GOOGLE_VENDOR_ID = 0x18d1;
-const ANDROID_VENDOR_IDS = new Set([GOOGLE_VENDOR_ID, 0x04e8, 0x22b8, 0x0bb4, 0x12d1, 0x1004]);
-
-interface PendingReader {
-  resolve: (data: Uint8Array) => void;
-  reader: ReadableStreamDefaultReader<Uint8Array>;
-}
 
 export class UsbTransport implements Transport {
   readonly type: TransportType = 'usb';
@@ -18,7 +11,7 @@ export class UsbTransport implements Transport {
   private disconnectCallbacks: Array<() => void> = [];
   private device: USBDevice | null = null;
   private readLoopActive = false;
-  private pendingReader: PendingReader | null = null;
+  private listenerAttached = false;
 
   async connect(): Promise<void> {
     if (this.device) {
@@ -99,6 +92,8 @@ export class UsbTransport implements Transport {
 
   onMessage(callback: (data: Uint8Array) => void): void {
     this.messageCallbacks.push(callback);
+    if (this.listenerAttached) return;
+    this.listenerAttached = true;
     browser.runtime.onMessage.addListener((message) => {
       if (!this.connected) return;
       const msg = message as { type?: string; payload?: { data?: number[] } } | undefined;
@@ -136,12 +131,7 @@ export class UsbTransport implements Transport {
     } catch {
       // WebUSB not supported
     }
-    try {
-      await browser.runtime.sendMessage({ type: 'webrtc-ping', payload: {} });
-      return true;
-    } catch {
-      return false;
-    }
+    return false;
   }
 
   private async requestDevice(): Promise<USBDevice | null> {
@@ -224,5 +214,6 @@ export class UsbTransport implements Transport {
     this.connected = false;
     this.device = null;
     this.readLoopActive = false;
+    this.listenerAttached = false;
   }
 }

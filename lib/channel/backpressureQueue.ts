@@ -49,12 +49,20 @@ export class BackpressureQueue {
       });
     }
 
-    dc.send(
-      payload.buffer.slice(
-        payload.byteOffset,
-        payload.byteOffset + payload.byteLength,
-      ) as ArrayBuffer,
-    );
+    try {
+      dc.send(
+        payload.buffer.slice(
+          payload.byteOffset,
+          payload.byteOffset + payload.byteLength,
+        ) as ArrayBuffer,
+      );
+    } catch (err) {
+      throw new ExtensionError(
+        err instanceof Error ? err.message : 'DataChannel send failed',
+        'SEND_FAILED',
+        false,
+      );
+    }
   }
 
   getQueueLength(): number {

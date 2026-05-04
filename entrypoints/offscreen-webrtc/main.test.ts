@@ -137,30 +137,14 @@ describe('buildIceServers', () => {
 });
 
 describe('data channel configuration', () => {
-  it('creates data channel with ordered: true and maxPacketLifeTime: 3000', async () => {
-    const createDataChannel = vi.fn().mockReturnValue({
-      binaryType: 'arraybuffer',
-      send: vi.fn(),
-      onopen: null,
-      onmessage: null,
-      onclose: null,
-      readyState: 'connecting',
-    });
+  it('exports DATA_CHANNEL_CONFIG with ordered: true and maxPacketLifeTime: 3000', async () => {
+    const mod = await import('~/entrypoints/offscreen-webrtc/main');
+    const config = (mod as { DATA_CHANNEL_CONFIG?: RTCDataChannelInit }).DATA_CHANNEL_CONFIG;
 
-    const mockDc = createDataChannel('smartid2', {
-      ordered: true,
-      maxPacketLifeTime: 3000,
-      negotiated: false,
-      id: 0,
-    });
-
-    expect(createDataChannel).toHaveBeenCalledWith(
-      'smartid2',
-      expect.objectContaining({
-        ordered: true,
-        maxPacketLifeTime: 3000,
-      }),
-    );
-    expect(mockDc.binaryType).toBe('arraybuffer');
+    expect(config).toBeDefined();
+    expect(config!.ordered).toBe(true);
+    expect(config!.maxPacketLifeTime).toBe(3000);
+    expect(config!.negotiated).toBe(false);
+    expect(config!.id).toBe(0);
   });
 });
