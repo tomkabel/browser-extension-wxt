@@ -18,4 +18,4 @@ export type { AttestationVerifier } from './verifier';
 export { refreshKeyManifest } from './manifest';
 export { logAuditEvent, getAuditLog } from './audit';
 export type { AuditEntry } from './audit';
-export { createDemoAttestationHeader, isDemoMode } from './demoAttestation';
+export { isDemoMode } from './env';

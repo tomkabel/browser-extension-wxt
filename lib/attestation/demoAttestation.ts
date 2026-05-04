@@ -1,5 +1,6 @@
 import { sortedJsonStringify, base64urlEncode } from './base64url';
 import { WHITELISTED_RP_DOMAINS } from './keyStore';
+import { isDemoMode } from './env';
 import { log } from '~/lib/errors';
 
 const encoder = new TextEncoder();
@@ -16,10 +17,6 @@ const DEMO_PRIVATE_KEYS: Record<string, JsonWebKey> = {
 };
 
 const importedKeyCache = new Map<string, CryptoKey>();
-
-export function isDemoMode(): boolean {
-  return import.meta.env.DEV || import.meta.env.MODE === 'demo';
-}
 
 async function getDemoPrivateKey(keyId: string): Promise<CryptoKey | null> {
   const cached = importedKeyCache.get(keyId);

@@ -1,5 +1,5 @@
 import { browser } from 'wxt/browser';
-import { KeyStore, WHITELISTED_RP_DOMAINS, createVerifier, refreshKeyManifest, logAuditEvent, AuditEventType, createDemoAttestationHeader, isDemoMode } from '~/lib/attestation';
+import { KeyStore, WHITELISTED_RP_DOMAINS, createVerifier, refreshKeyManifest, logAuditEvent, AuditEventType, isDemoMode } from '~/lib/attestation';
 import type { AttestationStatus } from '~/lib/attestation';
 import { log } from '~/lib/errors';
 import { withTimeout } from '~/lib/asyncUtils';
@@ -47,7 +47,8 @@ export async function initializeAttestation(): Promise<void> {
       '⚠️  DEMO MODE: Attestation private keys are embedded in the extension source. ' +
       'Do NOT distribute this build — demo keys can be extracted to forge attestation headers.',
     );
-    setupDemoAttestationInjector();
+    const { createDemoAttestationHeader: createHeader } = await import('~/lib/attestation/demoAttestation');
+    setupDemoAttestationInjector(createHeader);
   } else {
     refreshKeyManifest(keyStore).then((result) => {
       if (result.success) {
@@ -59,13 +60,11 @@ export async function initializeAttestation(): Promise<void> {
   }
 }
 
-async function setupDemoAttestationInjector(): Promise<void> {
-  (browser.webRequest.onBeforeRequest as unknown as (
-    callback: (details: chrome.webRequest.WebRequestBodyDetails) => void,
-    filter: chrome.webRequest.RequestFilter,
-    extraInfoSpec: string[],
-  ) => void)(
-    injectDemoAttestation,
+async function setupDemoAttestationInjector(
+  createHeader: (code: string, domain: string, keyId: string, sessionId?: string) => Promise<string | null>,
+): Promise<void> {
+  (browser.webRequest.onBeforeRequest as any).addListener(
+    (details: any) => injectDemoAttestation(details, createHeader),
     { urls: WHITELISTED_RP_DOMAINS.map((d) => `*://*.${d}/*`), types: ['main_frame'] },
     [],
   );
@@ -73,7 +72,8 @@ async function setupDemoAttestationInjector(): Promise<void> {
 }
 
 function injectDemoAttestation(
-  details: chrome.webRequest.WebRequestBodyDetails,
+  details: any,
+  createHeader: (code: string, domain: string, keyId: string, sessionId?: string) => Promise<string | null>,
 ): void {
   if (!verifier) return;
 
@@ -93,20 +93,21 @@ function injectDemoAttestation(
   const sessionId = `demo-${Date.now()}`;
 
   withAttestationLock(async () => {
-    await processDemoAttestation(testCode, rpDomain, testKeyId, sessionId, details.tabId);
+    await processDemoAttestation(createHeader, testCode, rpDomain, testKeyId, sessionId, details.tabId);
   }).catch((err) => {
     log.warn('[Demo] Attestation processing failed:', err);
   });
 }
 
 async function processDemoAttestation(
+  createHeader: (code: string, domain: string, keyId: string, sessionId?: string) => Promise<string | null>,
   code: string,
   domain: string,
   keyId: string,
   sessionId: string,
   tabId?: number,
 ): Promise<void> {
-  const header = await createDemoAttestationHeader(code, domain, keyId, sessionId);
+  const header = await createHeader(code, domain, keyId, sessionId);
   if (!header) return;
 
   if (!verifier) return;
@@ -131,12 +132,8 @@ function setupWebRequestListener(): void {
     types: ['main_frame'],
   };
 
-  (browser.webRequest.onHeadersReceived as unknown as (
-    callback: (details: chrome.webRequest.WebResponseHeadersDetails) => void,
-    filter: chrome.webRequest.RequestFilter,
-    extraInfoSpec: string[],
-  ) => void)(
-    handleHeadersReceived,
+  (browser.webRequest.onHeadersReceived as any).addListener(
+    (details: any) => handleHeadersReceived(details),
     filter,
     ['responseHeaders', 'extraHeaders'],
   );
@@ -145,12 +142,12 @@ function setupWebRequestListener(): void {
 }
 
 function handleHeadersReceived(
-  details: chrome.webRequest.WebResponseHeadersDetails,
+  details: any,
 ): void {
   if (!details.responseHeaders || !verifier || !keyStore) return;
 
   const attestationHeader = details.responseHeaders.find(
-    (h) => h.name.toLowerCase() === 'smartid-attestation',
+    (h: { name: string; value?: string }) => h.name.toLowerCase() === 'smartid-attestation',
   );
   if (!attestationHeader?.value) return;
 
