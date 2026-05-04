@@ -1,4 +1,4 @@
-import { bufferToBase64 } from '~/lib/asyncUtils';
+import { bufferToBase64, base64ToBuffer, uint8ArrayToArrayBuffer } from '~/lib/asyncUtils';
 import { createAssertionRequest } from '~/lib/webauthn';
 
 const EXTENSION_ID = chrome.runtime.id;
@@ -38,15 +38,6 @@ function log(msg: string): void {
   }
 }
 
-function base64ToBuffer(base64: string): ArrayBuffer {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes.buffer;
-}
-
 function setButtonsEnabled(enabled: boolean): void {
   btnRegister.disabled = !enabled;
   btnAuthenticate.disabled = !enabled;
@@ -70,9 +61,10 @@ async function loadExistingCredential(): Promise<boolean> {
       log(`Stored credential: ${stored.id.slice(0, 32)}...`);
       return true;
     }
-  } catch {
-  }
-  existingCredential = null;
+    } catch (err) {
+      console.warn('[Auth] Failed to load credential from storage:', err);
+    }
+    existingCredential = null;
   status('No credential registered. Register a new credential to continue.');
   btnRegister.style.display = 'block';
   btnAuthenticate.style.display = 'none';
@@ -374,6 +366,7 @@ async function reportPasskeyError(error: string): Promise<void> {
       payload: { error },
     });
   } catch {
+    // background worker may have shut down, nothing to do
   }
 }
 
@@ -391,7 +384,7 @@ async function handleChallengeAssert(): Promise<void> {
       return;
     }
 
-    const challengeBytes = Uint8Array.from(atob(challengeB64), (c) => c.charCodeAt(0));
+    const challengeBytes = new Uint8Array(base64ToBuffer(challengeB64));
 
     const stored = await chrome.storage.session.get('pending:assertion');
     const pending = stored['pending:assertion'] as {
