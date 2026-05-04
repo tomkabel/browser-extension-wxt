@@ -1,8 +1,6 @@
 import { browser } from 'wxt/browser';
 import { RttEstimator } from './rttEstimator';
-import {
-  CommandType,
-} from '~/types/commands';
+import { CommandType } from '~/types/commands';
 import type {
   CommandState,
   ControlCommand,
@@ -37,6 +35,7 @@ export function createCommandClient(
   },
 ) {
   const pending = new Map<number, PendingCommand>();
+  const pendingTimeouts = new Map<number, AbortController>();
   const rttEstimator = new RttEstimator();
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   let missedPings = 0;
@@ -65,15 +64,6 @@ export function createCommandClient(
     const count = await getAndIncrementMessageCount();
     if (count > 0 && count % ROTATION_THRESHOLD === 0) {
       await keyRotationProvider.rotate(count);
-    }
-  }
-
-  async function signPayload(payload: Record<string, unknown>): Promise<string | undefined> {
-    const data = JSON.stringify(payload);
-    try {
-      return await signatureProvider.sign(data);
-    } catch {
-      return undefined;
     }
   }
 
@@ -131,6 +121,12 @@ export function createCommandClient(
       rttEstimator.updateRtt(rttSample);
     }
 
+    const controller = pendingTimeouts.get(response.sequence);
+    if (controller) {
+      controller.abort();
+      pendingTimeouts.delete(response.sequence);
+    }
+
     pending.delete(response.sequence);
 
     if (response.status === 'error') {
@@ -147,9 +143,18 @@ export function createCommandClient(
     pendingPingSeq = sequence;
     const cmd = createCommand(CommandType.Ping, { ts: performance.now() }, sequence);
     const encoded = encodeMessage(cmd);
-    sendData(encoded).catch(() => {});
+    try {
+      await sendData(encoded);
+    } catch {
+      // transport send failed, will be detected by missed pings
+    }
+
+    const ac = new AbortController();
+    const signal = ac.signal;
+    pendingTimeouts.set(sequence, ac);
 
     setTimeout(() => {
+      if (signal.aborted) return;
       if (pendingPingSeq === sequence) {
         pendingPingSeq = null;
         missedPings++;
@@ -187,8 +192,14 @@ export function createCommandClient(
       };
       pending.set(command.sequence, entry);
 
+      const ac = new AbortController();
+      pendingTimeouts.set(command.sequence, ac);
+      const signal = ac.signal;
+
       function attemptSend() {
+        if (signal.aborted) return;
         if (entry.attempts >= MAX_RETRIES) {
+          pendingTimeouts.delete(command.sequence);
           pending.delete(command.sequence);
           reject(new Error(`Command ${command.sequence} failed after ${MAX_RETRIES} retries`));
           return;
@@ -199,18 +210,16 @@ export function createCommandClient(
         sendData(encoded).catch(() => {});
 
         const rto = rttEstimator.getRto();
-        const timeout = setTimeout(() => {
+        const timer = setTimeout(() => {
+          if (signal.aborted) return;
           if (pending.has(command.sequence)) {
             attemptSend();
           }
         }, rto);
 
-        const checkResolved = () => {
-          if (!pending.has(command.sequence)) {
-            clearTimeout(timeout);
-          }
-        };
-        setTimeout(checkResolved, 100);
+        signal.addEventListener('abort', () => {
+          clearTimeout(timer);
+        }, { once: true });
       }
 
       attemptSend();
@@ -286,7 +295,6 @@ export function createCommandClient(
     handleIncomingResponse,
     getPendingCount,
     getState,
-    signPayload,
     getRttEstimator,
     startHeartbeat,
     stopHeartbeat,
