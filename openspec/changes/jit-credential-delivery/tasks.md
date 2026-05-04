@@ -37,7 +37,12 @@
 - [x] 5.4 Show "Credentials filled" confirmation after successful injection
 - [x] 5.5 Show "No credentials found" when phone returns `not_found`
 
-## 6. Android Companion
+## 6. Android Companion (Phase 4 — blocked on phone-side)
+
+> **Phase boundary**: Tasks 6.x are Android companion app work tracked in
+> `android-companion-app`. They are listed here for cross-reference but
+> implementation is sequenced after the extension-side Phase 1 tasks (1-5) and
+> after the `android-companion-app` vault infrastructure is in place.
 
 - [ ] 6.1 Implement `VaultLookup.kt` — decrypts site credential from Android Keystore-backed encrypted database
 - [ ] 6.2 Implement `CredentialRequestHandler.kt` — receives `credential-request`, routes to vault lookup, returns micro-payload

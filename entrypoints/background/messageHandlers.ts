@@ -28,7 +28,7 @@ import {
 import { cachePrfCredentialId, getCachedPrfCredentialId } from '~/lib/crypto/fallbackAuth';
 import { withTimeout } from '~/lib/asyncUtils';
 import { createSlidingWindowLimiter, createDomainRateLimiter } from '~/lib/rateLimit/slidingWindow';
-import { isReplayAssertion, recordAssertion } from '~/lib/replayProtection';
+import { checkAndReserveAssertion } from '~/lib/replayProtection';
 import { TransportManager } from '~/lib/transport';
 import { getAttestationStatus, refreshRpKeys, getDomCode } from './attestationManager';
 import {
@@ -41,6 +41,7 @@ import {
   getTlsBindingComponents,
   buildChallengeProof,
 } from '~/lib/tlsBinding';
+import { isDomainApproved } from './contentScriptManager';
 import type {
   AttestedCodePayload,
   CredentialRequestPayload,
@@ -56,11 +57,9 @@ import {
   removePendingDomain,
   getPendingDomains,
   getApprovedDomains,
-  isDomainApproved,
   isDomainDeniedInSession,
   addDeniedDomain,
   registerForDomain,
-  unregisterForDomain,
 } from './contentScriptManager';
 import { transmitCredentialToAndroid } from './pairingCoordinator';
 
@@ -184,10 +183,14 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
     }
 
     try {
-      const response = await browser.tabs.sendMessage(tabId, {
-        type: 'detect-transaction',
-        payload,
-      });
+      const response = await withTimeout(
+        browser.tabs.sendMessage(tabId, {
+          type: 'detect-transaction',
+          payload,
+        }),
+        5000,
+        'Transaction detection timed out',
+      );
       return response;
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : 'Detection failed' };
@@ -291,11 +294,9 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
     }
 
     const assertionTuple = `${credentialId}:${clientDataJSON}:${authenticatorData}`;
-    if (isReplayAssertion(assertionTuple)) {
+    if (await checkAndReserveAssertion(assertionTuple)) {
       return { success: false, error: 'Assertion replay detected' };
     }
-
-    recordAssertion(assertionTuple);
 
     const session = await activateSession();
     return {
@@ -373,13 +374,17 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       if (credStatus === 'found' && response.data?.username && response.data?.password) {
         const credBuffer = new TextEncoder().encode(response.data.password as string);
 
-        await browser.tabs.sendMessage(tabId, {
-          type: 'credential-response',
-          payload: {
-            username: response.data.username,
-            password: response.data.password,
-          },
-        });
+        await withTimeout(
+          browser.tabs.sendMessage(tabId, {
+            type: 'credential-response',
+            payload: {
+              username: response.data.username,
+              password: response.data.password,
+            },
+          }),
+          5000,
+          'Credential response timed out',
+        );
 
         credBuffer.fill(0);
       }
@@ -529,49 +534,39 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
     if (!sender.tab?.id) {
       return { success: false, error: 'No sender tab' };
     }
+    authInProgress = true;
+    const tabId = sender.tab.id;
 
     try {
-      const origin = new URL(sender.tab.url ?? '').origin;
+      if (!sender.tab.url) {
+        return { success: false, error: 'Cannot determine origin from sender tab' };
+      }
+      const origin = new URL(sender.tab.url).origin;
       if (!origin || origin === 'null') {
         return { success: false, error: 'Cannot determine origin from sender tab' };
       }
 
-      const controlCode = await getDomCode(sender.tab.id);
+      const controlCode = await getDomCode(tabId);
 
       let pageContent = '';
       try {
-        const scrapeResult = (await withTimeout(
-          browser.tabs.sendMessage(sender.tab.id, {
-            type: 'read-dom',
-            payload: { maxLength: 5000 },
-          }),
-          3000,
-          'Page content scrape timed out',
-        )) as { success?: boolean; text?: string };
-        if (scrapeResult?.success && scrapeResult.text) {
-          pageContent = scrapeResult.text;
+        const domResponse = await withTimeout(
+          browser.tabs.sendMessage(tabId, { type: 'scrape-control-code', payload: {} }),
+          2000,
+          'Page content request timed out',
+        );
+        if (domResponse?.success && domResponse?.data?.text) {
+          pageContent = domResponse.data.text as string;
         }
       } catch {
-        log.warn('[BG] Could not scrape page content from tab', sender.tab.id);
+        pageContent = sender.tab?.url ?? '';
       }
-
-      const tlsBindingHash = await buildChallengeProof(
-        sender.tab.id,
-        controlCode ?? '0000',
-        pageContent,
-      );
+      const tlsBindingHash = await buildChallengeProof(tabId, controlCode ?? '0000', pageContent);
 
       const sessionNonce = generateSessionNonce();
 
       const tlvComponents = serializeChallengeComponents({
-        zkTlsProof: tlsBindingHash,
-        origin,
-        controlCode: controlCode ?? '0000',
-        sessionNonce,
-      });
-
-      const derivedChallenge = await deriveChallenge({
-        zkTlsProof: tlsBindingHash,
+        tlsBinding: tlsBindingHash,
         origin,
         controlCode: controlCode ?? '0000',
         sessionNonce,
@@ -579,11 +574,14 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
 
       const rpId = chrome.runtime.id;
 
-      const tlsBinding = await getTlsBindingComponents(
-        sender.tab.id,
-        controlCode ?? '0000',
-        pageContent,
-      );
+      const derivedChallenge = await deriveChallenge({
+        tlsBinding: tlsBindingHash,
+        origin,
+        controlCode: controlCode ?? '0000',
+        sessionNonce,
+      });
+
+      const tlsBinding = await getTlsBindingComponents(tabId, controlCode ?? '0000', pageContent);
 
       await browser.storage.session.set({
         'pending:assertion': {
@@ -599,13 +597,19 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
         },
       });
 
-      authInProgress = true;
-
       const challengeB64 = btoa(String.fromCharCode(...Array.from(derivedChallenge)));
       const authUrl = chrome.runtime.getURL(
         `auth.html?mode=challenge-assert&challenge=${encodeURIComponent(challengeB64)}`,
       );
-      await browser.tabs.create({ url: authUrl, active: false });
+      const tab = await browser.tabs.create({ url: authUrl, active: false });
+      authTabId = tab.id ?? null;
+
+      clearAuthTimeout();
+      authTimeoutHandle = setTimeout(() => {
+        if (authInProgress) {
+          resetAuthInProgress('timeout');
+        }
+      }, AUTH_TIMEOUT_MS);
 
       return {
         success: true,
@@ -613,6 +617,7 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       };
     } catch (err) {
       log.error('Failed to begin challenge assertion:', err);
+      resetAuthInProgress('begin-challenge-assertion error');
       return {
         success: false,
         error: err instanceof Error ? err.message : 'Assertion initiation failed',
@@ -656,15 +661,9 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
 
   'domain-denied': async (payload) => {
     const { domain } = payload as { domain: string };
-    const currentlyApproved = await isDomainApproved(domain);
-    if (currentlyApproved) {
-      await unregisterForDomain(domain);
-      log.info('[BG] Domain approval revoked:', domain);
-    } else {
-      await addDeniedDomain(domain);
-      await removePendingDomain(domain);
-      log.info('[BG] Domain denied:', domain);
-    }
+    await addDeniedDomain(domain);
+    await removePendingDomain(domain);
+    log.info('[BG] Domain denied:', domain);
     return { success: true, data: { domain } };
   },
 
@@ -679,7 +678,7 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
   },
 
   'assertion-complete': async (payload) => {
-    authInProgress = false;
+    clearAuthTimeout();
     const data = payload as {
       status: string;
       error?: string;
@@ -698,18 +697,23 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       await browser.storage.session.set({
         'assertion:result': { status: data.status, error: data.error ?? 'Assertion failed' },
       });
+      resetAuthInProgress('assertion-complete not verified');
       return { success: false, error: data.error ?? 'Assertion failed' };
     }
 
     if (
       !data.credentialId ||
       !data.tlvComponents ||
+      !data.sessionNonce ||
+      !data.origin ||
+      !data.controlCode ||
       !data.authenticatorData ||
       !data.signature ||
       !data.clientDataJSON
     ) {
       const error = 'Incomplete assertion data';
       await browser.storage.session.set({ 'assertion:result': { status: 'error', error } });
+      resetAuthInProgress('assertion-complete incomplete data');
       return { success: false, error };
     }
 
@@ -744,6 +748,7 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       });
       await browser.storage.session.remove('pending:assertion');
 
+      resetAuthInProgress('assertion-complete success');
       return { success: true, data: { status: 'verified' } };
     } catch (err) {
       log.error('Failed to transmit assertion:', err);
@@ -753,6 +758,7 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
           error: err instanceof Error ? err.message : 'Transmission failed',
         },
       });
+      resetAuthInProgress('assertion-complete transmission error');
       return { success: false, error: err instanceof Error ? err.message : 'Transmission failed' };
     }
   },
@@ -847,6 +853,32 @@ function isValidMessage(message: unknown): message is { type: string; payload?: 
   );
 }
 
+let authInProgress = false;
+let authTabId: number | null = null;
+let authTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
+
+const AUTH_TIMEOUT_MS = 120_000;
+
+function clearAuthTimeout(): void {
+  if (authTimeoutHandle !== null) {
+    clearTimeout(authTimeoutHandle);
+    authTimeoutHandle = null;
+  }
+}
+
+function resetAuthInProgress(reason: string): void {
+  clearAuthTimeout();
+  authInProgress = false;
+  authTabId = null;
+  log.info('[authInProgress] Reset:', reason);
+}
+
+browser.tabs.onRemoved.addListener((tabId) => {
+  if (tabId === authTabId) {
+    resetAuthInProgress('auth tab closed');
+  }
+});
+
 const MFA_RATE_LIMIT_WINDOW_MS = 60_000;
 const MFA_RATE_LIMIT_MAX = 3;
 const mfaRateLimiter = createSlidingWindowLimiter(MFA_RATE_LIMIT_WINDOW_MS, MFA_RATE_LIMIT_MAX);
@@ -857,10 +889,8 @@ const credentialRateLimiter = createDomainRateLimiter(CREDENTIAL_RATE_LIMIT_MS);
 let transportManager: TransportManager | null = null;
 let transportManagerInitPromise: Promise<void> | null = null;
 
-let authInProgress = false;
-
 export function clearAuthInProgress(): void {
-  authInProgress = false;
+  resetAuthInProgress('clearAuthInProgress');
 }
 
 export function getTransportManager(): TransportManager | null {

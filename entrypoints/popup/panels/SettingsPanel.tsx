@@ -37,11 +37,19 @@ export function SettingsPanel() {
 
   const handleRevoke = useCallback(
     async (domain: string) => {
-      await browser.runtime.sendMessage({
-        type: 'domain-denied',
-        payload: { domain },
-      });
-      setApprovedDomains(approvedDomains.filter((d) => d.domain !== domain));
+      try {
+        const response = await browser.runtime.sendMessage({
+          type: 'domain-denied',
+          payload: { domain },
+        });
+        if (response?.success) {
+          setApprovedDomains(approvedDomains.filter((d) => d.domain !== domain));
+        } else {
+          setLoadError(response?.error ?? 'Failed to revoke domain');
+        }
+      } catch {
+        setLoadError('Failed to connect to background worker');
+      }
     },
     [approvedDomains, setApprovedDomains],
   );

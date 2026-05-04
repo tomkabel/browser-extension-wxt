@@ -3,7 +3,7 @@ import { getTransportManager } from './messageHandlers';
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
 
-const OFFSCREEN_URL = 'offscreen-webrtc.html';
+export const OFFSCREEN_URL = 'offscreen-webrtc.html';
 let keepalivePort: chrome.runtime.Port | null = null;
 let offscreenCreated = false;
 let connectionState: ConnectionState = 'disconnected';

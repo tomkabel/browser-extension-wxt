@@ -1,8 +1,11 @@
+/// <reference types="w3c-web-usb" />
 import { io, type Socket } from 'socket.io-client';
+import { BackpressureQueue } from '~/lib/channel/backpressureQueue';
 
 export interface TurnCredentials {
   username: string;
-  password: string;
+  credential?: string;
+  password?: string;
   ttl: number;
   urls: string[];
   stunUrls: string[];
@@ -15,8 +18,13 @@ let pc: RTCPeerConnection | null = null;
 let dataChannel: RTCDataChannel | null = null;
 let socket: Socket | null = null;
 let sasCode: string | null = null;
+let nonce: number[] | null = null;
+let extensionStaticKey: number[] | null = null;
 let keepalivePort: chrome.runtime.Port | null = null;
 let turnCredentials: TurnCredentials | null = null;
+let usbDevice: USBDevice | null = null;
+let pendingSdpOffer: RTCSessionDescriptionInit | null = null;
+let backpressureQueue: BackpressureQueue | null = null;
 
 const RECONNECT_BACKOFF_INITIAL = 1000;
 const RECONNECT_BACKOFF_MAX = 30_000;
@@ -88,7 +96,8 @@ export function buildIceServers(creds: TurnCredentials | null): RTCIceServer[] {
       if (validUrls.length > 0) {
         const turnConfig: RTCIceServer = { urls: validUrls };
         if (creds.username) turnConfig.username = creds.username;
-        if (creds.password) turnConfig.credential = creds.password;
+        if (creds.credential) turnConfig.credential = creds.credential;
+        else if (creds.password) turnConfig.credential = creds.password;
         servers.push(turnConfig);
       }
     }
@@ -150,12 +159,15 @@ function setupPeerConnection(relayOnly = false): void {
     iceCandidatePoolSize: 0,
   });
 
+  // SCTP ordered delivery ensures command sequencing; maxPacketLifeTime drops stale retransmissions
   dataChannel = pc.createDataChannel('smartid2', {
     ordered: true,
+    maxPacketLifeTime: 3000,
     negotiated: false,
     id: 0,
   });
 
+  backpressureQueue = new BackpressureQueue();
   dataChannel.binaryType = 'arraybuffer';
 
   dataChannel.onopen = () => {
@@ -273,7 +285,7 @@ function scheduleReconnect(): void {
 
     closePeerConnection();
     setupPeerConnection();
-    connectSignaling(sasCode!);
+    connectSignaling(sasCode!, nonce ?? undefined, extensionStaticKey ?? undefined);
   }, actualDelay);
 }
 
@@ -288,8 +300,10 @@ function closePeerConnection(): void {
   }
 }
 
-function connectSignaling(code: string): void {
+function connectSignaling(code: string, roomNonce?: number[], extStaticKey?: number[]): void {
   sasCode = code;
+  nonce = roomNonce ?? null;
+  extensionStaticKey = extStaticKey ?? null;
 
   socket = io(SIGNALING_SERVER_URL, {
     transports: ['websocket', 'polling'],
@@ -300,6 +314,17 @@ function connectSignaling(code: string): void {
 
   socket.on('connect', () => {
     log('Signaling connected');
+
+    if (nonce && extensionStaticKey) {
+      const roomId = `smartid2::${code}`;
+      socket?.emit('register-room', {
+        sasCode: code,
+        nonce,
+        extensionStaticKey,
+        roomId,
+      });
+    }
+
     socket?.emit('join-room', code);
   });
 
@@ -350,10 +375,39 @@ async function createOffer(): Promise<void> {
   try {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
+    pendingSdpOffer = offer;
     socket?.emit('sdp-offer', sasCode, offer);
   } catch (err) {
     log(`createOffer error: ${err}`);
   }
+}
+
+async function generateQrSdp(): Promise<RTCSessionDescriptionInit | null> {
+  if (!pc) return null;
+  try {
+    const offer = await pc.createOffer({ iceRestart: false });
+    await pc.setLocalDescription(offer);
+    pendingSdpOffer = offer;
+    const iceCandidates: string[] = [];
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        iceCandidates.push(event.candidate.candidate);
+      }
+    };
+    await new Promise<void>((resolve) => setTimeout(resolve, 2000));
+    return {
+      type: offer.type,
+      sdp: compressSdp(offer.sdp ?? ''),
+      candidates: iceCandidates,
+    } as unknown as RTCSessionDescriptionInit;
+  } catch (err) {
+    log(`generateQrSdp error: ${err}`);
+    return null;
+  }
+}
+
+function compressSdp(sdp: string): string {
+  return btoa(new TextEncoder().encode(sdp).reduce((acc, b) => acc + String.fromCharCode(b), ''));
 }
 
 function sendData(data: Uint8Array): boolean {
@@ -362,6 +416,84 @@ function sendData(data: Uint8Array): boolean {
     return true;
   }
   return false;
+}
+
+async function connectWebUsb(): Promise<boolean> {
+  try {
+    if (!navigator.usb) {
+      log('WebUSB not available in this browser');
+      return false;
+    }
+
+    const device = await navigator.usb.requestDevice({
+      filters: [
+        { vendorId: 0x18d1 }, // Google
+        { vendorId: 0x04e8 }, // Samsung
+        { vendorId: 0x22b8 }, // Motorola
+        { vendorId: 0x0fce }, // Sony
+        { vendorId: 0x2b4c }, // OnePlus
+      ],
+    });
+
+    await device.open();
+    await device.selectConfiguration(1);
+    await device.claimInterface(0);
+
+    usbDevice = device;
+    log(`WebUSB device connected: ${device.productName}`);
+
+    notifyBackground('transport-changed', {
+      previous: null,
+      current: 'usb',
+      reason: 'WebUSB device connected',
+    });
+
+    startUsbReadLoop(device);
+    return true;
+  } catch (err) {
+    log(`WebUSB connection failed: ${err}`);
+    return false;
+  }
+}
+
+async function startUsbReadLoop(device: USBDevice): Promise<void> {
+  while (device.opened) {
+    try {
+      const result = await device.transferIn(0x81, 16384);
+      if (result.data && result.data.byteLength > 0) {
+        const data = new Uint8Array(result.data.buffer);
+        chrome.runtime
+          .sendMessage({
+            type: 'webrtc-data-received',
+            payload: { data: Array.from(data) },
+          })
+          .catch(() => {});
+      }
+    } catch (err) {
+      log(`USB read error: ${err}`);
+      notifyBackground('transport-changed', {
+        previous: 'usb',
+        current: null,
+        reason: 'USB read failed',
+      });
+      break;
+    }
+  }
+}
+
+async function sendViaUsb(data: Uint8Array): Promise<boolean> {
+  if (!usbDevice?.opened) return false;
+  try {
+    const buf = data.buffer.slice(
+      data.byteOffset,
+      data.byteOffset + data.byteLength,
+    ) as ArrayBuffer;
+    await usbDevice.transferOut(0x01, buf);
+    return true;
+  } catch (err) {
+    log(`USB send error: ${err}`);
+    return false;
+  }
 }
 
 function setupKeepalive(): void {
@@ -390,6 +522,10 @@ function disconnect(): void {
     dataChannel.close();
     dataChannel = null;
   }
+  if (backpressureQueue) {
+    backpressureQueue.clear();
+    backpressureQueue = null;
+  }
   if (pc) {
     pc.close();
     pc = null;
@@ -398,12 +534,19 @@ function disconnect(): void {
     socket.disconnect();
     socket = null;
   }
+  if (usbDevice?.opened) {
+    usbDevice.close().catch(() => {});
+    usbDevice = null;
+  }
   if (keepalivePort) {
     keepalivePort.disconnect();
     keepalivePort = null;
   }
   sasCode = null;
+  nonce = null;
+  extensionStaticKey = null;
   turnCredentials = null;
+  pendingSdpOffer = null;
   reconnectAttempt = 0;
 }
 
@@ -411,23 +554,78 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   switch (message.type) {
     case 'webrtc-start-pairing':
       (async () => {
-        sasCode = message.payload.sasCode as string;
+        const payload = message.payload as {
+          sasCode: string;
+          nonce?: number[];
+          extensionStaticKey?: number[];
+        };
+        sasCode = payload.sasCode;
+        nonce = payload.nonce ?? null;
+        extensionStaticKey = payload.extensionStaticKey ?? null;
         turnCredentials = await fetchTurnCredentials();
         if (turnCredentials) {
           scheduleCredsRefresh(turnCredentials.ttl);
         }
         setupPeerConnection();
-        connectSignaling(sasCode);
+        connectSignaling(sasCode, nonce ?? undefined, extensionStaticKey ?? undefined);
       })().catch((err) => log(`Start pairing error: ${err}`));
       sendResponse({ success: true });
       break;
+
+    case 'webrtc-start-pairing-offerless':
+      (async () => {
+        const payload = message.payload as {
+          sasCode: string;
+          nonce?: number[];
+          extensionStaticKey?: number[];
+        };
+        sasCode = payload.sasCode;
+        nonce = payload.nonce ?? null;
+        extensionStaticKey = payload.extensionStaticKey ?? null;
+        turnCredentials = await fetchTurnCredentials();
+        if (turnCredentials) {
+          scheduleCredsRefresh(turnCredentials.ttl);
+        }
+        setupPeerConnection();
+        const sdp = await generateQrSdp();
+        chrome.runtime
+          .sendMessage({
+            type: 'webrtc-sdp-for-qr',
+            payload: { sasCode, sdp },
+          })
+          .catch(() => {});
+        connectSignaling(sasCode, nonce ?? undefined, extensionStaticKey ?? undefined);
+      })().catch((err) => log(`Start pairing error: ${err}`));
+      sendResponse({ success: true });
+      break;
+
+    case 'webrtc-connect-usb':
+      connectWebUsb()
+        .then((ok) => sendResponse({ success: ok }))
+        .catch((err) => sendResponse({ success: false, error: String(err) }));
+      return true;
+
     case 'webrtc-send':
-      if (message.payload?.data) {
+      if (usbDevice?.opened) {
+        sendViaUsb(new Uint8Array(message.payload.data as number[]));
+        break;
+      }
+      if (message.payload?.data && dataChannel && backpressureQueue) {
+        const data = new Uint8Array(message.payload.data as number[]);
+        backpressureQueue
+          .send(data, dataChannel)
+          .catch((err) => log(`Backpressure send error: ${err}`));
+      } else if (message.payload?.data) {
         sendData(new Uint8Array(message.payload.data as number[]));
       }
       break;
+
     case 'webrtc-disconnect':
       disconnect();
+      break;
+
+    case 'webrtc-get-sdp':
+      sendResponse({ sdp: pendingSdpOffer });
       break;
   }
   return false;
@@ -435,4 +633,4 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
 setupKeepalive();
 
-log('Offscreen WebRTC initialized');
+log('Offscreen WebRTC + WebUSB initialized');

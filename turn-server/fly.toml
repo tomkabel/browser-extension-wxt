@@ -1,14 +1,12 @@
-# Fly.io deployment config for SmartID2 TURN server
-# Deployed as a separate Fly app from the signaling server.
-# UDP 3478 for TURN/UDP, TCP 443 for TURN/TCP firewall traversal.
+# fly.toml app configuration file generated for smartid2-turn on 2026-05-04T07:49:08+03:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
 
-app = "smartid2-turn"
+app = 'smartid2-turn'
+primary_region = 'ams'
 
 [build]
-  dockerfile = "Dockerfile"
-
-[env]
-  EXTERNAL_IP = "fly-global"  # Replaced at runtime by Fly.io's anycast IP
 
 [[services]]
   protocol = "udp"
@@ -16,6 +14,12 @@ app = "smartid2-turn"
 
   [[services.ports]]
     port = 3478
+    protocol = "udp"
+
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
 
 [[services]]
   protocol = "tcp"
@@ -23,6 +27,12 @@ app = "smartid2-turn"
 
   [[services.ports]]
     port = 3478
+    protocol = "tcp"
+
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
 
 [[services]]
   protocol = "tcp"
@@ -30,8 +40,14 @@ app = "smartid2-turn"
 
   [[services.ports]]
     port = 443
+    protocol = "tcp"
+
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
 
 [[vm]]
-  memory = "256mb"
-  cpu_kind = "shared"
+  memory = '1gb'
+  cpu_kind = 'shared'
   cpus = 1

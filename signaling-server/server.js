@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { randomBytes, createHmac, timingSafeEqual } from 'node:crypto';
+import { randomBytes, createHmac, createHash, timingSafeEqual } from 'node:crypto';
 import { Server } from 'socket.io';
 
 const PORT = parseInt(process.env.PORT ?? '7333', 10);
@@ -15,6 +15,7 @@ const SAS_EMOJI_RE = /^[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]{3
 
 const rooms = new Map();
 const pendingCredentials = new Map();
+const roomMetadata = new Map();
 
 function getRoom(roomId) {
   let room = rooms.get(roomId);
@@ -37,7 +38,27 @@ function scheduleCleanup(roomId, room) {
   room.timeout = setTimeout(() => {
     rooms.delete(roomId);
     pendingCredentials.delete(roomId);
+    roomMetadata.delete(roomId);
   }, ROOM_TTL_MS);
+}
+
+function verifyCommitment(metadata, commitment) {
+  if (!commitment || typeof commitment !== 'string') return false;
+  if (!metadata.extensionStaticKey || !Array.isArray(metadata.extensionStaticKey)) return false;
+  if (!metadata.nonce || !Array.isArray(metadata.nonce)) return false;
+  if (metadata.nonce.length !== 32) return false;
+  if (typeof metadata.sasCode !== 'string') return false;
+
+  const hash = createHash('sha256');
+  const extKey = Buffer.from(metadata.extensionStaticKey);
+  const nonceBuf = Buffer.from(metadata.nonce);
+  const sasBuf = Buffer.from(metadata.sasCode, 'utf-8');
+  hash.update(Buffer.concat([extKey, nonceBuf, sasBuf]));
+  const expected = hash.digest('base64url');
+  const commitmentBuf = Buffer.from(commitment);
+  const expectedBuf = Buffer.from(expected);
+  if (commitmentBuf.length !== expectedBuf.length) return false;
+  return timingSafeEqual(commitmentBuf, expectedBuf);
 }
 
 function isValidSasCode(sasCode) {
@@ -97,6 +118,42 @@ const io = new Server(httpServer, {
 });
 
 io.on('connection', (socket) => {
+  socket.on('register-room', (data) => {
+    const { sasCode, nonce, extensionStaticKey, roomId } = data;
+    if (!sasCode || !isValidSasCode(sasCode) || !roomId) {
+      socket.emit('error', { message: 'Invalid register-room data' });
+      return;
+    }
+    if (!Array.isArray(nonce) || nonce.length !== 32) {
+      socket.emit('error', { message: 'Invalid nonce: must be 32-byte array' });
+      return;
+    }
+    if (!Array.isArray(extensionStaticKey) || extensionStaticKey.length < 32) {
+      socket.emit('error', {
+        message: 'Invalid extensionStaticKey: must be at least 32-byte array',
+      });
+      return;
+    }
+
+    roomMetadata.set(roomId, {
+      sasCode,
+      nonce,
+      extensionStaticKey,
+      createdAt: Date.now(),
+    });
+
+    const room = getRoom(roomId);
+    clearTimeout_(room);
+    socket.join(roomId);
+    room.peers.add(socket.id);
+
+    const turnCreds = pendingCredentials.get(roomId);
+    socket.emit('room-joined', {
+      peerCount: room.peers.size,
+      turnCredentials: turnCreds ?? undefined,
+    });
+  });
+
   socket.on('join-room', (sasCode) => {
     if (!sasCode || !isValidSasCode(sasCode)) {
       socket.emit('error', { message: 'Invalid room code' });
@@ -104,6 +161,19 @@ io.on('connection', (socket) => {
     }
 
     const roomId = ROOM_PREFIX + sasCode;
+    const metadata = roomMetadata.get(roomId);
+    if (!metadata) {
+      socket.emit('error', { error: 'room_not_ready' });
+      socket.disconnect(true);
+      return;
+    }
+    const commitment = socket.handshake.query?.commitment;
+    if (!commitment || !verifyCommitment(metadata, commitment)) {
+      socket.emit('error', { error: 'invalid_commitment' });
+      socket.disconnect(true);
+      return;
+    }
+
     const room = getRoom(roomId);
     clearTimeout_(room);
 

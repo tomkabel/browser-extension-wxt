@@ -9,6 +9,7 @@ coverage/
 *.apk
 *.key
 credentials.*
+.env
 .env.local
 .env.production
 signaling-server/node_modules/

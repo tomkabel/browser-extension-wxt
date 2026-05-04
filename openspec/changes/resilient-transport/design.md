@@ -1,54 +1,155 @@
 ## Context
 
-The current architecture assumes both devices are on the same local network (mDNS). This fails in:
-- Corporate Wi-Fi with Layer 2 AP Isolation (devices can't see each other)
-- Aggressive firewalls that block UDP
-- Cellular hotspots (different NATs)
-- Coffee shop/public Wi-Fi with client isolation
+WebRTC-based transport is the primary communication channel between the browser extension and the Android vault. Currently it has three fragile dependencies: a cloud signaling server for SDP exchange, a TURN credentials HTTP endpoint, and a 2-second USB polling loop that drains battery.
 
-ARCHITECTURE.md Phase 2 requires an ICE candidate waterfall: mDNS (local) → TURN/UDP (relayed) → TURN/TCP 443 (firewall-traversing). The goal is 99.99% connection success with zero user-visible errors.
+The resilient transport redesign eliminates all three:
+
+1. QR-embedded SDP eliminates the signaling server from the pairing critical path
+2. Static TURN credentials eliminate the `/turn-credentials` HTTP dependency
+3. Event-driven USB detection eliminates polling (replaced by native host push)
+
+### Connection Architecture (After)
+
+```
+Pairing:
+  Extension → generates SDP offer → compresses → encodes in QR → phone scans
+  Phone → decompresses SDP → creates answer → establishes WebRTC directly
+  [Signaling server NOT needed for pairing]
+
+  Fallback: if QR SDP fails (ICE timeout after 15s) → use signaling server
+
+TURN:
+  Primary: fetch ephemeral credentials from signaling server (existing)
+  Fallback: use static embedded credentials (always available)
+
+USB Detection:
+  Go native host detects hotplug → sends "device-attached" via native messaging
+  Extension receives push → switches to USB transport
+  [No polling]
+
+Idle Detection (WebRTC only):
+  chrome.idle.onStateChanged → if user active, phone likely in range → start WebRTC connect
+```
 
 ## Goals / Non-Goals
 
 **Goals:**
-- Deploy a TURN server on port 443 (TCP) to traverse all firewalls
-- Configure WebRTC to try local first, then relay, without user intervention
-- Provide connection quality metrics (dev mode only)
-- Automatic retry with exponential backoff on transient failures
+- Eliminate signaling server from pairing critical path (QR-embedded SDP)
+- Eliminate /turn-credentials HTTP dependency (static TURN fallback)
+- Eliminate USB polling (event-driven native host push)
+- Maintain backward compatibility (signaling server still available as fallback)
+- Support WebRTC Perfect Negotiation (polite/impolite role)
 
 **Non-Goals:**
-- Self-hosted TURN on user's own infrastructure
-- TURN over TLS/TCP 443 with a valid certificate (use self-signed; DTLS inside provides security)
-- Bandwidth limiting or QoS management (TURN relay uses minimal bandwidth for credential-sized messages)
+- Remove signaling server entirely (still needed for late-joining peers, TURN refresh)
+- Remove TURN credentials endpoint (static credentials are fallback only)
+- Replace Go native host (event-driven push is additive)
 
 ## Decisions
 
-### Decision 1: TURN server — coturn on Fly.io
+### Decision 1: QR-Embedded SDP
 
-Use coturn (industry-standard open-source TURN/STUN server) deployed on Fly.io. Fly.io supports UDP and TCP on the same app, which is critical for the TCP 443 fallback.
+The extension generates a WebRTC offer, compresses it, and embeds in the QR:
 
-**Why coturn**: Battle-tested, supports both UDP and TCP, ephemeral credentials via REST API, lightweight (~20MB memory).
-**Why Fly.io**: Supports UDP on custom ports, free tier covers dev needs, Dockerfile-friendly.
+```typescript
+// Extension side (offscreen document)
+const offer = await pc.createOffer();
+await pc.setLocalDescription(offer);
+const compressed = await compressStream(
+  JSON.stringify({ sdp: offer.sdp, type: offer.type, ice: turnCredentials })
+);
+const pairingUrl = `smartid2-pair://${sasCode}?sdp=${encodeURIComponent(compressed)}`;
 
-### Decision 2: Ephemeral TURN credentials via signaling server
+// Phone side (Android)
+const qrData = decodeQR(url);
+const decompressed = await decompressStream(qrData.sdp);
+const offer = new RTCSessionDescription(JSON.parse(decompressed));
+await pc.setRemoteDescription(offer);
+const answer = await pc.createAnswer();
+await pc.setLocalDescription(answer);
+// Send answer back via data channel (already open after ICE)
+```
 
-The signaling server serves an authenticated `/turn-credentials` endpoint that returns a time-limited (5-minute) username/password for the TURN server. The offscreen WebRTC document fetches credentials just before creating the `RTCPeerConnection`.
+Both sides implement WebRTC Perfect Negotiation roles:
+- Extension is the **polite peer** (rolls back on conflict)
+- Phone is the **impolite peer** (always pushes its latest state)
 
-**Why**: Static credentials are a security risk. Ephemeral HMAC-based credentials (coturn's `--use-auth-secret` mode) expire after 5 minutes and are single-use.
+### Decision 2: Static TURN Credential Fallback
 
-### Decision 3: ICE waterfall ordering — local-first, then relay
+Generate a static TURN credential with long TTL and embed in the extension:
 
-The `RTCPeerConnection` is configured with:
-1. `iceTransportPolicy: 'all'` (not 'relay' — try local first)
-2. ICE candidate gathering is NOT gated by policy; instead, we use a 3-second timer:
-   - If a local (host/srflx) candidate pair succeeds within 3s → use it
-   - Otherwise, switch mode to prefer relay candidates
-   - Auto-fallback to TCP if UDP relay fails to establish within 5s
+```typescript
+const STATIC_TURN_FALLBACK = {
+  urls: ['turns:smartid2-turn.fly.dev:443'],
+  username: 'static-v1',
+  credential: process.env.STATIC_TURN_CREDENTIAL,
+};
+```
 
-**Why**: Chrome's built-in ICE prioritization already prefers local candidates. The timer-based approach avoids the pathological case where ICE gets stuck trying a local candidate that will never work (AP isolation).
+Rotation strategy:
+- Credential generated with 45-day TTL
+- New credential embedded in each extension build (auto-updated via Chrome Web Store)
+- 15-day overlap window ensures no gap during update lag
+- Old credential remains valid until its TTL expires (no immediate invalidation)
+
+### Decision 3: Event-Driven USB Detection
+
+The Go native host (apps/native-host/) already has hotplug monitoring in `aoa/hotplug.go`:
+
+```go
+func monitorHotplug(ctx *gousb.Context) {
+  events := ctx.WatchDeviceChanges()
+  for event := range events {
+    if event.Type == gousb.DeviceAdded && isAoaCapable(event.Desc) {
+      sendNativeMessage(Msg{Type: "device-attached", Vendor: event.Desc.Vendor})
+    }
+    if event.Type == gousb.DeviceRemoved {
+      sendNativeMessage(Msg{Type: "device-removed"})
+    }
+  }
+}
+```
+
+The extension listens for these messages:
+
+```typescript
+// In TransportManager
+async startEventDrivenUsbDetection(): Promise<void> {
+  this.usbPort = chrome.runtime.connectNative(NATIVE_HOST_NAME);
+  this.usbPort.onMessage.addListener((msg) => {
+    if (msg.type === 'device-attached') {
+      this.handleUsbAttached();
+    } else if (msg.type === 'device-removed') {
+      this.handleUsbRemoved();
+    }
+  });
+}
+```
+
+For environments without the native host (WebRTC-only), use `chrome.idle.onStateChanged` as a heuristic proxy:
+
+```typescript
+chrome.idle.onStateChanged.addListener((newState) => {
+  if (newState === 'active') {
+    // User is at the computer — phone is likely in range
+    this.attemptWebRtcConnection();
+  }
+});
+```
+
+### Decision 4: Hybrid ICE — SDP Candidates + Trickle + Waterfall
+
+The QR-embedded SDP contains full ICE candidates from the extension. The phone adds its own candidates via trickle ICE over the data channel (already open after SDP exchange). The ICE waterfall tries three phases:
+1. Phase 1 (0-3s): Local candidates only (mDNS, host)
+2. Phase 2 (3-10s): TURN/UDP relay
+3. Phase 3 (10-15s): TURN/TCP 443 relay
+
+If all phases fail after 15s, fall back to signaling server SDP exchange.
 
 ## Risks / Trade-offs
 
-- [Risk] TURN server becomes a single point of failure → Mitigation: deploy a secondary TURN instance on a different region; add it as a backup ICE server
-- [Risk] TCP 443 TURN traffic could be rate-limited by corporate proxies (looks like long-lived HTTPS) → Mitigation: implement WebSocket reconnection with jittered backoff
-- [Risk] TURN bandwidth costs at scale → Mitigation: each credential payload is <1KB; 1000 users/day = ~30MB/month of relay traffic (negligible)
+- [Risk] QR code size limit — SDP offers can be 5-10KB. QR codes at version 40 can hold ~4KB (binary mode). Use compression (pako/deflate) which typically reduces SDP by 60-70%. If still too large, encode only the SDP `type` + `sdp` fields (omit ICE candidates, which can be trickled after connection).
+- [Risk] WebRTC Perfect Negotiation complexity — Both sides must implement the polite/impolite rollback logic correctly. A bug causes infinite negotiation loops. Mitigation: use a simple flag (`isPolite`) and test with deliberate SDP conflicts.
+- [Risk] Static TURN credential is less secure — 45-day credential reduces the window but doesn't eliminate it. Mitigation: only used as fallback; primary path still uses ephemeral credentials. Rotate on every build.
+- [Risk] Native host may not be installed (WebRTC-only environments) — Event-driven USB is optional; polling is disabled only when native host push is available. Fallback to `chrome.idle` heuristic if no native host.
+- [Trade-off] QR-embedded SDP increases QR scan time — SDP compression/decompression adds ~100ms. The benefit (no server round-trip, offline pairing) outweighs this.

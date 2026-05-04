@@ -2,23 +2,23 @@ import { uint8ArrayToArrayBuffer } from '~/lib/asyncUtils';
 
 export interface ChallengeComponents {
   version: number;
-  zkTlsProof: Uint8Array;
+  tlsBinding: Uint8Array;
   origin: string;
   controlCode: string;
   sessionNonce: Uint8Array;
 }
 
 export interface ChallengeDerivationInput {
-  zkTlsProof: Uint8Array;
+  tlsBinding: Uint8Array;
   origin: string;
   controlCode: string;
   sessionNonce: Uint8Array;
 }
 
-const VERSION = 0x01;
+const VERSION = 0x02;
 const CONTROL_CODE_LENGTH = 0x04;
 const NONCE_LENGTH = 32;
-const MAX_PROOF_LENGTH = 4096;
+const MAX_TLS_BINDING_LENGTH = 4096;
 const PADDING_BLOCK = 32;
 
 function computePaddingLength(currentLength: number): number {
@@ -29,12 +29,12 @@ function computePaddingLength(currentLength: number): number {
 
 export function serializeChallengeComponents(input: ChallengeDerivationInput): Uint8Array {
   const originBytes = new TextEncoder().encode(input.origin);
-  const proofBytes = input.zkTlsProof;
+  const proofBytes = input.tlsBinding;
   const controlCodeBytes = new TextEncoder().encode(input.controlCode);
   const nonce = input.sessionNonce;
 
-  if (proofBytes.length > MAX_PROOF_LENGTH) {
-    throw new Error(`zkTLS proof exceeds maximum length of ${MAX_PROOF_LENGTH} bytes`);
+  if (proofBytes.length > MAX_TLS_BINDING_LENGTH) {
+    throw new Error(`TLS binding exceeds maximum length of ${MAX_TLS_BINDING_LENGTH} bytes`);
   }
   if (controlCodeBytes.length !== 4) {
     throw new Error('Control code must be exactly 4 ASCII digits');
@@ -87,21 +87,23 @@ export function parseChallengeComponents(serialized: Uint8Array): ChallengeCompo
 
   const version = serialized[offset];
   if (version === undefined) throw new Error('Truncated: missing version byte');
-  if (version !== VERSION) {
-    throw new Error(`Unsupported challenge version: ${version}`);
+  if (version !== 0x01 && version !== 0x02) {
+    throw new Error(
+      `Unsupported challenge version: ${version}. Please update both extension and Android companion app.`,
+    );
   }
   offset += 1;
 
   if (offset + 2 > serialized.length) {
-    throw new Error('Truncated: missing zkTLS proof length');
+    throw new Error('Truncated: missing TLS binding length');
   }
   const proofLength = (serialized[offset]! << 8) | serialized[offset + 1]!;
   offset += 2;
 
   if (offset + proofLength > serialized.length) {
-    throw new Error('Truncated: zkTLS proof exceeds available data');
+    throw new Error('Truncated: TLS binding exceeds available data');
   }
-  const zkTlsProof = serialized.slice(offset, offset + proofLength);
+  const tlsBinding = serialized.slice(offset, offset + proofLength);
   offset += proofLength;
 
   if (offset + 2 > serialized.length) {
@@ -136,7 +138,7 @@ export function parseChallengeComponents(serialized: Uint8Array): ChallengeCompo
 
   return {
     version: version!,
-    zkTlsProof,
+    tlsBinding,
     origin,
     controlCode,
     sessionNonce,

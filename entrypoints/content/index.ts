@@ -59,7 +59,10 @@ function emitLoginForm(): void {
 
 function scheduleLoginDetection(): void {
   if (loginDebounceTimer) clearTimeout(loginDebounceTimer);
-  loginDebounceTimer = setTimeout(emitLoginForm, 500);
+  loginDebounceTimer = setTimeout(() => {
+    if (!checkedApproval) return;
+    emitLoginForm();
+  }, 500);
 }
 
 function startMutationObserver(): void {
@@ -185,11 +188,10 @@ export default defineContentScript({
     });
 
     setTimeout(() => {
-      if (!checkedApproval) {
-        isApprovedDomain = false;
-        checkedApproval = true;
-        if (!loginFormEmitted) emitLoginForm();
-      }
+      if (checkedApproval) return;
+      isApprovedDomain = false;
+      checkedApproval = true;
+      if (!loginFormEmitted) emitLoginForm();
     }, 2000);
 
     startMutationObserver();
@@ -215,7 +217,9 @@ export default defineContentScript({
         const newRegistrableDomain = newParsed.success
           ? newParsed.data.registrableDomain
           : url.hostname;
+        checkedApproval = false;
         checkDynamicApproval(newRegistrableDomain).then((approved) => {
+          checkedApproval = true;
           isApprovedDomain = approved;
           if (approved) {
             setTimeout(reportDomainTransaction, 1000);

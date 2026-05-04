@@ -1,2 +1,14 @@
 schema: spec-driven
 created: 2026-05-04
+updated: 2026-05-04
+specs:
+  - specs/native-host-ci
+  - specs/mock-native-host
+  - specs/usb-transport-e2e
+context: |
+  Quality gate for the Go Native Messaging Host at apps/native-host/ leading to its
+  replacement: WebUSB in the offscreen document. Adds go test, go vet, staticcheck
+  to the CI pipeline. Creates a Node.js mock native host for E2E testing. Implements
+  WebUSB transport (navigator.usb) with AOA bulk transfer to eliminate the 400-line
+  Go binary. A minimal ~30-line Go shim is preserved for AOA mode negotiation only.
+  The WebUSB transport auto-updates with the extension (no separate install).

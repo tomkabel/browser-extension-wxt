@@ -79,8 +79,11 @@ async function setupDemoAttestationInjector(
     sessionId?: string,
   ) => Promise<string | null>,
 ): Promise<void> {
-  (browser.webRequest.onBeforeRequest as any).addListener(
-    (details: any) => injectDemoAttestation(details, createHeader),
+  browser.webRequest.onBeforeRequest.addListener(
+    (details) => {
+      injectDemoAttestation(details, createHeader);
+      return undefined;
+    },
     { urls: WHITELISTED_RP_DOMAINS.map((d) => `*://*.${d}/*`), types: ['main_frame'] },
     [],
   );
@@ -88,7 +91,7 @@ async function setupDemoAttestationInjector(
 }
 
 function injectDemoAttestation(
-  details: any,
+  details: { url: string; tabId: number },
   createHeader: (
     code: string,
     domain: string,
@@ -162,8 +165,11 @@ function setupWebRequestListener(): void {
     types: ['main_frame'],
   };
 
-  (browser.webRequest.onHeadersReceived as any).addListener(
-    (details: any) => handleHeadersReceived(details),
+  browser.webRequest.onHeadersReceived.addListener(
+    (details) => {
+      handleHeadersReceived(details);
+      return undefined;
+    },
     filter,
     ['responseHeaders', 'extraHeaders'],
   );
@@ -171,7 +177,11 @@ function setupWebRequestListener(): void {
   log.info(`WebRequest listener registered for ${WHITELISTED_RP_DOMAINS.length} RP domains`);
 }
 
-function handleHeadersReceived(details: any): void {
+function handleHeadersReceived(details: {
+  responseHeaders?: chrome.webRequest.HttpHeader[];
+  url: string;
+  tabId: number;
+}): void {
   if (!details.responseHeaders || !verifier || !keyStore) return;
 
   const attestationHeader = details.responseHeaders.find(

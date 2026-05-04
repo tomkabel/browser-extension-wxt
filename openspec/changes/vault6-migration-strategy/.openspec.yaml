@@ -1,12 +1,19 @@
 schema: spec-driven
 created: 2026-05-03
+specs: []
 context: |
-  Phase 1.5 — Strategic planning artifact (no code changes). Defines the sequenced
-  migration from the current WebRTC-based phone-as-vault architecture to the V6
-  USB-AOA architecture. Specifies four sub-phases (1.5 Bridge → 2A Core Enclave →
-  2B zkTLS + WebAuthn → 2C eIDAS QES), the Transport abstraction interface for
-  WebRTC/USB coexistence, component retention vs replacement table, dependency
-  graph, phase transition triggers, and deprecation policy for Phase 1 capabilities.
-  V6 Alignment: Ensures coherent delivery of all V6 components without breaking
-    the working WebRTC transport. All V6 changes reference this strategy for
-    sequencing and integration guidance.
+  Phase 1.5 — Strategic planning artifact (no code changes, no spec directory).
+  Defines the sequenced migration from the current WebRTC-based phone-as-vault
+  architecture to the V6 USB-AOA architecture. Specifies four sub-phases
+  (1.5 Bridge → 2A Core Enclave → 2B zkTLS + WebAuthn → 2C eIDAS QES),
+  the Transport abstraction interface for WebRTC/USB coexistence, a component
+  retention vs replacement table, a dependency graph with change-level
+  blocking/builds-on relationships, phase transition triggers gated by user
+  opt-in, and a deprecation policy for Phase 1 capabilities. Includes a
+  Regression Testing Plan mandating that all 10 archived OpenSpec change test
+  suites pass before any V6 merge, plus a manual regression checklist for
+  Transport Abstraction WebRTC Fallback, Pairing, Transaction Detection,
+  WebRTC Signaling, WebAuthn PRF Re-auth, and Content Script Domain Detection.
+  The dependencies.md companion defines the exact dependency graph, change
+  dependency table, phase mapping, and GitHub issue tracking stubs. All V6
+  changes reference this strategy for sequencing and integration guidance.

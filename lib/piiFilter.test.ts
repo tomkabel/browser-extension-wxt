@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { filterPii, filterDomContent } from './piiFilter';
+import {
+  filterPii,
+  filterDomContent,
+  isValidIban,
+  isValidEstonianIdCode,
+  PiiCategory,
+} from './piiFilter';
 
 describe('PII Filter (7.3)', () => {
   describe('filterPii', () => {
@@ -38,6 +44,139 @@ describe('PII Filter (7.3)', () => {
     it('identifies categories of redacted content', () => {
       const result = filterPii('Email: user@test.com');
       expect(result.categories.size).toBeGreaterThan(0);
+    });
+  });
+
+  describe('isValidIban', () => {
+    it('returns true for valid DE IBAN', () => {
+      expect(isValidIban('DE89370400440532013000')).toBe(true);
+    });
+
+    it('returns true for valid GB IBAN', () => {
+      expect(isValidIban('GB29NWBK60161331926819')).toBe(true);
+    });
+
+    it('returns true for valid EE IBAN', () => {
+      expect(isValidIban('EE471000001020145685')).toBe(true);
+    });
+
+    it('returns false for IBAN with bad checksum', () => {
+      expect(isValidIban('DE89370400440532013001')).toBe(false);
+    });
+
+    it('returns false for too-short string', () => {
+      expect(isValidIban('DE12')).toBe(false);
+    });
+
+    it('tolerates lowercase input', () => {
+      expect(isValidIban('de89370400440532013000')).toBe(true);
+    });
+  });
+
+  describe('isValidEstonianIdCode', () => {
+    it('returns true for a valid Estonian ID code', () => {
+      expect(isValidEstonianIdCode('38705264215')).toBe(true);
+    });
+
+    it('returns false for invalid check digit', () => {
+      expect(isValidEstonianIdCode('38705264210')).toBe(false);
+    });
+
+    it('returns false for wrong length', () => {
+      expect(isValidEstonianIdCode('1234567890')).toBe(false);
+    });
+
+    it('returns false for non-digit input', () => {
+      expect(isValidEstonianIdCode('abc')).toBe(false);
+    });
+  });
+
+  describe('PII redaction — IBAN', () => {
+    it('redacts valid IBAN in text', () => {
+      const result = filterPii('IBAN: DE89370400440532013000');
+      expect(result.text).toContain('[REDACTED]');
+      expect(result.categories.has(PiiCategory.Iban)).toBe(true);
+    });
+
+    it('does not redact invalid IBAN', () => {
+      const result = filterPii('IBAN: DE89370400440532013001');
+      expect(result.text).not.toContain('[REDACTED]');
+      expect(result.categories.has(PiiCategory.Iban)).toBe(false);
+    });
+
+    it('redacts lowercase IBAN (case-insensitive flag)', () => {
+      const result = filterPii('iban: de89370400440532013000');
+      expect(result.text).toContain('[REDACTED]');
+      expect(result.categories.has(PiiCategory.Iban)).toBe(true);
+    });
+
+    it('redacts IBAN with formatted spacing', () => {
+      const result = filterPii('IBAN: DE89 3704 0044 0532 0130 00');
+      expect(result.text).toContain('[REDACTED]');
+      expect(result.categories.has(PiiCategory.Iban)).toBe(true);
+    });
+  });
+
+  describe('PII redaction — passport', () => {
+    it('redacts passport pattern', () => {
+      const result = filterPii('Passport: AB123456');
+      expect(result.text).toContain('[REDACTED]');
+      expect(result.categories.has(PiiCategory.Passport)).toBe(true);
+    });
+
+    it('redacts lowercase passport (case-insensitive flag)', () => {
+      const result = filterPii('passport: ab123456');
+      expect(result.text).toContain('[REDACTED]');
+      expect(result.categories.has(PiiCategory.Passport)).toBe(true);
+    });
+
+    it('redacts passport with 8-digit number', () => {
+      const result = filterPii('Passport: XY12345678');
+      expect(result.text).toContain('[REDACTED]');
+      expect(result.categories.has(PiiCategory.Passport)).toBe(true);
+    });
+
+    it('does not redact single-letter prefix passport pattern', () => {
+      const result = filterPii('Passport: A1234567');
+      expect(result.text).not.toContain('[REDACTED]');
+      expect(result.categories.has(PiiCategory.Passport)).toBe(false);
+    });
+
+    it('redacts multiple passports in one text', () => {
+      const result = filterPii('Passports: AB123456 and CD789012');
+      expect(result.text).toContain('[REDACTED]');
+      expect(result.redactionCount).toBe(2);
+      expect(result.categories.has(PiiCategory.Passport)).toBe(true);
+    });
+  });
+
+  describe('PII redaction — password edge cases', () => {
+    it('redacts password value ending with punctuation', () => {
+      const result = filterPii('password=abc!');
+      expect(result.text).toContain('[REDACTED]');
+      expect(result.categories.has(PiiCategory.Password)).toBe(true);
+    });
+
+    it('redacts password value ending with special chars', () => {
+      const result = filterPii('pwd=test@123#');
+      expect(result.text).toContain('[REDACTED]');
+    });
+
+    it('redacts 64-char password value', () => {
+      const pwd = 'a'.repeat(64);
+      const result = filterPii(`password=${pwd}`);
+      expect(result.text).toContain('[REDACTED]');
+    });
+
+    it('does not redact password value exceeding 64 chars', () => {
+      const pwd = 'a'.repeat(65);
+      const result = filterPii(`password=${pwd}`);
+      expect(result.text).not.toContain('[REDACTED]');
+    });
+
+    it('redacts pin1 and pin2 variants', () => {
+      expect(filterPii('pin1=1234').text).toContain('[REDACTED]');
+      expect(filterPii('pin2=5678').text).toContain('[REDACTED]');
     });
   });
 

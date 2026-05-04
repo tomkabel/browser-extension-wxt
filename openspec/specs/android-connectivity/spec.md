@@ -1,5 +1,7 @@
-## MODIFIED Requirements
+## Purpose
 
+Define the connectivity requirements between the browser extension and the Android companion app, covering WebRTC data channel transport, FCM push wake-up, emoji SAS confirmation, context-aware biometric prompts, credential vault operations, PRF silent re-authentication, and accessibility relay.
+## Requirements
 ### Requirement: WebRTC client
 
 The Android app SHALL implement a WebRTC client using `org.webrtc:google-webrtc` that connects to the signaling server and establishes a data channel.
@@ -24,13 +26,13 @@ The Android app SHALL receive FCM high-priority pushes and start a transient for
 
 ### Requirement: Emoji SAS confirmation
 
-The Android app SHALL display a 3-emoji SAS after completing the Noise XX handshake, with Match/No Match buttons for user confirmation.
+The Android app SHALL display a 4-emoji SAS after completing the Noise XX handshake, with Match/No Match buttons for user confirmation.
 
 #### Scenario: Emoji SAS displayed after handshake
 
 - **WHEN** the Noise XX handshake completes on the phone
-- **AND** the phone derives the 3-emoji SAS from `SHA-256(encryption_key)`
-- **THEN** the phone SHALL display the 3 emoji prominently with "Do these match your laptop screen?"
+- **AND** the phone derives the 4-emoji SAS from `SHA-256(chainingKey || qrCodePublicKey)` — binding the SAS to the QR public key prevents MITM at QR printing stage
+- **THEN** the phone SHALL display the 4 emoji prominently with "Do these match your laptop screen?"
 - **AND** provide "Yes, Match" and "No, Cancel" buttons
 - **AND** only complete pairing after user confirms "Yes, Match"
 
@@ -40,9 +42,17 @@ The Android app SHALL display a 3-emoji SAS after completing the Noise XX handsh
 - **THEN** the phone SHALL display the 6-digit numeric SAS instead of emoji
 - **AND** provide a "Confirm" button
 
+#### Scenario: Increased SAS entropy from 4 emoji
+
+- **GIVEN** the emoji palette contains 64 emoji (6 bits each)
+- **WHEN** 4 emoji are selected (24 bits total)
+- **THEN** the SAS space SHALL be 64⁴ = 16.7 million combinations
+- **AND** the 6-digit numeric fallback SHALL be 1 million combinations
+- **AND** both SHALL be verified in constant-time human verification
+
 ### Requirement: Context-aware biometric prompt
 
-The Android app SHALL determine the phone's unlock state and choose between silent auto-approval and lock-screen notification for credential requests. This applies to both the Phase 1 website password vault and the V6 Smart-ID PIN vault, but with different data flows.
+The Android app SHALL determine the phone's unlock state and choose between silent auto-approval and lock-screen notification for credential requests. This applies to both the Phase 1 website password vault and the V6 Smart-ID PIN vault, but with different authorization flows.
 
 #### Scenario: Phone unlocked, Phase 1 auto-approve
 
@@ -51,12 +61,12 @@ The Android app SHALL determine the phone's unlock state and choose between sile
 - **THEN** the app SHALL silently decrypt and return the credentials over the Noise channel
 - **AND** the response SHALL include `approval_mode: 'auto'`
 
-#### Scenario: Phone unlocked, V6 enclave authorization
+#### Scenario: Phone unlocked, V6 auto-approve (enclave authorization)
 
 - **WHEN** a V6 `pin-authorization` command arrives (after zkTLS + WebAuthn verification)
 - **AND** the phone is currently unlocked and in the user's hand
-- **THEN** the app SHALL authorize the NDK enclave to decrypt the Smart-ID PIN locally
-- **AND** the returned data SHALL be `float[x,y][]` coordinates (not credential strings)
+- **THEN** the app SHALL authorize the NDK enclave to decrypt the Smart-ID PIN
+- **AND** the PIN SHALL NOT be transmitted — only the resulting `float[x,y][]` coordinates are returned
 
 #### Scenario: Phone locked, biometric required
 
@@ -78,7 +88,7 @@ The Android app SHALL maintain an encrypted Phase 1 credential vault (AES-256-GC
 
 #### Scenario: Phase 1 credential found
 
-- **WHEN** a Phase 1 `credential-request` for domain `example.com` is received
+- **WHEN** a `credential-request` for domain `example.com` is received
 - **AND** credentials exist in the Phase 1 vault for `example.com`
 - **THEN** the app SHALL decrypt the credentials locally
 - **AND** respond with `{ status: 'found', username, password }` over the Noise channel
@@ -142,3 +152,4 @@ The Android app SHALL relay commands to a11y-bridge via OkHttp HTTP client. If a
 - **AND** a11y-bridge is not available
 - **THEN** the app SHALL use DirectAccessibilityService as fallback
 - **AND** guide the user to enable Accessibility Service in Settings if not already enabled
+

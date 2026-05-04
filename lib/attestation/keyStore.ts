@@ -1,4 +1,3 @@
-import { browser } from 'wxt/browser';
 import type { TrustedRpSigningKey, SignedKeyManifest, RpKeyStore } from './types';
 import { log } from '~/lib/errors';
 
