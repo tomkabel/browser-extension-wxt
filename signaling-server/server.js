@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { randomBytes, createHmac, timingSafeEqual } from 'node:crypto';
+import { randomBytes, createHmac, createHash, timingSafeEqual } from 'node:crypto';
 import { Server } from 'socket.io';
 
 const PORT = parseInt(process.env.PORT ?? '7333', 10);
@@ -15,6 +15,7 @@ const SAS_EMOJI_RE = /^[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]{3
 
 const rooms = new Map();
 const pendingCredentials = new Map();
+const roomMetadata = new Map();
 
 function getRoom(roomId) {
   let room = rooms.get(roomId);
@@ -37,7 +38,19 @@ function scheduleCleanup(roomId, room) {
   room.timeout = setTimeout(() => {
     rooms.delete(roomId);
     pendingCredentials.delete(roomId);
+    roomMetadata.delete(roomId);
   }, ROOM_TTL_MS);
+}
+
+function verifyCommitment(metadata, commitment) {
+  if (!commitment || typeof commitment !== 'string') return false;
+  const hash = createHash('sha256');
+  const extKey = Buffer.from(metadata.extensionStaticKey);
+  const nonceBuf = Buffer.from(metadata.nonce);
+  const sasBuf = Buffer.from(metadata.sasCode, 'utf-8');
+  hash.update(Buffer.concat([extKey, nonceBuf, sasBuf]));
+  const expected = hash.digest('base64url');
+  return timingSafeEqual(Buffer.from(commitment), Buffer.from(expected));
 }
 
 function isValidSasCode(sasCode) {
@@ -95,6 +108,32 @@ const io = new Server(httpServer, {
 });
 
 io.on('connection', (socket) => {
+  socket.on('register-room', (data) => {
+    const { sasCode, nonce, extensionStaticKey, roomId } = data;
+    if (!sasCode || !isValidSasCode(sasCode) || !nonce || !extensionStaticKey || !roomId) {
+      socket.emit('error', { message: 'Invalid register-room data' });
+      return;
+    }
+
+    roomMetadata.set(roomId, {
+      sasCode,
+      nonce,
+      extensionStaticKey,
+      createdAt: Date.now(),
+    });
+
+    const room = getRoom(roomId);
+    clearTimeout_(room);
+    socket.join(roomId);
+    room.peers.add(socket.id);
+
+    const turnCreds = pendingCredentials.get(roomId);
+    socket.emit('room-joined', {
+      peerCount: room.peers.size,
+      turnCredentials: turnCreds ?? undefined,
+    });
+  });
+
   socket.on('join-room', (sasCode) => {
     if (!sasCode || !isValidSasCode(sasCode)) {
       socket.emit('error', { message: 'Invalid room code' });
@@ -102,6 +141,16 @@ io.on('connection', (socket) => {
     }
 
     const roomId = ROOM_PREFIX + sasCode;
+    const metadata = roomMetadata.get(roomId);
+    if (metadata) {
+      const commitment = socket.handshake.query?.commitment;
+      if (!commitment || !verifyCommitment(metadata, commitment)) {
+        socket.emit('error', { error: 'invalid_commitment' });
+        socket.disconnect(true);
+        return;
+      }
+    }
+
     const room = getRoom(roomId);
     clearTimeout_(room);
 

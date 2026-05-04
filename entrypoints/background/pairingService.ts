@@ -9,20 +9,26 @@ const COMMAND_CLIENT_KEY = 'cmd:commandClient';
 
 interface PairingSession {
   sasCode: string;
+  nonce: Uint8Array;
   localStaticKey: NoiseKeyPair;
   startedAt: number;
 }
 
 let activeSession: PairingSession | null = null;
 
-export async function startPairing(sasCode: string): Promise<{ success: boolean; error?: string }> {
+export async function startPairing(
+  sasCode: string,
+  nonce?: Uint8Array,
+): Promise<{ success: boolean; error?: string; publicKey?: number[] }> {
   if (activeSession) {
     return { success: false, error: 'Pairing session already in progress' };
   }
 
   const localStaticKey = generateKeyPair();
+  const sessionNonce = nonce ?? crypto.getRandomValues(new Uint8Array(32));
   activeSession = {
     sasCode,
+    nonce: sessionNonce,
     localStaticKey,
     startedAt: Date.now(),
   };
@@ -36,11 +42,18 @@ export async function startPairing(sasCode: string): Promise<{ success: boolean;
   try {
     await browser.runtime.sendMessage({
       type: 'webrtc-start-pairing',
-      payload: { sasCode },
+      payload: {
+        sasCode,
+        nonce: Array.from(sessionNonce),
+        extensionStaticKey: Array.from(localStaticKey.publicKey),
+      },
     });
 
     log.info('[Pairing] WebRTC pairing initiated');
-    return { success: true };
+    return {
+      success: true,
+      publicKey: Array.from(localStaticKey.publicKey),
+    };
   } catch (err) {
     log.error('[Pairing] Failed to start WebRTC pairing:', err);
     activeSession = null;

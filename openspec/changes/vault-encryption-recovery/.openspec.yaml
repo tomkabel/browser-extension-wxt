@@ -1,2 +1,17 @@
 schema: spec-driven
 created: 2026-05-04
+updated: 2026-05-04
+specs:
+  - specs/vault-encryption
+  - specs/vault-storage
+  - specs/seed-phrase-backup
+  - specs/disaster-recovery
+  - specs/shamir-recovery
+context: |
+  Phase 1 — Vault encryption specification for the Android companion app's credential
+  storage. Master key in Android Keystore (biometric-gated AES-256-GCM), per-credential
+  keys derived via HKDF-SHA256, SQLite storage schema, BIP39 24-word seed phrase backup
+  (optional), Shamir 2-of-3 secret sharing across Chrome sync / QR code / phone for
+  recovery, and disaster recovery flow. Only the password is encrypted; username is
+  stored in plaintext for UI disambiguation. Recovery re-encrypts all credentials with
+  a new master key. Revocation Merkle tree verifies device status per command.

@@ -1,0 +1,17 @@
+schema: spec-driven
+created: 2026-05-01
+updated: 2026-05-04
+specs:
+  - specs/android-connectivity
+context: |
+  Android vault implementation: Progressive Web App (PWA) as primary vault,
+  replacing the full native Android app approach. The PWA uses WebUSB for AOA
+  bulk transport, WebAuthn for passkey/PRF, Web Crypto API for AES-256-GCM,
+  and Web Push for notifications. Shares TypeScript code with the browser
+  extension (Noise protocol, emoji SAS, crypto). A minimal ~200KB native APK
+  (Ghost Actuator) handles AccessibilityService PIN gesture injection only.
+  Optional Rust WASM core for crypto performance on low-end devices.
+  V6 Alignment: PWA vault evolves with the extension — same codebase, same
+    updates. The Ghost Actuator APK is the only native component. WebRTC remains
+    fallback; WebUSB is primary transport. Emoji SAS uses 4 emoji (24-bit entropy)
+    bound to QR public key for MITM protection.

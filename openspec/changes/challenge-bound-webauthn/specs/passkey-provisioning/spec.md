@@ -17,6 +17,7 @@ The extension SHALL create a WebAuthn passkey during initial device pairing, bou
 - **WHEN** the passkey is successfully created
 - **THEN** the extension SHALL transmit the credential ID and public key bytes (raw P-256 coordinates) over the transport channel to the Android Vault
 - **AND** the Android Vault SHALL store them in the trust-store
+- **AND** the transmission SHALL include the minimum tier policy for challenge binding (default: Tier 1)
 
 #### Scenario: Passkey creation failure
 

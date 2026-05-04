@@ -1,22 +1,19 @@
 schema: spec-driven
 created: 2026-05-03
+updated: 2026-05-04
 specs:
-  - specs/challenge-derivation
-  - specs/webauthn-assertion-binding
-  - specs/passkey-provisioning
-  - specs/challenge-recomposition-engine
-  - openspec/specs/webauthn-auth-page
-  - openspec/specs/webauthn-prf-derivation
-  - openspec/specs/session-persistence
+  - challenge-derivation
+  - webauthn-assertion-binding
+  - passkey-provisioning
+  - challenge-recomposition-engine
 context: |
-  Phase 2 — Cryptographic binding of zkTLS proof, transaction origin, control code,
-  and session nonce into a SHA-256 WebAuthn challenge. This prevents DOM/RAT attacks:
-  the PC biometric (Windows Hello/TouchID) is mathematically fused to the exact
-  transaction. Challenge derivation uses canonical TLV serialization. The Android
-  Vault recomputes the challenge and verifies the WebAuthn assertion signature
-  against a Passkey public key provisioned during Phase 0 pairing.
-  V6 Alignment: Core V6 cryptographic layer. Implemented on top of the completed
-    usb-aoa-transport-proxy (Go Native Messaging Host + AOA 2.0, all 74 tasks
-    complete). The zkTLS proof from zktls-context-engine feeds the challenge input.
-    The Android-side verification uses the WebAuthn verifier running in the Java
-    Orchestrator. Passkey provisioning happens during USB AOA Phase 0 pairing.
+  Phase 2 cryptographic binding of TLS binding proof (progressive three-tier:
+  Tier 1 Sec-Fetch headers, Tier 2 Token Binding, Tier 3 DECO WASM oracle),
+  transaction origin, control code, and session nonce into SHA-256 WebAuthn
+  challenge (version 0x02).
+v6_alignment: |
+  PHASE 2 — Core V6 cryptographic layer. Replaces the deprecated monolithic
+  zkTLS proof with a progressive three-tier TLS binding system. Tier 1 works
+  today with zero infrastructure. Depends on usb-aoa-transport-proxy
+  (complete) and tls-binding-engine (was zktls-context-engine) for proof
+  generation.

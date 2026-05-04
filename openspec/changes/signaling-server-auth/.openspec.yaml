@@ -1,2 +1,18 @@
 schema: spec-driven
 created: 2026-05-04
+updated: 2026-05-04
+specs:
+  - specs/signaling-server
+  - specs/qr-encoding
+  - specs/commitment-room-access
+  - specs/ik-session-resumption
+context: |
+  Commitment-based room access control for the signaling server. Prevents room
+  hijacking by requiring the phone to prove knowledge of the SAS code via a
+  SHA-256 commitment. QR code encodes commitment = SHA-256(extensionStaticKey ||
+  nonce || sasCode). Server stores room metadata and rejects join-room events
+  with invalid commitments.
+
+  Extended with: protocol version negotiation via capability flags in handshake
+  message 1, Prometheus metrics endpoint, structured JSON logging, and IK
+  session resumption for faster reconnection.

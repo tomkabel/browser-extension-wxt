@@ -1,7 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, forwardRef } from 'react';
 import { useAppStore } from '~/lib/store';
 
-export function CredentialPanel() {
+export const CredentialPanel = forwardRef<HTMLHeadingElement>(function CredentialPanel(_props, headingRef) {
   const credentialState = useAppStore((s) => s.credentialState);
   const credentialDomain = useAppStore((s) => s.credentialDomain);
   const credentialStatus = useAppStore((s) => s.credentialStatus);
@@ -26,15 +26,18 @@ export function CredentialPanel() {
   if (credentialState === 'filled') {
     return (
       <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+        <h1 ref={headingRef} className="sr-only">Credential Auto-Fill</h1>
         <div className="flex items-center gap-2 mb-2">
-          <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-5 h-5 text-green-500" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
           <h2 className="text-sm font-semibold text-green-700">Credentials filled</h2>
         </div>
-        {credentialDomain && (
-          <p className="text-xs text-green-600">Automatically filled on {credentialDomain}</p>
-        )}
+        <div aria-live="polite">
+          {credentialDomain && (
+            <p className="text-xs text-green-600">Automatically filled on {credentialDomain}</p>
+          )}
+        </div>
       </div>
     );
   }
@@ -42,10 +45,13 @@ export function CredentialPanel() {
   if (credentialState === 'not_found') {
     return (
       <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-        <h2 className="text-sm font-semibold text-yellow-700 mb-1">No credentials found</h2>
-        {credentialDomain && (
-          <p className="text-xs text-yellow-600">No saved credentials for {credentialDomain}</p>
-        )}
+        <h1 ref={headingRef} className="sr-only">Credential Auto-Fill</h1>
+        <div aria-live="polite">
+          <h2 className="text-sm font-semibold text-yellow-700 mb-1">No credentials found</h2>
+          {credentialDomain && (
+            <p className="text-xs text-yellow-600">No saved credentials for {credentialDomain}</p>
+          )}
+        </div>
       </div>
     );
   }
@@ -53,13 +59,16 @@ export function CredentialPanel() {
   if (credentialState === 'requesting') {
     return (
       <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+        <h1 ref={headingRef} className="sr-only">Credential Auto-Fill</h1>
         <div className="flex items-center gap-2 mb-2">
           <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
           <h2 className="text-sm font-semibold text-blue-700">Requesting credentials</h2>
         </div>
-        {credentialDomain && (
-          <p className="text-xs text-blue-600">Contacting phone for {credentialDomain}</p>
-        )}
+        <div aria-live="polite">
+          {credentialDomain && (
+            <p className="text-xs text-blue-600">Contacting phone for {credentialDomain}</p>
+          )}
+        </div>
       </div>
     );
   }
@@ -67,13 +76,16 @@ export function CredentialPanel() {
   if (credentialState === 'waiting_phone') {
     return (
       <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+        <h1 ref={headingRef} className="sr-only">Credential Auto-Fill</h1>
         <div className="flex items-center gap-2 mb-2">
           <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
           <h2 className="text-sm font-semibold text-blue-700">Waiting for phone authentication...</h2>
         </div>
-        {credentialDomain && (
-          <p className="text-xs text-blue-600">Approve on your phone to fill {credentialDomain}</p>
-        )}
+        <div aria-live="polite">
+          {credentialDomain && (
+            <p className="text-xs text-blue-600">Approve on your phone to fill {credentialDomain}</p>
+          )}
+        </div>
       </div>
     );
   }
@@ -81,6 +93,7 @@ export function CredentialPanel() {
   if (credentialState === 'detecting') {
     return (
       <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+        <h1 ref={headingRef} className="sr-only">Credential Auto-Fill</h1>
         <h2 className="text-sm font-semibold text-gray-600">
           {credentialStatus || 'Login detected'}
         </h2>
@@ -94,11 +107,14 @@ export function CredentialPanel() {
   if (credentialState === 'error') {
     return (
       <div className="p-4 bg-red-50 rounded-lg border border-red-200">
-        <h2 className="text-sm font-semibold text-red-700 mb-1">Credential error</h2>
-        <p className="text-xs text-red-600">{credentialStatus || 'An error occurred'}</p>
+        <h1 ref={headingRef} className="sr-only">Credential Auto-Fill</h1>
+        <div aria-live="polite">
+          <h2 className="text-sm font-semibold text-red-700 mb-1">Credential error</h2>
+          <p className="text-xs text-red-600">{credentialStatus || 'An error occurred'}</p>
+        </div>
       </div>
     );
   }
 
   return null;
-}
+});
