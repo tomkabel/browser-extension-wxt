@@ -118,8 +118,8 @@ export class TransportManager {
     if (target === 'usb' && this.usbAvailable) {
       try {
         await this.usbTransport.connect();
-        if (current && current.type === 'webrtc') {
-          await current.send(new Uint8Array(0));
+        if (current && current.type !== 'usb') {
+          await current.disconnect();
         }
         this.activeTransport = this.usbTransport;
         if (this.messageCallback) {

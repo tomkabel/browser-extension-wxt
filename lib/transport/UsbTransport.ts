@@ -1,54 +1,75 @@
 import { browser } from 'wxt/browser';
+import { log } from '~/lib/errors';
 import { TRANSPORT_CONFIG } from './config';
 import type { Transport, TransportType } from './types';
+
+const GOOGLE_VENDOR_ID = 0x18d1;
+const ANDROID_VENDOR_IDS = new Set([GOOGLE_VENDOR_ID, 0x04e8, 0x22b8, 0x0bb4, 0x12d1, 0x1004]);
+
+interface PendingReader {
+  resolve: (data: Uint8Array) => void;
+  reader: ReadableStreamDefaultReader<Uint8Array>;
+}
 
 export class UsbTransport implements Transport {
   readonly type: TransportType = 'usb';
 
   private connected = false;
-  private disconnecting = false;
   private messageCallbacks: Array<(data: Uint8Array) => void> = [];
   private disconnectCallbacks: Array<() => void> = [];
-  private offscreenReady = false;
-  private usbSupported = false;
+  private device: USBDevice | null = null;
+  private readLoopActive = false;
+  private pendingReader: PendingReader | null = null;
 
   async connect(): Promise<void> {
+    if (this.device) {
+      this.connected = true;
+      return;
+    }
+
     try {
-      this.usbSupported = typeof navigator !== 'undefined' && 'usb' in navigator;
-
-      if (this.usbSupported) {
-        const response = await browser.runtime.sendMessage({
-          type: 'webrtc-connect-usb',
-          payload: {},
-        });
-        const data = response as { success?: boolean; error?: string } | undefined;
-        if (data?.success) {
-          this.connected = true;
-          this.disconnecting = false;
-          this.offscreenReady = true;
-          return;
+      const device = await this.requestDevice();
+      if (device) {
+        await device.open();
+        if (device.configuration === null) {
+          await device.selectConfiguration(1);
         }
-        throw new Error(data?.error ?? 'WebUSB connection failed');
-      }
-
-      const response = await browser.runtime.sendMessage({
-        type: 'webrtc-connect-usb',
-        payload: {},
-      });
-      const fallbackData = response as { success?: boolean } | undefined;
-      if (fallbackData?.success) {
+        await device.claimInterface(0);
+        this.device = device;
         this.connected = true;
+        this.startReadLoop(device);
+        log.info('[UsbTransport] Connected via WebUSB');
         return;
       }
-      throw new Error('No USB transport available');
     } catch (err) {
-      this.cleanup();
-      throw err;
+      log.warn('[UsbTransport] WebUSB unavailable, falling back to offscreen relay:', err);
     }
+
+    const response = await browser.runtime.sendMessage({
+      type: 'webrtc-connect-usb',
+      payload: {},
+    });
+    const data = response as { success?: boolean; error?: string } | undefined;
+    if (data?.success) {
+      this.connected = true;
+      log.info('[UsbTransport] Connected via offscreen relay');
+      return;
+    }
+    throw new Error(data?.error ?? 'No USB transport available');
   }
 
   async disconnect(): Promise<void> {
+    this.readLoopActive = false;
     try {
+      if (this.device) {
+        try {
+          await this.device.close();
+        } catch {
+          // device may already be detached
+        }
+        this.device = null;
+        return;
+      }
       await browser.runtime.sendMessage({
         type: 'webrtc-disconnect',
         payload: {},
@@ -63,6 +84,14 @@ export class UsbTransport implements Transport {
       throw new Error('USB transport not connected');
     }
 
+      if (this.device) {
+        const endpoint = this.findOutputEndpoint();
+        if (endpoint) {
+          await this.device.transferOut(endpoint.endpointNumber, payload as unknown as BufferSource);
+          return;
+        }
+      }
+
     await browser.runtime.sendMessage({
       type: 'webrtc-send',
       payload: { data: Array.from(payload) },
@@ -71,8 +100,8 @@ export class UsbTransport implements Transport {
 
   onMessage(callback: (data: Uint8Array) => void): void {
     this.messageCallbacks.push(callback);
-
     browser.runtime.onMessage.addListener((message) => {
+      if (!this.connected) return;
       const msg = message as { type?: string; payload?: { data?: number[] } } | undefined;
       if (msg?.type === 'webrtc-data-received' && msg.payload?.data) {
         callback(new Uint8Array(msg.payload.data));
@@ -99,6 +128,15 @@ export class UsbTransport implements Transport {
   }
 
   async checkAvailability(): Promise<boolean> {
+    if (this.device) return true;
+    try {
+      const devices = await navigator.usb.getDevices();
+      for (const d of devices) {
+        if (ANDROID_VENDOR_IDS.has(d.vendorId)) return true;
+      }
+    } catch {
+      // WebUSB not supported
+    }
     try {
       await browser.runtime.sendMessage({ type: 'webrtc-ping', payload: {} });
       return true;
@@ -107,9 +145,85 @@ export class UsbTransport implements Transport {
     }
   }
 
+  private async requestDevice(): Promise<USBDevice | null> {
+    try {
+      const devices = await navigator.usb.getDevices();
+      for (const d of devices) {
+        if (ANDROID_VENDOR_IDS.has(d.vendorId)) return d;
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  }
+
+  private findOutputEndpoint(): USBEndpoint | undefined {
+    if (!this.device) return undefined;
+    for (const iface of this.device.configuration?.interfaces ?? []) {
+      for (const alt of iface.alternates) {
+        for (const ep of alt.endpoints) {
+          if (ep.direction === 'out') return ep;
+        }
+      }
+    }
+    return undefined;
+  }
+
+  private async startReadLoop(device: USBDevice): Promise<void> {
+    if (this.readLoopActive) return;
+    this.readLoopActive = true;
+
+    const endpoint = this.findInputEndpoint();
+    if (!endpoint) {
+      this.readLoopActive = false;
+      return;
+    }
+
+    while (this.readLoopActive && this.device) {
+      try {
+        const result = await device.transferIn(endpoint.endpointNumber, endpoint.packetSize);
+        if (result.data?.buffer) {
+          const data = new Uint8Array(result.data.buffer);
+          for (const cb of this.messageCallbacks) {
+            try {
+              cb(data);
+            } catch {
+              // listener error
+            }
+          }
+        }
+      } catch (err) {
+        if (this.readLoopActive) {
+          log.error('[UsbTransport] Read error:', err);
+          this.cleanup();
+          for (const cb of this.disconnectCallbacks) {
+            try {
+              cb();
+            } catch {
+              // listener error
+            }
+          }
+        }
+        break;
+      }
+    }
+  }
+
+  private findInputEndpoint(): USBEndpoint | undefined {
+    if (!this.device) return undefined;
+    for (const iface of this.device.configuration?.interfaces ?? []) {
+      for (const alt of iface.alternates) {
+        for (const ep of alt.endpoints) {
+          if (ep.direction === 'in') return ep;
+        }
+      }
+    }
+    return undefined;
+  }
+
   private cleanup(): void {
     this.connected = false;
-    this.disconnecting = false;
-    this.offscreenReady = false;
+    this.device = null;
+    this.readLoopActive = false;
   }
 }
