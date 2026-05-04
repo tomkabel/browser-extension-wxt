@@ -15,6 +15,12 @@ signaling-server/node_modules/
 signaling-server/mydatabase.db
 *.tsbuildinfo
 
+# Test runner artifacts
+test-results/
+
+# Local tool/IDE configuration
+.kilo/
+
 # Go native host build artifacts
 apps/native-host/build/
 apps/native-host/dist/
