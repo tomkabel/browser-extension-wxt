@@ -1,104 +1,125 @@
-> **STATUS**: PHASE 1 — WebRTC-based Phone-as-Vault
-> 
-> **This architecture is Phase 1 of a multi-phase evolution.** The ultimate end-goal
-> architecture is defined in `../SMARTID_VAULT_v6.md` (USB AOA 2.0 + zkTLS + NDK 
-> Enclave + Ghost Actuator). Phase 1 builds the browser extension foundation, 
-> WebAuthn/PRF patterns, Android companion app, and WebRTC transport. Phase 1.5 
-> introduces the Go Native Host and USB AOA bridge. Phase 2 realizes the full V6 
-> specification.
->
-> For the V6 migration plan, see `openspec/changes/vault6-migration-strategy/`.
-> For individual V6 component proposals, see:
-> - `openspec/changes/usb-aoa-transport-proxy/`
-> - `openspec/changes/zktls-context-engine/`
-> - `openspec/changes/challenge-bound-webauthn/`
-> - `openspec/changes/ndk-enclave-pin-vault/`
-> - `openspec/changes/ghost-actuator-gesture-injection/`
-> - `openspec/changes/eidas-qes-hardware-gate/`
-
-The greatest trap in security engineering is **complexity**. Every time we tried to outsmart the browser sandbox, the corporate firewall, or the laws of physics, we introduced a fragile point of failure. 
-
-This document describes **Phase 1: The Pragmatic Zero-Trust Architecture** — it abandons theoretical crypto-gymnastics in favor of browser sandbox realities, enterprise network constraints, and absolute security through **simplicity, standard APIs, and graceful degradation.**
-
-Here is the Phase 1 blueprint.
+# **ARCHITECTURAL SPECIFICATION: Smart-ID Tethered Vault**
+**Version:** 6.0.0 (The "Quantum-Resilient Enclave" Revision)  
+**Classification:** Zero-Knowledge, Binder-Bypassing HSM Proxy & eIDAS-Compliant Orchestrator  
+**Target Architecture:** Manifest V3 (Chromium) ↔ Go Native IPC ↔ Android Open Accessory (AOA 2.0) ↔ Android 13+ NDK/TEE 
 
 ---
 
-### Phase 1: Pragmatic Pairing (The Unbreakable Bootstrap)
-*We abandon acoustic chirps, flashing lights, and Bluetooth APIs. We use the most reliable optical medium in the world, secured by human verification.*
+## **1. Executive Summary & Zero-Trust Paradigm**
+This specification outlines the definitive architecture for seamlessly retrofitting hardware-bound, phishing-resistant, and RAT-impervious automation onto legacy Smart-ID PKI infrastructure. 
 
-1. **The Ephemeral QR Code:**
-   * The laptop extension generates an ephemeral X25519 public key and a random Room ID. 
-   * It displays a standard, high-contrast QR code.
-2. **E2EE Cloud Signaling (The Reality Check):**
-   * We accept that local-only signaling (BLE/mDNS) is too flaky for bootstrapping.
-   * The extension connects to a lightweight cloud signaling server (e.g., via WebSocket).
-   * *The Security Guarantee:* The signaling payload is End-to-End Encrypted (E2EE) using the keys exchanged via the QR code. The server is a "dumb pipe"—it only routes opaque ciphertext between the Room ID. It cannot read the traffic.
-3. **The 3-Emoji SAS (Human-in-the-Loop):**
-   * Once the WebRTC handshake completes, both devices derive a session key.
-   * Both screens display a **3-Emoji Short Authentication String (SAS)** (e.g., 🚀 🎸 🥑). 
-   * The user taps "Match" on the phone. This completely neutralizes any theoretical Man-in-the-Middle (MitM) or signaling server compromise, with zero numerical typing.
-
-### Phase 2: Resilient Transport (Graceful Degradation)
-*We stop fighting AP Isolation. We let the network stack do what it was designed to do.*
-
-1. **ICE Candidate Waterfall:**
-   * The extension and phone attempt to establish a WebRTC Data Channel.
-   * **Step 1 (mDNS Local):** WebRTC tries to connect locally via mDNS. If the devices are on a home Wi-Fi network, this succeeds. Latency is <5ms.
-   * **Step 2 (TURN / UDP):** If the user is on an Enterprise Wi-Fi with Layer 2 AP Isolation, local connection fails. WebRTC seamlessly fails over to a cloud TURN server over UDP. 
-   * **Step 3 (TURN / TCP 443):** If the corporate firewall aggressively drops UDP traffic, the TURN server falls back to TCP port 443, disguising the WebRTC traffic as standard HTTPS.
-   * *The Result:* The connection succeeds 99.99% of the time. The user never sees an error. Because the Data Channel is E2EE (DTLS + Noise), the transport medium (local vs. cloud relay) is irrelevant to security.
-
-### Phase 3: The "Dumb Terminal" Architecture (State Management)
-*We stop trying to safely store keys on the laptop's hard drive. The laptop is hostile territory.*
-
-1. **The Phone as the Vault:**
-   * The Chrome extension holds **zero persistent cryptographic state** on the SSD (`chrome.storage.local` is empty).
-   * The Android device holds the actual encrypted database (passwords, 2FA tokens) backed by the Android Keystore.
-2. **RAM-Only MV3 Survival:**
-   * The extension’s Manifest V3 Service Worker maintains the session purely in `chrome.storage.session` (which lives exclusively in RAM and is wiped when the browser closes).
-   * When the Service Worker sleeps (the 30-second rule), the Offscreen Document keeps the WebRTC connection alive. If the browser fully restarts, the extension uses a cached, hardware-bound WebAuthn PRF key to silently re-authenticate the WebRTC link to the phone.
-
-### Phase 4: Just-In-Time (JIT) Authentication & UX
-*We abandon unreliable proximity distance metrics. We rely on the absolute truth of human intent.*
-
-1. **The Intent-Driven Unlock:**
-   * The user navigates to `github.com`. The extension detects a login field.
-   * The extension sends a "Credential Request" ping over the WebRTC channel to the phone.
-2. **Context-Aware Biometric Prompt:**
-   * If the user's phone is currently unlocked in their hand, it silently approves the request.
-   * If the phone is locked on the desk or in a pocket, the Android app triggers a silent smartwatch tap or a lock-screen notification: *"Tap fingerprint to log into GitHub on Laptop."*
-3. **The Micro-Payload Delivery:**
-   * *Crucial distinction:* The phone does not send the master decryption key to the laptop. It does not send the whole vault.
-   * The phone decrypts the GitHub password *locally on the phone* and sends **only the requested password** over the E2EE WebRTC channel. 
-   * The extension receives it, injects it into the DOM, and immediately garbage-collects/zeros the variable in RAM.
+Version 6.0 completely discards reliance on trusted PC operating systems, vulnerable browser DOMs, and standard Android Java Virtual Machine (JVM) memory models. Instead, it operates on three unbreakable cryptographic pillars:
+1.  **Zero-Knowledge Context Attestation (zkTLS):** Proves the origin and transaction data directly from the network's TLS socket layer, defeating sophisticated Remote Access Trojans (RATs) and DOM manipulation.
+2.  **Challenge-Bound WebAuthn Entanglement:** Cryptographically fuses local PC biometric verification (Windows Hello/TouchID) to the specific transaction, defeating Origin Spoofing.
+3.  **JNI/NDK Memory-Locked Enclave:** Bypasses the Android JVM/Binder IPC by decrypting PINs directly into page-locked C++ memory, transforming cryptographic secrets into anonymous raw UI coordinates.
 
 ---
 
-### Why This is the Ultimate Production Architecture
+## **2. Cryptographic Bootstrapping & Device Pairing (Phase 0)**
+Before standard execution, a one-time provisioning phase establishes the cryptographic trust anchors between the Browser, the Host OS, the Go Proxy, and the Android Vault.
 
-1. **It Actually Ships:** No custom ML models, no audio-jitter math, no accessibility-violating QR codes. Every piece of this architecture relies on stable, well-documented W3C and OS APIs (WebRTC, standard QR, Web Crypto, BiometricPrompt).
-2. **Bulletproof Security Boundary:** The laptop is treated as a compromised I/O device. By ensuring the vault never leaves the phone, and sending only JIT micro-payloads (single passwords), a hacker who compromises the laptop gets absolutely nothing but the password for the specific site the user is actively logging into at that exact second.
-3. **Network Agnosticism:** By utilizing WebRTC with standard TURN fallbacks, it doesn't matter if the user is at home, behind a strict corporate firewall, or on a 5G hotspot. It works frictionlessly.
-4. **Beautiful UX:** The user scans one QR code on day one. After that, logging in simply feels like the phone and laptop are telepathically connected. A quick fingerprint tap on the phone auto-fills the laptop screen.
+1.  **USB AOA Handshake:** The physical Android device is connected to the PC via USB. The Go Native Host initiates an Android Open Accessory (AOA) connection.
+2.  **ECDH Key Exchange:** Over the raw USB bulk endpoints, the Go Host and the Android TEE perform an Elliptic Curve Diffie-Hellman (ECDH) exchange (Curve25519) to derive a shared AES-256-GCM symmetric session key.
+3.  **WebAuthn Passkey Provisioning:** The Browser Extension invokes `navigator.credentials.create()`, generating an asymmetric Passkey (bound to `chrome-extension://<id>`). The generated Public Key is transmitted over the AOA tunnel and securely stored in the Android device's local immutable SQLite trust-store.
+4.  **Vault Provisioning:** The user completes a native Android Biometric authentication. They input their Smart-ID PIN1 and PIN2. These PINs are encrypted via `AndroidKeyStore` using `KeyGenParameterSpec` with `setUserAuthenticationRequired(true)` and `setUnlockedDeviceRequired(true)`. The ciphertexts are saved; the plaintext buffers are destroyed.
 
 ---
 
-### Evolution to V6: The Ultimate Goal
+## **3. System Component Architecture**
 
-This Phase 1 architecture builds the essential foundation: browser extension patterns, WebAuthn/FIDO2 integration, Android companion app, and WebRTC transport. These components are directly reusable in the V6 evolution.
+### **Layer 1: The Context Engine (Zero-Knowledge Browser Extension)**
+*   **Runtime:** Manifest V3 Background Service Worker + Offscreen Document API (for WASM/zkTLS execution).
+*   **The zkTLS Circuit (Network Truth):**
+    *   The extension embeds a lightweight Multi-Party Computation (MPC) proxy (e.g., TLSNotary/DECO WebAssembly module).
+    *   When the user navigates to a whitelisted relying party (`https://www.lhv.ee`), the proxy observes the TLS handshake.
+    *   Upon detecting the Relying Party displaying a Control Code (e.g., "4892"), the extension generates a **Zero-Knowledge Proof (ZKP)**. This proof mathematically guarantees that the server holding the valid `lhv.ee` TLS certificate transmitted the string "4892" to the client. *A local RAT cannot forge this because it lacks the Bank's private TLS key.*
+*   **Challenge-Bound WebAuthn (Human Intent):**
+    *   The extension generates a strict cryptographic binding: `Challenge = SHA256(zkTLS_Proof || Origin || Control_Code || Session_Nonce)`.
+    *   It invokes `navigator.credentials.get({ publicKey: { challenge: Challenge, ... } })`.
+    *   The Host OS prompts the user (Windows Hello/Apple TouchID): *"Verify Smart-ID transaction."*
+*   **Native Output:** The extension dispatches the resulting JSON payload `{ origin, code, nonce, zkTLS_proof, webauthn_assertion }` to the Go Host via `chrome.runtime.sendNativeMessage`.
 
-**Phase 1.5 (Bridge)** adds USB AOA 2.0 transport via a Go Native Messaging Host, introducing a common Transport abstraction that unifies WebRTC + USB. USB mode provides hardware proximity guarantees.
+### **Layer 2: The Proximity Transport (Go Native Messaging Host)**
+*   **Runtime:** Statically compiled, dependency-free Go binary (`native_host.exe`/`native_host.elf`).
+*   **Zero-ADB Transport Mechanics:**
+    *   The host binds directly to the OS's USB hardware abstraction layer using `libusb-1.0`.
+    *   It scans the USB bus for devices matching Android vendor IDs.
+    *   It issues a `libusb_control_transfer` with the specific AOA manufacturer strings (`manufacturer: SmartIDVault`, `model: TetheredProxy`, `version: 6.0`).
+    *   The Android OS kernel receives this control packet, instantly drops the MTP/Charge-only interface, and switches the port into AOA Accessory Mode, exposing raw bulk IN/OUT endpoints (`0x01`, `0x81`).
+*   **Payload Encryption:** The Go host serializes the Extension's JSON payload, encrypts it using the AES-256-GCM symmetric key established during Phase 0, appends the authentication tag, and flushes the binary blob to the USB OUT endpoint.
 
-**Phase 2 (V6 Ultimate)** layers on:
-- **zkTLS Context Engine**: WASM-based TLSNotary attestation for mathematical proof of transaction context, defeating RATs and DOM manipulation
-- **Challenge-Bound WebAuthn**: zkTLS-derived WebAuthn challenge cryptographically fuses PC biometrics to the specific transaction
-- **NDK Memory-Locked Enclave**: C++ mlock/explicit_bzero PIN processing — PINs never enter JVM heap
-- **Ghost Actuator**: AccessibilityService.dispatchGesture() for blind, zero-secret PIN entry into Smart-ID app
-- **eIDAS QES Gate**: Hardware Volume Down interrupt for legally bulletproof Qualified Electronic Signatures
+### **Layer 3: The Android Vault (Java Orchestrator & C++ NDK Enclave)**
+*   **AOA Wake-Lock:** The Orchestrator defines `<action android:name="android.hardware.usb.action.USB_ACCESSORY_ATTACHED" />`. The Android OS natively foregrounds the background service without user interaction upon USB transmission.
+*   **Cryptographic Verification (Java Layer):**
+    *   Decrypts the AES-GCM payload.
+    *   Verifies the `zkTLS_proof` using the embedded Bank public certificate.
+    *   Recomputes the `Challenge` hash.
+    *   Verifies the `webauthn_assertion` signature against the Extension's Passkey Public Key (stored during Phase 0).
+    *   *Result: The app has mathematical certainty of the network state and physical PC user presence.*
+*   **The NDK Memory-Locked Enclave (C++ Layer - `libvault_enclave.so`):**
+    *   To prevent JVM Garbage Collection leaks and Binder IPC interception, the Java layer calculates the screen bounding boxes (X/Y coordinates) of the Smart-ID app's PIN grid layout (using safe, empty node bounds) and passes these *layout coordinates* to the C++ Enclave via Java Native Interface (JNI).
+    *   The C++ code allocates a memory buffer and instantly locks it from OS swapping: `mlock(buffer, size)`.
+    *   The C++ Enclave invokes the hardware Keystore via Android NDK APIs to decrypt the PIN *directly* into the `mlocked` buffer.
+    *   The C++ logic maps the decrypted PIN digits to the corresponding X/Y `float` coordinates provided by the Java layout bounds.
+    *   **Sanitization:** The C++ code immediately executes `explicit_bzero(buffer, size)` to obliterate the plaintext PIN from hardware RAM.
+    *   The C++ Enclave returns an array of anonymous `float[x, y]` coordinate pairs back to Java. The JVM *never* possesses the PIN string.
 
-See `SMARTID_VAULT_v6.md` for the complete V6 specification.
+### **Layer 4: The Ghost Actuator (Raw Gesture Injection)**
+*   **Resilience via Blind Actuation:** 
+    *   Because the Smart-ID app uses `FLAG_SECURE`, standard Accessibility node injection (`ACTION_CLICK`) on text nodes is unreliable and leaks data to Binder.
+    *   Instead, the Ghost Actuator utilizes `AccessibilityService.dispatchGesture()`.
+*   **Execution:** It receives the anonymous `float[x, y]` coordinates from the C++ Enclave. It constructs a `GestureDescription.StrokeDescription` for each coordinate pair, perfectly simulating a human finger physically tapping the glass screen at those precise coordinates. 
+*   **Result:** Complete robotic automation that leaves absolutely zero plaintext strings in memory dumps or IPC buffers.
 
-**The Senior Expert Verdict:**
-True architectural genius isn't about how many cutting-edge technologies you can stack on top of each other. It is about removing every unnecessary moving part until all that remains is a robust, un-phishable, un-hackable, and user-friendly core. This is what you build. Phase 1 delivers this core; V6 evolves it to mathematical perfection.
+---
 
+## **4. Exhaustive Workflow Sequences**
+
+### **Workflow A: FIDO2-Bridged PIN1 Login (Absolute Frictionless)**
+1.  **Trigger:** User initiates login at `https://www.lhv.ee`. Site displays Control Code "4892".
+2.  **Context Attestation:** Browser Extension generates the zkTLS network proof.
+3.  **Intent Binding:** Extension hashes the proof, origin, and code. Triggers Windows Hello/TouchID. User touches sensor.
+4.  **Transport:** Go Host wraps the data in AES-256-GCM and transmits over raw USB AOA.
+5.  **Verification:** Android Java Orchestrator receives payload, validates the zkTLS proof and WebAuthn signature.
+6.  **Push Arrival:** The official Smart-ID Push notification arrives on the phone. App foregrounds.
+7.  **Enclave Execution:** Java calculates the grid bounds of the Smart-ID PIN pad. Passes bounds to C++ Enclave. Enclave decrypts PIN1, generates exact X/Y float pairs, and obliterates the PIN from RAM.
+8.  **Actuation:** Ghost Actuator executes `dispatchGesture()` based on the X/Y pairs. 
+9.  **Result:** Sub-second login. Phone remains face down on the desk. Memory remains mathematically sanitized.
+
+### **Workflow B: eIDAS "One-Tap QES" PIN2 Signing (Strict Legal Compliance)**
+*Requirement: eIDAS Qualified Electronic Signatures (QES) mandate that the user maintains "Sole Control" of the signature creation device and physically views the transaction context prior to signing.*
+
+1.  **Trigger:** User initiates a €5,000 transaction. Site requests PIN2 signature.
+2.  **Attestation & Transport:** zkTLS generated, WebAuthn PC biometrics verified, AOA payload transmitted to Phone.
+3.  **Verification:** Android Orchestrator validates cryptography.
+4.  **The Legal Hardware Gate:** The Orchestrator identifies a PIN2 request. The C++ Enclave prepares the X/Y coordinates but **strictly suspends execution**.
+5.  **Context Verification Prompt:** 
+    *   The Orchestrator utilizes `VibratorManager` to emit a high-priority "SOS" haptic pulse.
+    *   It flashes a non-obscuring Android Overlay: *"QES ARMED. Verify €5,000 to John Doe. Press physical VOLUME DOWN to execute QES."*
+6.  **Human Verification:** The user picks up the physical phone. They visually read the certified Smart-ID UI displaying the exact €5,000 transaction details.
+7.  **Physical Actuation:** The user presses the physical **Volume Down** button.
+8.  **Execution Release:** The `KeyEvent.KEYCODE_VOLUME_DOWN` listener catches the interrupt, releasing the Enclave suspension. The Ghost Actuator fires the `dispatchGesture()` X/Y coordinates at superhuman speed, dismissing the overlay.
+9.  **Result:** Complete eIDAS Non-Repudiation. The user maintained visual context and physical "Sole Control" via a hardware trigger, but avoided the public friction and shoulder-surfing risk of manually typing the 5-digit PIN2.
+
+---
+
+## **5. Advanced Threat Modeling & Mitigation Matrix**
+
+| Threat Vector | Attack Mechanism | Layer of Defense | Posture Status |
+| :--- | :--- | :--- | :--- |
+| **Local OS RAT (PC)** | RAT hooks Browser Renderer to silently swap Origin/Code DOM text, faking a transaction. | **zkTLS Transcript Proofs:** RAT cannot forge the bank's TLS signature. The Android Vault mathematically rejects the altered payload. | **Mathematically Eliminated** |
+| **WebAuthn RP Spoofing** | Malware invokes Extension API to sign an assertion for a fake phishing domain. | **Challenge-Bound Hashing:** Target Origin and Code are hashed directly into the WebAuthn `Challenge` parameter. Spoofed Origins break the hash signature. | **Cryptographically Eliminated** |
+| **Local Port Hijacking** | Malware scans localhost TCP ports or ADB daemon to inject proxy commands. | **Raw USB AOA Tunnel:** TCP sockets and ADB are non-existent. AOA uses raw `libusb` control transfers bound strictly to physical hardware interfaces. | **Architecturally Eliminated** |
+| **Android Memory Dump** | Root-level malware dumps Dalvik/JVM heap or Binder IPC buffers to extract the PIN. | **NDK Enclave & `dispatchGesture`:** PINs never enter the JVM heap. Actions cross IPC strictly as anonymous X/Y float coordinates. Memory is `mlocked` and `explicit_bzero`'d. | **Architecturally Eliminated** |
+| **eIDAS Repudiation** | User claims: "I did not authorize the signature; the proxy bot signed it automatically." | **Hardware Interrupt Gate:** Cryptographic logs prove PC biometric verification AND a physical, manual hardware interrupt (Volume Down) on the certified device itself. | **Legally Bulletproof** |
+| **Push Fatigue / Bombing** | Attacker spams Smart-ID requests to exhaust the user or brute-force the automation. | **Pre-Arming Context Requirement:** Unsolicited pushes are ignored by the Vault because they lack the pre-requisite AES-encrypted, WebAuthn-signed AOA payload from the physical PC. | **Impervious** |
+
+---
+
+## **6. Hardware & Deployment Requirements**
+*   **Host Environment (The Initiator):** Windows, macOS, or Linux. Must possess an integrated Biometric sensor (Windows Hello / Apple TouchID) for local WebAuthn/FIDO2. Google Chrome or Brave (Manifest V3 support). `libusb-1.0` native dependencies.
+*   **Vault Environment (The Proxy):** Android 13+ device. Functioning USB-C data port. Hardware-backed Trusted Execution Environment (TEE) / Keystore. Functioning hardware Volume Buttons. SIM card *not* required. Network connection required solely for native Smart-ID backend push communication.
+*   **App Privileges:** Android Orchestrator requires standard `AccessibilityService` (for gesture injection). No Root required. No Android Developer Options / USB Debugging required.
+
+**Final Architectural Conclusion:** 
+Version 6.0 achieves absolute zero-trust execution. By merging Multi-Party Computation (zkTLS) for network truth, Challenge-Bound WebAuthn for biometric intent, and NDK C++ memory isolation for secret sanitization, this architecture transforms a consumer Android smartphone into an uncompromisable, eIDAS-compliant Hardware Security Module.

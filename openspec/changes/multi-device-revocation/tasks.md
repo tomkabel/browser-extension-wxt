@@ -1,6 +1,6 @@
 ## 1. Implement Device Registry
 
-- [ ] 1.1 Define `DeviceRecord` interface in `types/index.ts`
+- [ ] 1.1 Define `DeviceRecord` interface and `DeviceMeta` (non-sensitive subset for local storage) in `types/index.ts`
 - [ ] 1.2 Create `entrypoints/background/deviceRegistry.ts`:
   - `addDevice(record: DeviceRecord): Promise<void>`
   - `removeDevice(deviceId: string): Promise<void>`
@@ -9,9 +9,12 @@
   - `setActiveDevice(deviceId: string): Promise<void>`
   - `getActiveDevice(): DeviceRecord | undefined`
 - [ ] 1.3 Store device registry in `chrome.storage.session` key `devices`
-- [ ] 1.4 Enforce 5-device maximum
-- [ ] 1.5 Unit test: add, remove, list devices
-- [ ] 1.6 Unit test: max 5 devices enforced
+- [ ] 1.4 Shadow-copy metadata to `chrome.storage.local` key `deviceMetadata` on every registry mutation (add/remove/update)
+- [ ] 1.5 Implement `reconcileDeviceRegistry()` on background startup: if session empty, reconstruct from local metadata (without static keys — requires IK re-handshake or re-pairing)
+- [ ] 1.6 Enforce 5-device maximum
+- [ ] 1.7 Unit test: add, remove, list devices
+- [ ] 1.8 Unit test: max 5 devices enforced
+- [ ] 1.9 Unit test: reconciler rebuilds session from local storage on simulated browser restart
 
 ## 2. Update Pairing Flow for Device Registration
 

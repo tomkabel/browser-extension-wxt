@@ -2,11 +2,11 @@
 
 ### Requirement: WebAuthn assertion with custom challenge
 
-The extension SHALL invoke `navigator.credentials.get()` with the derived SHA-256 challenge, requiring user verification.
+The extension SHALL invoke `navigator.credentials.get()` with the derived SHA-256 challenge (version 0x02, tier-aware), requiring user verification.
 
 #### Scenario: Assertion invocation
 
-- **GIVEN** the derived challenge from `challenge-derivation`
+- **GIVEN** the derived challenge from `challenge-derivation` (containing TLS binding proof at the negotiated tier)
 - **AND** the user has a provisioned passkey for the extension origin
 - **WHEN** the extension calls `navigator.credentials.get()` from the popup window
 - **THEN** the request SHALL include: `challenge: derivedChallenge` (SHA-256 hash), `rpId: hostname` (extracted from extensionOrigin via URL parsing), `allowCredentials` with stored credential ID, `userVerification: 'required'`, and `timeout: 60000`
@@ -16,7 +16,7 @@ The extension SHALL invoke `navigator.credentials.get()` with the derived SHA-25
 
 - **WHEN** the user successfully completes biometric verification
 - **THEN** the extension SHALL extract: `rawId`, `response.authenticatorData`, `response.signature`, and `response.clientDataJSON`
-- **AND** SHALL serialize these for transport to the Android Vault
+- **AND** SHALL serialize these for transport to the Android Vault alongside the TLS binding proof and tier byte
 
 #### Scenario: Assertion timeout
 

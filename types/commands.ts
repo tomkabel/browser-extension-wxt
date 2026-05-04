@@ -4,7 +4,9 @@ export enum CommandType {
   RejectTransaction = 'reject_transaction',
   ReadScreen = 'read_screen',
   Ping = 'ping',
+  Pong = 'pong',
   CredentialRequest = 'credential-request',
+  ProvisionPasskey = 'provision-passkey',
 }
 
 export interface ControlCommand {
@@ -13,15 +15,17 @@ export interface ControlCommand {
   command: CommandType;
   payload: Record<string, unknown>;
   timestamp: number;
+  signature?: string;
 }
 
 export interface ControlResponse {
   version: 1;
   sequence: number;
-  status: 'ok' | 'error' | 'confirmed' | 'rejected';
+  status: 'ok' | 'error' | 'confirmed' | 'rejected' | 'pong';
   data?: Record<string, unknown>;
   error?: string;
   signature?: string;
+  timestamp?: number;
 }
 
 export interface CommandState {

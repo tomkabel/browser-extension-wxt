@@ -29,15 +29,21 @@ export class TransportManager {
 
     this.usbTransport.onDisconnect(() => {
       if (this.activeTransport?.type === 'usb') {
-        this.switchTransport('webrtc', 'USB disconnected').catch(() => {
-          // fallback failed — no active transport
-        });
+        this.switchTransport('webrtc', 'USB disconnected').catch(() => {});
       }
     });
 
     this.webrtcTransport.onDisconnect(() => {
       if (this.activeTransport?.type === 'webrtc') {
-        this.emit('status-change', { connected: false });
+        this.switchTransport('usb', 'WebRTC disconnected').then((switched) => {
+          if (!switched) {
+            this.activeTransport = null;
+            this.emit('status-change', {
+              connected: false,
+              reason: 'WebRTC disconnected, USB unavailable',
+            });
+          }
+        });
       }
     });
   }
@@ -61,7 +67,6 @@ export class TransportManager {
       }
 
       this.startUsbPolling();
-      this.startHostAvailabilityCheck();
     } finally {
       this.connecting = false;
     }
@@ -105,38 +110,30 @@ export class TransportManager {
       clearInterval(this.usbPollTimer);
       this.usbPollTimer = null;
     }
-    if (this.hostCheckTimer) {
-      clearInterval(this.hostCheckTimer);
-      this.hostCheckTimer = null;
-    }
 
     if (this.activeTransport) {
       await this.activeTransport.disconnect();
     }
   }
 
-  private async switchTransport(
-    target: TransportType,
-    reason: string,
-  ): Promise<void> {
+  async switchTransport(target: TransportType, reason: string): Promise<boolean> {
     const previous = this.activeTransport?.type ?? null;
     const current = this.activeTransport;
 
     if (target === 'usb' && this.usbAvailable) {
       try {
         await this.usbTransport.connect();
-        if (current && current.type === 'webrtc') {
-          // Flush pending data while WebRTC is still the active transport
-          await current.send(new Uint8Array(0));
+        if (current && current.type !== 'usb') {
+          await current.disconnect();
         }
         this.activeTransport = this.usbTransport;
         if (this.messageCallback) {
           this.usbTransport.onMessage(this.messageCallback);
         }
         this.emitChange(previous, 'usb', reason);
-        return;
+        return true;
       } catch {
-        // USB connect or flush failed, stay on current
+        // USB connect failed, stay on current
       }
     }
 
@@ -147,10 +144,12 @@ export class TransportManager {
       await this.connectWebRtc();
       if (this.activeTransport?.type === 'webrtc') {
         this.emitChange(previous, 'webrtc', reason);
-      } else {
-        this.emit('status-change', { connected: false, reason });
+        return true;
       }
+      this.emit('status-change', { connected: false, reason });
     }
+
+    return false;
   }
 
   private async connectWebRtc(): Promise<void> {
@@ -190,17 +189,7 @@ export class TransportManager {
     }, TRANSPORT_CONFIG.usbPollIntervalMs);
   }
 
-  private startHostAvailabilityCheck(): void {
-    this.hostCheckTimer = setInterval(async () => {
-      this.usbAvailable = await this.checkUsbAvailability();
-    }, TRANSPORT_CONFIG.hostAvailabilityCheckIntervalMs);
-  }
-
-  private emitChange(
-    previous: TransportType | null,
-    current: TransportType,
-    reason: string,
-  ): void {
+  private emitChange(previous: TransportType | null, current: TransportType, reason: string): void {
     this.emit('transport-changed', { previous, current, reason } as TransportChangeEvent);
 
     try {

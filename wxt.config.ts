@@ -30,13 +30,13 @@ export default defineConfig({
     version: '1.0.0',
     key: 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAttg73RbMji2rzH+ltq5zbmW+hVBCskDiIz3vObBo9UH48/rSNOLSR5Tj+cn1CsVhH0eIvp+zHI7uz1jt3p1NfAxMO1qHFjNNOjazAlC5kPx14fUlx1gyKd5HjhBeAS6ppYqIq9A+A+3NI5pySJT1exKBMQqK349lmn+aq0qgr/xrW0hXG1oneBqusWvaSfuPKiI5l8yzed/kaX+ckLKI1VvDZmNV6GvCTQFlshXf6e1aYu5M4eTMVIctNxwatQJ4biB63OjMB2ILrkeav+93kJ9VCgr94AW3LOtO5PZmUExggdORuLFCpf1WVliojxdxUv3CsuN7ILnFcbu2xnHW/QIDAQAB',
 
-    permissions: ['storage', 'activeTab', 'alarms', 'offscreen', 'idle', 'webRequest'],
+    permissions: ['storage', 'activeTab', 'alarms', 'offscreen', 'idle', 'scripting', 'webRequest'],
 
     action: {
       default_popup: 'popup.html',
     },
 
-    host_permissions: ['<all_urls>'],
+    host_permissions: ['*://*/*'],
 
     web_accessible_resources: [
       {
