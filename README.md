@@ -22,14 +22,23 @@ The TURN server provides relay connectivity when direct WebRTC peer-to-peer conn
 
 ### Deploy to Fly.io
 
+Generate a shared HMAC secret used by both TURN and signaling servers:
+
+```bash
+TURN_SECRET=$(openssl rand -hex 32)
+echo $TURN_SECRET
+```
+
+Then deploy the TURN server:
+
 ```bash
 cd turn-server
 
 # Create the Fly app (one-time)
 fly launch --name smartid2-turn --region fra --no-deploy
 
-# Set the HMAC auth secret
-fly secrets set TURN_SECRET=$(openssl rand -hex 32)
+# Set the HMAC auth secret (use the TURN_SECRET generated above)
+fly secrets set TURN_SECRET=$TURN_SECRET
 
 # Set the external IP for relay candidates
 fly secrets set EXTERNAL_IP=$(fly ips list | grep 'v4' | awk '{print $2}')
@@ -59,14 +68,17 @@ The signaling server handles WebSocket-based SDP/ICE exchange and issues ephemer
 
 ### Deploy to Fly.io
 
+Ensure `TURN_SECRET` is set to the same value used for the TURN server above,
+then deploy:
+
 ```bash
 cd signaling-server
 
 # Create the Fly app (one-time)
 fly launch --name smartid2-signaling --region fra --no-deploy
 
-# Set required secrets
-fly secrets set TURN_SECRET=$(openssl rand -hex 32)
+# Reuse the TURN_SECRET from the TURN server deployment (must match)
+fly secrets set TURN_SECRET=$TURN_SECRET
 
 # Set TURN server list (comma-separated, without protocol prefix)
 fly secrets set TURN_SERVERS=smartid2-turn.fly.dev:3478
