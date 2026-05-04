@@ -520,6 +520,8 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
         sessionNonce,
       });
 
+      const rpId = chrome.runtime.id;
+
       const derivedChallenge = await deriveChallenge({
         zkTlsProof: proofBytes,
         origin,
