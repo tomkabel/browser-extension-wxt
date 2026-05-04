@@ -4,6 +4,7 @@ import type { ApprovedDomain } from '~/types';
 
 const STORAGE_KEY = 'approvedDomains';
 const SCRIPT_ID_PREFIX = 'credential-fill-';
+const registerLock = new Map<string, Promise<void>>();
 
 export async function sha256Hex(input: string): Promise<string> {
   const data = new TextEncoder().encode(input);
@@ -20,37 +21,50 @@ export async function registerForDomain(domain: string, jsFile?: string): Promis
   const hash = await sha256Hex(domain);
   const scriptId = scriptIdForDomain(domain, hash);
 
-  const existing = await getApprovedDomains();
-  if (existing.some((a) => a.domain === domain)) {
-    log.info('[CSM] Domain already approved:', domain);
+  const pending = registerLock.get(domain);
+  if (pending) {
+    await pending;
     return scriptId;
   }
 
-  try {
-    await chrome.scripting.registerContentScripts([
-      {
-        id: scriptId,
-        matches: [`*://*.${domain}/*`],
-        js: [jsFile ?? 'content-scripts/content.js'],
-        runAt: 'document_end',
-        persistAcrossSessions: true,
-        world: 'ISOLATED',
-      },
-    ]);
-  } catch (err) {
-    if (err instanceof Error && err.message.includes('already registered')) {
-      log.info('[CSM] Script already registered:', domain);
-    } else {
-      log.error('[CSM] Failed to register script for', domain, err);
-      throw err;
+  const promise = (async () => {
+    const existing = await getApprovedDomains();
+    if (existing.some((a) => a.domain === domain)) {
+      log.info('[CSM] Domain already approved:', domain);
+      return;
     }
-  }
 
-  const entry: ApprovedDomain = { domain, registeredAt: Date.now(), scriptId };
-  const updated = [...existing, entry];
-  await browser.storage.sync.set({ [STORAGE_KEY]: updated });
+    try {
+      await chrome.scripting.registerContentScripts([
+        {
+          id: scriptId,
+          matches: [`*://*.${domain}/*`],
+          js: [jsFile ?? 'content-scripts/content.js'],
+          runAt: 'document_end',
+          persistAcrossSessions: true,
+          world: 'ISOLATED',
+        },
+      ]);
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('already registered')) {
+        log.info('[CSM] Script already registered:', domain);
+      } else {
+        log.error('[CSM] Failed to register script for', domain, err);
+        throw err;
+      }
+    }
 
-  log.info('[CSM] Registered domain:', domain);
+    const entry: ApprovedDomain = { domain, registeredAt: Date.now(), scriptId };
+    const updated = [...existing, entry];
+    await browser.storage.sync.set({ [STORAGE_KEY]: updated });
+
+    log.info('[CSM] Registered domain:', domain);
+  })();
+
+  const cleanup = () => { registerLock.delete(domain); };
+  registerLock.set(domain, promise.then(cleanup, cleanup));
+  await promise;
+
   return scriptId;
 }
 
@@ -89,26 +103,28 @@ export async function reRegisterOnStartup(): Promise<void> {
   if (domains.length === 0) return;
 
   log.info('[CSM] Re-registering', domains.length, 'approved domains on startup');
-  for (const entry of domains) {
-    try {
-      const registered = await chrome.scripting.getRegisteredContentScripts();
-      const alreadyRegistered = registered.some((s) => s.id === entry.scriptId);
-      if (alreadyRegistered) continue;
+  await Promise.allSettled(
+    domains.map(async (entry) => {
+      try {
+        const registered = await chrome.scripting.getRegisteredContentScripts();
+        const alreadyRegistered = registered.some((s) => s.id === entry.scriptId);
+        if (alreadyRegistered) return;
 
-      await chrome.scripting.registerContentScripts([
-        {
-          id: entry.scriptId,
-          matches: [`*://*.${entry.domain}/*`],
-          js: ['content-scripts/content.js'],
-          runAt: 'document_end',
-          persistAcrossSessions: true,
-          world: 'ISOLATED',
-        },
-      ]);
-    } catch (err) {
-      log.warn('[CSM] Failed to re-register script for', entry.domain, err);
-    }
-  }
+        await chrome.scripting.registerContentScripts([
+          {
+            id: entry.scriptId,
+            matches: [`*://*.${entry.domain}/*`],
+            js: ['content-scripts/content.js'],
+            runAt: 'document_end',
+            persistAcrossSessions: true,
+            world: 'ISOLATED',
+          },
+        ]);
+      } catch (err) {
+        log.warn('[CSM] Failed to re-register script for', entry.domain, err);
+      }
+    }),
+  );
 }
 
 export async function isScriptRegistered(domain: string): Promise<boolean> {
@@ -177,6 +193,7 @@ export async function updateBadgeCount(): Promise<void> {
     await browser.action.setBadgeBackgroundColor({ color: '#dc2626' });
   } else {
     await browser.action.setBadgeText({ text: '' });
+    await browser.action.setBadgeBackgroundColor({ color: '#000000' });
   }
 }
 
