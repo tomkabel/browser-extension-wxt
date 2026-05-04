@@ -261,6 +261,9 @@ export function createCommandClient(
   }
 
   async function sendPing(): Promise<ControlResponse> {
+    if (pendingPingSeq !== null) {
+      return Promise.reject(new Error('A ping command is already in-flight'));
+    }
     return sendCommand(CommandType.Ping, { ts: performance.now() });
   }
 
