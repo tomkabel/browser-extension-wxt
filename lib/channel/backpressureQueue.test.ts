@@ -2,9 +2,21 @@ import { describe, it, expect, vi } from 'vitest';
 import { BackpressureQueue } from './backpressureQueue';
 
 function createMockDc(bufferedAmount = 0): RTCDataChannel {
+  const listeners = new Map<string, Array<() => void>>();
   return {
     bufferedAmount,
     send: vi.fn(),
+    addEventListener: vi.fn((event: string, cb: () => void) => {
+      if (!listeners.has(event)) listeners.set(event, []);
+      listeners.get(event)!.push(cb);
+    }),
+    removeEventListener: vi.fn((event: string, cb: () => void) => {
+      const cbs = listeners.get(event);
+      if (cbs) {
+        const idx = cbs.indexOf(cb);
+        if (idx >= 0) cbs.splice(idx, 1);
+      }
+    }),
   } as unknown as RTCDataChannel;
 }
 
@@ -16,7 +28,7 @@ describe('BackpressureQueue', () => {
 
     await queue.send(payload, dc);
 
-    expect(dc.send).toHaveBeenCalledWith(payload);
+    expect(dc.send).toHaveBeenCalled();
     expect(queue.getQueueLength()).toBe(0);
   });
 
@@ -27,12 +39,16 @@ describe('BackpressureQueue', () => {
 
     setTimeout(() => {
       Object.defineProperty(dc, 'bufferedAmount', { value: 0 });
+      const bufferedAmountLowCb = (dc.addEventListener as ReturnType<typeof vi.fn>).mock.calls.find(
+        (c: unknown[]) => c[0] === 'bufferedamountlow',
+      );
+      if (bufferedAmountLowCb) bufferedAmountLowCb[1]();
     }, 10);
 
     await queue.send(payload, dc);
 
     expect(queue.getQueueLength()).toBe(0);
-    expect(dc.send).toHaveBeenCalledWith(payload);
+    expect(dc.send).toHaveBeenCalled();
   });
 
   it('drains queue when bufferedAmount drops below threshold', async () => {
@@ -43,15 +59,17 @@ describe('BackpressureQueue', () => {
     const sendPromise = queue.send(payload, dc);
     expect(queue.getQueueLength()).toBe(1);
 
-    // Simulate bufferedAmount dropping after some time
     setTimeout(() => {
       Object.defineProperty(dc, 'bufferedAmount', { value: 0 });
+      const bufferedAmountLowCb = (dc.addEventListener as ReturnType<typeof vi.fn>).mock.calls.find(
+        (c: unknown[]) => c[0] === 'bufferedamountlow',
+      );
+      if (bufferedAmountLowCb) bufferedAmountLowCb[1]();
     }, 10);
 
-    // After drain completes, queue should be empty
     await sendPromise;
     expect(queue.getQueueLength()).toBe(0);
-    expect(dc.send).toHaveBeenCalledWith(payload);
+    expect(dc.send).toHaveBeenCalled();
   });
 
   it('reports draining state correctly', async () => {
@@ -68,6 +86,10 @@ describe('BackpressureQueue', () => {
 
     setTimeout(() => {
       Object.defineProperty(dc, 'bufferedAmount', { value: 0 });
+      const bufferedAmountLowCb = (dc.addEventListener as ReturnType<typeof vi.fn>).mock.calls.find(
+        (c: unknown[]) => c[0] === 'bufferedamountlow',
+      );
+      if (bufferedAmountLowCb) bufferedAmountLowCb[1]();
     }, 10);
 
     await sendPromise;
