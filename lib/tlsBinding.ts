@@ -63,6 +63,7 @@ export async function buildChallengeProof(
   tabId: number,
   controlCode: string,
   pageContent: string,
+  precomputedHash?: string,
 ): Promise<Uint8Array> {
   const secFetch = tabSecFetchCache.get(tabId) ?? {
     site: 'cross-site',
@@ -70,7 +71,7 @@ export async function buildChallengeProof(
     dest: 'document',
     user: '?1',
   };
-  const contentHash = await computeContentHash(pageContent);
+  const contentHash = precomputedHash ?? await computeContentHash(pageContent);
 
   const encoder = new TextEncoder();
   const proofPayload = {
@@ -102,7 +103,7 @@ export async function getTlsBindingComponents(
 ): Promise<TlsBindingComponents> {
   const secFetch = tabSecFetchCache.get(tabId) ?? { site: 'cross-site', mode: 'navigate', dest: 'document', user: '?1' };
   const contentHash = await computeContentHash(pageContent);
-  const binding = await buildChallengeProof(tabId, controlCode, pageContent);
+  const binding = await buildChallengeProof(tabId, controlCode, pageContent, contentHash);
 
   return {
     secFetchSite: secFetch.site,
