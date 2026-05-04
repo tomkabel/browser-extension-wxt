@@ -56,7 +56,7 @@ Bank coordination to add the `SmartID-Attestation` header is NOT feasible during
 4. All crypto operations are identical to production — the same `crypto.subtle.verify()` code path is exercised
 5. End-to-end unit tests verify the entire pipeline: key generation → signing → parsing → verification → cross-reference
 
-This provides the same security guarantees for testing. In production, the private key is replaced with the bank's actual signing key, and the header source switches from local generation to server-signed headers.
+**⚠️ Security caveat:** Demo mode exercises the functional crypto pipeline (`crypto.subtle.verify()`, header parsing, control-code cross-reference) but does **NOT** replicate the production threat model. Demo private keys are bundled in source and can be extracted by any local attacker to forge attestation headers. Demo mode is for development and integration testing only. Production requires bank-held signing keys and server-signed `SmartID-Attestation` headers. When switching to production: replace `trusted-rp-keys.json` with bank-provided public keys, disable the demo injector via runtime guards, and enable manifest refresh from the update server.
 
 ## Dependencies
 
