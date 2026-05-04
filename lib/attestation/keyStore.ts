@@ -27,6 +27,7 @@ export class KeyStore implements RpKeyStore {
   }
 
   getKey(domain: string, keyId: string): TrustedRpSigningKey | undefined {
+    if (!(WHITELISTED_RP_DOMAINS as readonly string[]).includes(domain)) return undefined;
     const key = this.keys.get(`${domain}:${keyId}`);
     if (!key) return undefined;
     if (!this.isKeyActive(key)) return undefined;
@@ -73,6 +74,10 @@ export class KeyStore implements RpKeyStore {
   }
 
   updateManifest(manifest: SignedKeyManifest): boolean {
+    if (!manifest.manifestSignature || manifest.manifestSignature.length === 0) {
+      log.warn('Rejecting manifest with empty or missing signature');
+      return false;
+    }
     if (manifest.version <= this.manifestVersion) {
       log.warn('Rejecting manifest with version <= current');
       return false;

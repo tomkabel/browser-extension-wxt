@@ -81,11 +81,10 @@ describe('timestamp validation', () => {
 });
 
 describe('key store', () => {
-  it('rejects unknown key-id', () => {
+  it('rejects unknown key-id in verifyHeader', async () => {
     const store = new KeyStore();
     const verifier = createVerifier(store);
-    const attested = { controlCode: '4892', rpDomain: 'lhv.ee', keyId: 'nonexistent', signature: '' };
-    const result = verifier.verifyControlCode(attested, '4892');
-    expect(result.type).toBe('verified');
+    const result = await verifier.verifyHeader('v1;eyJjb2RlIjoiNDg5MiIsInRzIjoxNzAwMDAwMDAwfQ;c2lnbmF0dXJl;unknown-key', 'lhv.ee');
+    expect(result).toBeNull();
   });
 });

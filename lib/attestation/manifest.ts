@@ -8,6 +8,7 @@ const MANIFEST_SIGNING_KEY_HEX =
   '0453c0135f5c4ce30d89ae2e256f954ff42967e63213a0e79f05af5e7420a31a2384cfc5714fa86acb60f27bedb8b79dd2f62a594d99074f9033b33350df0a40ae';
 
 const MANIFEST_URL = 'https://update.smartid2.app/trusted-rp-keys.json';
+const MANIFEST_FETCH_TIMEOUT_MS = 10_000;
 
 let manifestSigningKey: CryptoKey | null = null;
 
@@ -34,10 +35,19 @@ export async function refreshKeyManifest(
   keyStore: KeyStore,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const response = await fetch(MANIFEST_URL, {
-      cache: 'no-cache',
-      headers: { Accept: 'application/json' },
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), MANIFEST_FETCH_TIMEOUT_MS);
+
+    let response: Response;
+    try {
+      response = await fetch(MANIFEST_URL, {
+        cache: 'no-cache',
+        headers: { Accept: 'application/json' },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!response.ok) {
       return { success: false, error: `HTTP ${response.status}` };
@@ -49,27 +59,29 @@ export async function refreshKeyManifest(
       return { success: false, error: 'Invalid manifest format' };
     }
 
-    if (manifest.manifestSignature) {
-      const signingKey = await getManifestSigningKey();
-      if (!signingKey) {
-        return { success: false, error: 'Manifest signing key unavailable' };
-      }
+    if (!manifest.manifestSignature) {
+      return { success: false, error: 'Manifest signature missing' };
+    }
 
-      const payloadBytes = new TextEncoder().encode(
-        sortedJsonStringify({ version: manifest.version, keys: manifest.keys }),
-      );
-      const sigBytes = new Uint8Array(base64urlDecode(manifest.manifestSignature));
+    const signingKey = await getManifestSigningKey();
+    if (!signingKey) {
+      return { success: false, error: 'Manifest signing key unavailable' };
+    }
 
-      const valid = await crypto.subtle.verify(
-        { name: 'ECDSA', hash: 'SHA-256' },
-        signingKey,
-        sigBytes,
-        payloadBytes,
-      );
+    const payloadBytes = new TextEncoder().encode(
+      sortedJsonStringify({ version: manifest.version, keys: manifest.keys }),
+    );
+    const sigBytes = new Uint8Array(base64urlDecode(manifest.manifestSignature));
 
-      if (!valid) {
-        return { success: false, error: 'Manifest signature invalid' };
-      }
+    const valid = await crypto.subtle.verify(
+      { name: 'ECDSA', hash: 'SHA-256' },
+      signingKey,
+      sigBytes,
+      payloadBytes,
+    );
+
+    if (!valid) {
+      return { success: false, error: 'Manifest signature invalid' };
     }
 
     const applied = keyStore.updateManifest(manifest);

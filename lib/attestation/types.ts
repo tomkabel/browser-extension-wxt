@@ -24,7 +24,7 @@ export interface TrustedRpSigningKey {
 export interface SignedKeyManifest {
   version: number;
   keys: TrustedRpSigningKey[];
-  manifestSignature?: string;
+  manifestSignature: string;
 }
 
 export interface RpKeyStore {

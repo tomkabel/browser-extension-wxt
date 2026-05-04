@@ -34,7 +34,7 @@ describe('KeyStore', () => {
     expect(key!.domain).toBe('lhv.ee');
   });
 
-  it('returns no keys for non-whitelisted domain', () => {
+  it('returns undefined for domain without registered keys', () => {
     const store = new KeyStore([makeKey('lhv.ee', 'lhv-2026q1')]);
     expect(store.getKey('evil.com', 'lhv-2026q1')).toBeUndefined();
   });
@@ -58,12 +58,12 @@ describe('KeyStore', () => {
     store.updateManifest({
       version: 2,
       keys: [makeKey('lhv.ee', 'lhv-v2')],
-      manifestSignature: '',
+      manifestSignature: 'dummy-sig-for-test',
     });
     const result = store.updateManifest({
       version: 1,
       keys: [makeKey('lhv.ee', 'lhv-v1')],
-      manifestSignature: '',
+      manifestSignature: 'dummy-sig-for-test',
     });
     expect(result).toBe(false);
   });
@@ -73,7 +73,7 @@ describe('KeyStore', () => {
     const result = store.updateManifest({
       version: 2,
       keys: [makeKey('lhv.ee', 'lhv-v2')],
-      manifestSignature: '',
+      manifestSignature: 'dummy-sig-for-test',
     });
     expect(result).toBe(true);
   });
