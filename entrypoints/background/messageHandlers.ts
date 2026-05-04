@@ -534,7 +534,16 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       });
 
       const authUrl = chrome.runtime.getURL('auth.html?mode=challenge-assert');
-      await browser.tabs.create({ url: authUrl, active: false });
+      const tab = await browser.tabs.create({ url: authUrl, active: false });
+      authTabId = tab.id ?? null;
+
+      setTimeout(() => {
+        if (authInProgress) {
+          authInProgress = false;
+          authTabId = null;
+          log.info('[authInProgress] Reset on timeout');
+        }
+      }, AUTH_TIMEOUT_MS);
 
       return {
         success: true,
@@ -543,6 +552,7 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
     } catch (err) {
       log.error('Failed to begin challenge assertion:', err);
       authInProgress = false;
+      authTabId = null;
       return { success: false, error: err instanceof Error ? err.message : 'Assertion initiation failed' };
     }
   },
@@ -567,6 +577,7 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
         'assertion:result': { status: data.status, error: data.error ?? 'Assertion failed' },
       });
       authInProgress = false;
+      authTabId = null;
       return { success: false, error: data.error ?? 'Assertion failed' };
     }
 
@@ -574,6 +585,7 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       const error = 'Incomplete assertion data';
       await browser.storage.session.set({ 'assertion:result': { status: 'error', error } });
       authInProgress = false;
+      authTabId = null;
       return { success: false, error };
     }
 
@@ -609,6 +621,7 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       await browser.storage.session.remove('pending:assertion');
 
       authInProgress = false;
+      authTabId = null;
       return { success: true, data: { status: 'verified' } };
     } catch (err) {
       log.error('Failed to transmit assertion:', err);
@@ -616,6 +629,7 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
         'assertion:result': { status: 'error', error: err instanceof Error ? err.message : 'Transmission failed' },
       });
       authInProgress = false;
+      authTabId = null;
       return { success: false, error: err instanceof Error ? err.message : 'Transmission failed' };
     }
   },
@@ -698,6 +712,17 @@ function isValidMessage(
 }
 
 let authInProgress = false;
+let authTabId: number | null = null;
+
+const AUTH_TIMEOUT_MS = 120_000;
+
+browser.tabs.onRemoved.addListener((tabId) => {
+  if (tabId === authTabId) {
+    authInProgress = false;
+    authTabId = null;
+    log.info('[authInProgress] Reset on auth tab closed');
+  }
+});
 
 const MFA_RATE_LIMIT_WINDOW_MS = 60_000;
 const MFA_RATE_LIMIT_MAX = 3;
