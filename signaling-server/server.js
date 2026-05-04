@@ -47,6 +47,7 @@ function verifyCommitment(metadata, commitment) {
   if (!metadata.extensionStaticKey || !Array.isArray(metadata.extensionStaticKey)) return false;
   if (!metadata.nonce || !Array.isArray(metadata.nonce)) return false;
   if (metadata.nonce.length !== 32) return false;
+  if (typeof metadata.sasCode !== 'string') return false;
 
   const hash = createHash('sha256');
   const extKey = Buffer.from(metadata.extensionStaticKey);
@@ -157,13 +158,16 @@ io.on('connection', (socket) => {
 
     const roomId = ROOM_PREFIX + sasCode;
     const metadata = roomMetadata.get(roomId);
-    if (metadata) {
-      const commitment = socket.handshake.query?.commitment;
-      if (!commitment || !verifyCommitment(metadata, commitment)) {
-        socket.emit('error', { error: 'invalid_commitment' });
-        socket.disconnect(true);
-        return;
-      }
+    if (!metadata) {
+      socket.emit('error', { error: 'room_not_ready' });
+      socket.disconnect(true);
+      return;
+    }
+    const commitment = socket.handshake.query?.commitment;
+    if (!commitment || !verifyCommitment(metadata, commitment)) {
+      socket.emit('error', { error: 'invalid_commitment' });
+      socket.disconnect(true);
+      return;
     }
 
     const room = getRoom(roomId);
