@@ -421,6 +421,43 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
     return refreshRpKeys();
   },
 
+  'passkey-credential-created': async (payload) => {
+    const { credentialId, publicKeyBytes, prfEnabled } = payload as {
+      credentialId: string;
+      publicKeyBytes: number[];
+      prfEnabled: boolean;
+    };
+
+    log.info('Passkey credential created:', credentialId.slice(0, 16) + '...');
+
+    const { transmitCredentialToAndroid } = await import('./pairingCoordinator');
+    const transmitted = await transmitCredentialToAndroid(
+      credentialId,
+      new Uint8Array(publicKeyBytes),
+    );
+
+    if (!transmitted) {
+      log.warn('Credential public key transmission failed, falling back to PRF-only');
+    }
+
+    if (prfEnabled) {
+      try {
+        await cachePrfCredentialId(credentialId);
+        log.info('PRF credential cached from passkey provisioning');
+      } catch (err) {
+        log.warn('Failed to cache PRF credential:', err);
+      }
+    }
+
+    return { success: transmitted, data: { credentialId, transmitted } };
+  },
+
+  'passkey-credential-error': async (payload) => {
+    const { error } = payload as { error: string };
+    log.warn('Passkey credential creation failed:', error);
+    return { success: false, error: 'Passkey creation failed, PRF-only fallback activated' };
+  },
+
   'deliver-attested-code': async (payload) => {
     const attPayload = payload as AttestedCodePayload;
     if (!attPayload.controlCode || !attPayload.keyId || !attPayload.signature || !attPayload.rpDomain) {

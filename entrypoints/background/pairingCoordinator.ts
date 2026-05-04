@@ -240,17 +240,14 @@ export async function confirmSasMatch(): Promise<boolean> {
         }
       }
 
-      if (checkPrfSupport() && pendingRemoteStaticPk) {
+      if (pendingRemoteStaticPk) {
         try {
-          const salt = await generatePrfSalt(pendingRemoteStaticPk);
-          const saltBase64 = btoa(String.fromCharCode(...Array.from(salt)));
-          const authUrl = chrome.runtime.getURL(
-            `auth.html?mode=prf-create&salt=${encodeURIComponent(saltBase64)}`,
-          );
+          const authUrl = chrome.runtime.getURL('auth.html?mode=passkey-create');
           await browser.tabs.create({ url: authUrl, active: false });
-          log.info('[Coordinator] Opened PRF credential creation page');
+          log.info('[Coordinator] Opened passkey creation page');
         } catch (err) {
-          log.warn('[Coordinator] Failed to trigger PRF credential creation:', err);
+          log.warn('[Coordinator] Failed to open passkey creation page:', err);
+          await fallbackToPrfOnly(pendingRemoteStaticPk);
         }
       }
 
@@ -272,4 +269,53 @@ export async function rejectSasMatch(): Promise<void> {
   pendingRemoteStaticPk = null;
   await browser.storage.session.remove(EMOJI_SAS_STORAGE_KEY);
   await clearPairing();
+}
+
+async function fallbackToPrfOnly(remoteStaticPk: Uint8Array): Promise<void> {
+  log.info('[Coordinator] Falling back to PRF-only re-auth');
+  if (!checkPrfSupport()) {
+    log.warn('[Coordinator] PRF not supported, skipping');
+    return;
+  }
+  try {
+    const salt = await generatePrfSalt(remoteStaticPk);
+    const saltBase64 = btoa(String.fromCharCode(...Array.from(salt)));
+    const authUrl = chrome.runtime.getURL(
+      `auth.html?mode=prf-create&salt=${encodeURIComponent(saltBase64)}`,
+    );
+    await browser.tabs.create({ url: authUrl, active: false });
+    log.info('[Coordinator] Opened PRF credential creation page (fallback)');
+  } catch (err) {
+    log.warn('[Coordinator] PRF fallback failed:', err);
+  }
+}
+
+export async function transmitCredentialToAndroid(
+  credentialId: string,
+  publicKeyBytes: Uint8Array,
+): Promise<boolean> {
+  try {
+    const { getTransportManager, initializeTransportManager } = await import('./messageHandlers');
+    await initializeTransportManager();
+    const tm = getTransportManager();
+    if (!tm) {
+      log.warn('[Coordinator] No transport available to transmit credential');
+      return false;
+    }
+
+    const message = new TextEncoder().encode(
+      JSON.stringify({
+        type: 'credential-provision',
+        credentialId,
+        publicKeyBytes: Array.from(publicKeyBytes),
+      }),
+    );
+
+    await tm.send(message);
+    log.info('[Coordinator] Credential transmitted to Android Vault');
+    return true;
+  } catch (err) {
+    log.error('[Coordinator] Failed to transmit credential:', err);
+    return false;
+  }
 }
