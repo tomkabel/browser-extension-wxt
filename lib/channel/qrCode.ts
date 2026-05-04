@@ -164,7 +164,7 @@ export function encodePairingPayload(
   };
 
   if (sdpOffer) {
-    payload.s = compressSdp(sdpOffer);
+    payload.s = encodeSdp(sdpOffer);
   }
 
   if (iceCandidates && iceCandidates.length > 0) {
@@ -174,18 +174,19 @@ export function encodePairingPayload(
   return JSON.stringify(payload);
 }
 
-function compressSdp(sdp: string): string {
-  return btoa(
-    new TextEncoder()
-      .encode(sdp)
-      .reduce((acc, b) => acc + String.fromCharCode(b), ''),
-  );
+function encodeSdp(sdp: string): string {
+  const bytes = new TextEncoder().encode(sdp);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]!);
+  }
+  return btoa(binary);
 }
 
 function candidateToShort(candidate: string): string {
   const parts = candidate.split(' ');
-  if (parts.length >= 4) {
-    return `${parts[1]} ${parts[4]}`;
+  if (parts.length >= 8) {
+    return `${parts[0]} ${parts[1]} ${parts[2]} ${parts[3]} ${parts[4]} ${parts[5]} ${parts[6]} ${parts[7]}`;
   }
   return candidate;
 }
