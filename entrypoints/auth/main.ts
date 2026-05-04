@@ -61,10 +61,10 @@ async function loadExistingCredential(): Promise<boolean> {
       log(`Stored credential: ${stored.id.slice(0, 32)}...`);
       return true;
     }
-    } catch (err) {
-      console.warn('[Auth] Failed to load credential from storage:', err);
-    }
-    existingCredential = null;
+  } catch (err) {
+    console.warn('[Auth] Failed to load credential from storage:', err);
+  }
+  existingCredential = null;
   status('No credential registered. Register a new credential to continue.');
   btnRegister.style.display = 'block';
   btnAuthenticate.style.display = 'none';
@@ -244,7 +244,9 @@ async function handlePrfCreate(saltBase64: string): Promise<void> {
       throw new Error('Credential creation cancelled');
     }
 
-    const extResults = (credential.getClientExtensionResults?.() ?? {}) as { prf?: { enabled?: boolean } };
+    const extResults = (credential.getClientExtensionResults?.() ?? {}) as {
+      prf?: { enabled?: boolean };
+    };
     const prfEnabled = extResults.prf?.enabled === true;
 
     const relayResult = await chrome.runtime.sendMessage({
@@ -329,7 +331,9 @@ async function handlePasskeyCreate(): Promise<void> {
       return;
     }
 
-    const extResults = (credential.getClientExtensionResults?.() ?? {}) as { prf?: { enabled?: boolean } };
+    const extResults = (credential.getClientExtensionResults?.() ?? {}) as {
+      prf?: { enabled?: boolean };
+    };
     const prfEnabled = extResults.prf?.enabled === true;
 
     const relayResult = await chrome.runtime.sendMessage({
@@ -387,14 +391,16 @@ async function handleChallengeAssert(): Promise<void> {
     const challengeBytes = new Uint8Array(base64ToBuffer(challengeB64));
 
     const stored = await chrome.storage.session.get('pending:assertion');
-    const pending = stored['pending:assertion'] as {
-      derivedChallenge: number[];
-      tlvComponents: number[];
-      sessionNonce: number[];
-      origin: string;
-      controlCode: string;
-      rpId: string;
-    } | undefined;
+    const pending = stored['pending:assertion'] as
+      | {
+          derivedChallenge: number[];
+          tlvComponents: number[];
+          sessionNonce: number[];
+          origin: string;
+          controlCode: string;
+          rpId: string;
+        }
+      | undefined;
 
     if (!pending) {
       status('No pending assertion found');
@@ -404,8 +410,10 @@ async function handleChallengeAssert(): Promise<void> {
     }
 
     status('Reading cached passkey...');
-    const cachedResult = await chrome.runtime.sendMessage({ type: 'get-cached-credential-id', payload: {} }) as
-      { success: boolean; data?: { credentialId?: string; rawId?: number[] } };
+    const cachedResult = (await chrome.runtime.sendMessage({
+      type: 'get-cached-credential-id',
+      payload: {},
+    })) as { success: boolean; data?: { credentialId?: string; rawId?: number[] } };
 
     const rawId = cachedResult?.data?.rawId;
     const allowCredentialId = rawId && rawId.length > 0 ? new Uint8Array(rawId) : undefined;
@@ -473,10 +481,12 @@ async function handleChallengeAssert(): Promise<void> {
     status(`Assertion failed: ${message}`);
     log(`ERROR: ${message}`);
 
-    await chrome.runtime.sendMessage({
-      type: 'assertion-complete',
-      payload: { status: 'error', error: message },
-    }).catch(() => {});
+    await chrome.runtime
+      .sendMessage({
+        type: 'assertion-complete',
+        payload: { status: 'error', error: message },
+      })
+      .catch(() => {});
   }
 
   window.close();

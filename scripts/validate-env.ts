@@ -11,9 +11,7 @@ function main(): void {
   }
 
   if (missing.length > 0) {
-    console.error(
-      `ERROR: ${missing.join(', ')} must be set. See .env.example`,
-    );
+    console.error(`ERROR: ${missing.join(', ')} must be set. See .env.example`);
     process.exit(1);
   }
 

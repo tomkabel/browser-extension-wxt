@@ -1,10 +1,7 @@
 import { browser } from 'wxt/browser';
 import type { MfaSession } from '~/types';
 import { SessionExpiredError, log } from '~/lib/errors';
-import {
-  checkPrfSupport,
-  assertPrfCredential,
-} from '~/lib/crypto/fallbackAuth';
+import { checkPrfSupport, assertPrfCredential } from '~/lib/crypto/fallbackAuth';
 import { deriveNoiseKeypair } from '~/lib/channel/noise';
 import type { CachedPairing } from '~/lib/channel/noiseTypes';
 

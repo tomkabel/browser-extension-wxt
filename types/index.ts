@@ -146,7 +146,6 @@ export interface LoginFormDetection {
   url: string;
   usernameSelector: string;
   passwordSelector: string;
-  formAction: string;
 }
 
 export interface CredentialRequestPayload {
@@ -184,7 +183,6 @@ export interface UnapprovedLoginForm {
   url: string;
   usernameSelector: string;
   passwordSelector: string;
-  formAction: string;
 }
 
 export interface AttestedCodePayload {

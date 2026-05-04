@@ -6,6 +6,7 @@ export function SettingsPanel() {
   const approvedDomains = useAppStore((s) => s.approvedDomains);
   const setApprovedDomains = useAppStore((s) => s.setApprovedDomains);
   const setShowSettings = useAppStore((s) => s.setShowSettings);
+  const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -24,6 +25,8 @@ export function SettingsPanel() {
         }
       } catch {
         if (mounted) setLoadError('Failed to connect to background worker');
+      } finally {
+        if (mounted) setLoading(false);
       }
     }
     load();
@@ -34,11 +37,19 @@ export function SettingsPanel() {
 
   const handleRevoke = useCallback(
     async (domain: string) => {
-      await browser.runtime.sendMessage({
-        type: 'domain-denied',
-        payload: { domain },
-      });
-      setApprovedDomains(approvedDomains.filter((d) => d.domain !== domain));
+      try {
+        const response = await browser.runtime.sendMessage({
+          type: 'domain-denied',
+          payload: { domain },
+        });
+        if (response?.success) {
+          setApprovedDomains(approvedDomains.filter((d) => d.domain !== domain));
+        } else {
+          setLoadError(response?.error ?? 'Failed to revoke domain');
+        }
+      } catch {
+        setLoadError('Failed to connect to background worker');
+      }
     },
     [approvedDomains, setApprovedDomains],
   );
@@ -62,7 +73,9 @@ export function SettingsPanel() {
         </p>
       )}
 
-      {approvedDomains.length === 0 ? (
+      {loading ? (
+        <p className="text-sm text-gray-400 text-center py-4">Loading...</p>
+      ) : approvedDomains.length === 0 ? (
         <p className="text-sm text-gray-400 text-center py-4">No approved domains</p>
       ) : (
         <div className="space-y-2 max-h-64 overflow-y-auto">

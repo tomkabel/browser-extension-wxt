@@ -100,9 +100,7 @@ export async function createPasskeyCredential(
   }
 }
 
-export function extractPublicKeyBytes(
-  credential: PublicKeyCredential,
-): Uint8Array {
+export function extractPublicKeyBytes(credential: PublicKeyCredential): Uint8Array {
   const response = credential.response as AuthenticatorAttestationResponse;
   const rawKey = getPublicKeyFromResponse(response);
   if (!rawKey) {

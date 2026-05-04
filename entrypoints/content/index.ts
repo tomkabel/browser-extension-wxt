@@ -5,6 +5,7 @@ import { startCleanupInterval, stopCleanupInterval } from './rateLimiter';
 import { detectLoginForm } from './domScraper';
 import { detectTransaction } from '~/lib/transaction/transactionDetector';
 import { log } from '~/lib/errors';
+import { parseDomain } from '~/lib/domainParser';
 
 let loginFormEmitted = false;
 let loginDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -13,21 +14,18 @@ let contentInitDone = false;
 let checkedApproval = false;
 let isApprovedDomain = false;
 
-function getRegistrableDomain(hostname: string): string {
-  const parts = hostname.split('.');
-  if (parts.length >= 2) {
-    return parts.slice(-2).join('.');
-  }
-  return hostname;
-}
-
-async function checkDynamicApproval(domain: string): Promise<boolean> {
+async function checkDynamicApproval(domain: string, timeoutMs = 1500): Promise<boolean> {
   try {
-    const response = await browser.runtime.sendMessage({
-      type: 'check-domain-approved',
-      payload: { domain },
-    });
-    const data = response as { success?: boolean; data?: { approved?: boolean } } | undefined;
+    const result = await Promise.race([
+      browser.runtime.sendMessage({
+        type: 'check-domain-approved',
+        payload: { domain },
+      }),
+      new Promise<undefined>((_, reject) =>
+        setTimeout(() => reject(new Error('Approval check timed out')), timeoutMs),
+      ),
+    ]);
+    const data = result as { success?: boolean; data?: { approved?: boolean } } | undefined;
     return !!data?.data?.approved;
   } catch {
     return false;
@@ -61,7 +59,10 @@ function emitLoginForm(): void {
 
 function scheduleLoginDetection(): void {
   if (loginDebounceTimer) clearTimeout(loginDebounceTimer);
-  loginDebounceTimer = setTimeout(emitLoginForm, 500);
+  loginDebounceTimer = setTimeout(() => {
+    if (!checkedApproval) return;
+    emitLoginForm();
+  }, 500);
 }
 
 function startMutationObserver(): void {
@@ -156,7 +157,8 @@ export default defineContentScript({
     contentInitDone = true;
 
     const hostname = window.location.hostname;
-    const registrableDomain = getRegistrableDomain(hostname);
+    const parsed = parseDomain(window.location.href);
+    const registrableDomain = parsed.success ? parsed.data.registrableDomain : hostname;
 
     registerContentHandlers();
     startCleanupInterval();
@@ -186,10 +188,9 @@ export default defineContentScript({
     });
 
     setTimeout(() => {
-      if (!checkedApproval) {
-        isApprovedDomain = false;
-        checkedApproval = true;
-      }
+      if (checkedApproval) return;
+      isApprovedDomain = false;
+      checkedApproval = true;
       if (!loginFormEmitted) emitLoginForm();
     }, 2000);
 
@@ -212,7 +213,13 @@ export default defineContentScript({
             },
           })
           .catch(() => {});
-        checkDynamicApproval(getRegistrableDomain(url.hostname)).then((approved) => {
+        const newParsed = parseDomain(newUrlStr);
+        const newRegistrableDomain = newParsed.success
+          ? newParsed.data.registrableDomain
+          : url.hostname;
+        checkedApproval = false;
+        checkDynamicApproval(newRegistrableDomain).then((approved) => {
+          checkedApproval = true;
           isApprovedDomain = approved;
           if (approved) {
             setTimeout(reportDomainTransaction, 1000);

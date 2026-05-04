@@ -171,9 +171,7 @@ export function checkPrfSupport(): boolean {
   );
 }
 
-export async function generatePrfSalt(
-  phoneStaticPublicKey: Uint8Array,
-): Promise<Uint8Array> {
+export async function generatePrfSalt(phoneStaticPublicKey: Uint8Array): Promise<Uint8Array> {
   const domainBytes = new TextEncoder().encode(PRF_REAUTH_DOMAIN);
   const combined = new Uint8Array(phoneStaticPublicKey.length + domainBytes.length);
   combined.set(phoneStaticPublicKey, 0);
@@ -182,9 +180,7 @@ export async function generatePrfSalt(
   return new Uint8Array(hash);
 }
 
-export async function createPrfCredential(
-  salt: Uint8Array,
-): Promise<PrfCredentialResult> {
+export async function createPrfCredential(salt: Uint8Array): Promise<PrfCredentialResult> {
   const userId = new Uint8Array(16);
   crypto.getRandomValues(userId);
 
@@ -243,10 +239,9 @@ export async function assertPrfCredential(
     throw new Error('PRF credential assertion returned null');
   }
 
-  const prfResults = (assertion as { getClientExtensionResults?: () => unknown })
-    .getClientExtensionResults?.() as
-    | { prf?: { results?: { first?: ArrayBuffer } } }
-    | undefined;
+  const prfResults = (
+    assertion as { getClientExtensionResults?: () => unknown }
+  ).getClientExtensionResults?.() as { prf?: { results?: { first?: ArrayBuffer } } } | undefined;
 
   const prfOutputBuffer = prfResults?.prf?.results?.first;
   if (!prfOutputBuffer) {

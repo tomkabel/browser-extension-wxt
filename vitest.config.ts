@@ -13,12 +13,7 @@ export default defineConfig(async () => {
       exclude: ['e2e/**', 'node_modules/**', '.kilocode/**', '.kilo/**'],
       coverage: {
         provider: 'v8',
-        include: [
-          'lib/',
-          'entrypoints/background/',
-          'entrypoints/content/',
-          'entrypoints/popup/',
-        ],
+        include: ['lib/', 'entrypoints/background/', 'entrypoints/content/', 'entrypoints/popup/'],
         exclude: [
           '**/index.ts',
           '**/index.tsx',

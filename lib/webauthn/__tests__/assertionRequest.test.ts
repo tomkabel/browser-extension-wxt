@@ -20,19 +20,23 @@ describe('assertionRequest', () => {
     const challenge = new Uint8Array(32).fill(0x01);
     const allowCredentialId = new Uint8Array(16).fill(0x02);
 
-    mockCredentialsGet.mockImplementation(async ({ publicKey }: { publicKey: PublicKeyCredentialRequestOptions }) => {
-      expect(new Uint8Array(publicKey.challenge as ArrayBuffer)).toEqual(challenge);
-      expect(publicKey.rpId).toBe('extension.example.com');
-      expect(publicKey.userVerification).toBe('required');
-      expect(publicKey.timeout).toBe(60000);
-      expect(publicKey.allowCredentials).toBeDefined();
-      expect(publicKey.allowCredentials).toHaveLength(1);
-      expect(new Uint8Array(publicKey.allowCredentials![0]!.id as ArrayBuffer)).toEqual(allowCredentialId);
-      expect(publicKey.allowCredentials![0]!.type).toBe('public-key');
-      expect(publicKey.allowCredentials![0]!.transports).toBeUndefined();
+    mockCredentialsGet.mockImplementation(
+      async ({ publicKey }: { publicKey: PublicKeyCredentialRequestOptions }) => {
+        expect(new Uint8Array(publicKey.challenge as ArrayBuffer)).toEqual(challenge);
+        expect(publicKey.rpId).toBe('extension.example.com');
+        expect(publicKey.userVerification).toBe('required');
+        expect(publicKey.timeout).toBe(60000);
+        expect(publicKey.allowCredentials).toBeDefined();
+        expect(publicKey.allowCredentials).toHaveLength(1);
+        expect(new Uint8Array(publicKey.allowCredentials![0]!.id as ArrayBuffer)).toEqual(
+          allowCredentialId,
+        );
+        expect(publicKey.allowCredentials![0]!.type).toBe('public-key');
+        expect(publicKey.allowCredentials![0]!.transports).toBeUndefined();
 
-      return null;
-    });
+        return null;
+      },
+    );
 
     const { createAssertionRequest } = await import('../assertionRequest');
 
@@ -50,7 +54,9 @@ describe('assertionRequest', () => {
 
     const mockAuthenticatorData = new Uint8Array(37).fill(0x10);
     const mockSignature = new Uint8Array(64).fill(0x20);
-    const mockClientDataJSON = new TextEncoder().encode(JSON.stringify({ challenge: 'test', origin: 'https://example.com' }));
+    const mockClientDataJSON = new TextEncoder().encode(
+      JSON.stringify({ challenge: 'test', origin: 'https://example.com' }),
+    );
     const mockRawId = new Uint8Array(16).fill(0x30);
 
     function copyBuffer(src: Uint8Array): ArrayBuffer {
@@ -110,12 +116,14 @@ describe('assertionRequest', () => {
     const subarray = challenge.subarray(0, 4);
     expect(subarray.buffer.byteLength).toBe(8);
 
-    mockCredentialsGet.mockImplementation(async ({ publicKey }: { publicKey: PublicKeyCredentialRequestOptions }) => {
-      const received = new Uint8Array(publicKey.challenge as ArrayBuffer);
-      expect(received.length).toBe(4);
-      expect(Array.from(received)).toEqual([1, 2, 3, 4]);
-      return null;
-    });
+    mockCredentialsGet.mockImplementation(
+      async ({ publicKey }: { publicKey: PublicKeyCredentialRequestOptions }) => {
+        const received = new Uint8Array(publicKey.challenge as ArrayBuffer);
+        expect(received.length).toBe(4);
+        expect(Array.from(received)).toEqual([1, 2, 3, 4]);
+        return null;
+      },
+    );
 
     const { createAssertionRequest } = await import('../assertionRequest');
     await createAssertionRequest({ challenge: subarray, rpId: 'test.com' });

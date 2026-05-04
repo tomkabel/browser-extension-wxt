@@ -5,12 +5,8 @@ vi.spyOn(console, 'info').mockImplementation(() => {});
 vi.spyOn(console, 'error').mockImplementation(() => {});
 
 // Must import after mocks so they have access to mocked modules
-const {
-  updateConnectionState,
-  getConnectionState,
-  getConnectionError,
-  setConnectionError,
-} = await import('./offscreenWebrtc');
+const { updateConnectionState, getConnectionState, getConnectionError, setConnectionError } =
+  await import('./offscreenWebrtc');
 
 describe('connection state machine', () => {
   beforeEach(() => {

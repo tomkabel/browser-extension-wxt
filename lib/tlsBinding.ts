@@ -14,7 +14,9 @@ function computeContentHash(text: string): Promise<string> {
   const data = new TextEncoder().encode(text);
   return crypto.subtle.digest('SHA-256', data).then((hash) => {
     const bytes = new Uint8Array(hash);
-    return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+    return Array.from(bytes)
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
   });
 }
 
@@ -71,7 +73,7 @@ export async function buildChallengeProof(
     dest: 'document',
     user: '?1',
   };
-  const contentHash = precomputedHash ?? await computeContentHash(pageContent);
+  const contentHash = precomputedHash ?? (await computeContentHash(pageContent));
 
   const encoder = new TextEncoder();
   const proofPayload = {
@@ -101,7 +103,12 @@ export async function getTlsBindingComponents(
   controlCode: string,
   pageContent: string,
 ): Promise<TlsBindingComponents> {
-  const secFetch = tabSecFetchCache.get(tabId) ?? { site: 'cross-site', mode: 'navigate', dest: 'document', user: '?1' };
+  const secFetch = tabSecFetchCache.get(tabId) ?? {
+    site: 'cross-site',
+    mode: 'navigate',
+    dest: 'document',
+    user: '?1',
+  };
   const contentHash = await computeContentHash(pageContent);
   const binding = await buildChallengeProof(tabId, controlCode, pageContent, contentHash);
 

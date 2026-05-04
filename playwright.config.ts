@@ -42,7 +42,12 @@ export default defineConfig({
             '--headless=new',
             '--disable-gpu',
             '--no-sandbox',
-            ...(extensionPath ? [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`] : []),
+            ...(extensionPath
+              ? [
+                  `--disable-extensions-except=${extensionPath}`,
+                  `--load-extension=${extensionPath}`,
+                ]
+              : []),
           ],
         },
       },

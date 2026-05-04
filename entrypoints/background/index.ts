@@ -43,7 +43,9 @@ export default defineBackground({
       await reRegisterOnStartup();
       await updateBadgeCount();
       await tryRestoreSession();
-      initializeRegistry().then(() => log.info('Remote detector registry initialized'));
+      initializeRegistry()
+        .then(() => log.info('Remote detector registry initialized'))
+        .catch((err) => log.error('Failed to initialize remote registry', err));
     });
 
     browser.runtime.onStartup.addListener(async () => {

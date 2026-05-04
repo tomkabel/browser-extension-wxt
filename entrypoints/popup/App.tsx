@@ -84,13 +84,17 @@ function PopupApp() {
   useEffect(() => {
     let mounted = true;
     async function loadPendingDomains() {
-      const response = await browser.runtime.sendMessage({
-        type: 'get-pending-domains',
-        payload: null,
-      });
-      if (mounted && response.success && response.data) {
-        const pending = (response.data.pending as Array<{ domain: string; url: string }>) ?? [];
-        setPendingDomains(pending);
+      try {
+        const response = await browser.runtime.sendMessage({
+          type: 'get-pending-domains',
+          payload: null,
+        });
+        if (mounted && response?.success && response?.data) {
+          const pending = (response.data.pending as Array<{ domain: string; url: string }>) ?? [];
+          setPendingDomains(pending);
+        }
+      } catch {
+        if (mounted) setPendingDomains([]);
       }
     }
     loadPendingDomains();
@@ -114,6 +118,7 @@ function PopupApp() {
           className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
           onClick={() => setShowSettings(!showSettings)}
           title="Settings"
+          aria-label="Settings"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path

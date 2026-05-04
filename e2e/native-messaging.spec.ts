@@ -38,19 +38,17 @@ test.describe('Native Messaging Host — E2E', () => {
 
     const result = await page.evaluate(async () => {
       try {
-        const response = await new Promise<chrome.runtime.LastError | { type: string }>((resolve) => {
-          chrome.runtime.sendNativeMessage(
-            'org.smartid.aoa_host',
-            { type: 'ping' },
-            (resp) => {
+        const response = await new Promise<chrome.runtime.LastError | { type: string }>(
+          (resolve) => {
+            chrome.runtime.sendNativeMessage('org.smartid.aoa_host', { type: 'ping' }, (resp) => {
               if (chrome.runtime.lastError) {
                 resolve(chrome.runtime.lastError);
               } else {
                 resolve(resp as { type: string });
               }
-            },
-          );
-        });
+            });
+          },
+        );
         return { success: true, response };
       } catch (err) {
         return { success: false, error: String(err) };

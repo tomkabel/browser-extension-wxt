@@ -51,9 +51,9 @@ describe('challengeDerivation', () => {
     });
 
     it('throws on non-4-byte control code', () => {
-      expect(() =>
-        serializeChallengeComponents({ ...defaultInput, controlCode: '12' }),
-      ).toThrow('exactly 4 ASCII digits');
+      expect(() => serializeChallengeComponents({ ...defaultInput, controlCode: '12' })).toThrow(
+        'exactly 4 ASCII digits',
+      );
     });
 
     it('throws on wrong nonce length', () => {
