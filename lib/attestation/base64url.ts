@@ -21,19 +21,16 @@ export function base64urlEncode(data: ArrayBuffer): string {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+function sortObjectKeys<T>(value: T): T {
+  if (value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map(sortObjectKeys) as unknown as T;
+  const sorted: Record<string, unknown> = {};
+  for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+    sorted[key] = sortObjectKeys((value as Record<string, unknown>)[key]);
+  }
+  return sorted as T;
+}
+
 export function sortedJsonStringify(obj: Record<string, unknown>): string {
-  const keys = Object.keys(obj).sort();
-  const parts = keys.map((key) => {
-    const val = obj[key];
-    if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
-      return `${JSON.stringify(key)}:${sortedJsonStringify(val as Record<string, unknown>)}`;
-    }
-    if (Array.isArray(val)) {
-      return `${JSON.stringify(key)}:${JSON.stringify(val.map((v) =>
-        v !== null && typeof v === 'object' ? JSON.parse(sortedJsonStringify(v as Record<string, unknown>)) : v,
-      ))}`;
-    }
-    return `${JSON.stringify(key)}:${JSON.stringify(val)}`;
-  });
-  return `{${parts.join(',')}}`;
+  return JSON.stringify(sortObjectKeys(obj));
 }
