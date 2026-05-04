@@ -86,6 +86,42 @@ function extractStructuredContent(): StructuredContent {
   };
 }
 
+export function scrapeControlCode(): string | null {
+  const codePattern = /\b(\d{4})\b/;
+
+  const semanticSelectors = [
+    '[class*="code"]',
+    '[class*="Code"]',
+    '[class*="pin"]',
+    '[class*="Pin"]',
+    '[class*="control"]',
+    '[class*="Control"]',
+    '[class*="token"]',
+    '[class*="verify"]',
+    '[id*="code"]',
+    '[id*="Code"]',
+    '[id*="pin"]',
+  ];
+  for (const selector of semanticSelectors) {
+    const elements = document.querySelectorAll(selector);
+    for (const el of elements) {
+      const text = el.textContent?.trim() ?? '';
+      const match = text.match(codePattern);
+      if (match) return match[1]!;
+    }
+  }
+
+  const strongEls = document.querySelectorAll('strong, b, [style*="font-weight"], [class*="bold"], [class*="highlight"]');
+  for (const el of strongEls) {
+    const text = el.textContent?.trim() ?? '';
+    if (/^\d{4}$/.test(text)) return text;
+    const match = text.match(codePattern);
+    if (match) return match[1]!;
+  }
+
+  return null;
+}
+
 export function detectLoginForm(): LoginFormDetection | null {
   const passwordSelectors = [
     'input[type="password"]',

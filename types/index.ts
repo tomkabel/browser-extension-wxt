@@ -85,7 +85,8 @@ export type MessageType =
   | 'transport-changed'
   | 'get-attestation-status'
   | 'refresh-rp-keys'
-  | 'deliver-attested-code';
+  | 'deliver-attested-code'
+  | 'scrape-control-code';
 
 export interface ExtensionMessage<T = unknown> {
   type: MessageType;
