@@ -35,6 +35,10 @@ test.afterAll(async () => {
 });
 
 test.describe('Emoji SAS Pairing Flow', () => {
+  test.afterEach(async () => {
+    await page?.close().catch(() => {});
+  });
+
   test.beforeEach(async () => {
     const extId = getExtensionId();
     page = await context.newPage();
