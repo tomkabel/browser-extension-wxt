@@ -30,12 +30,14 @@ test.describe('Accessibility', () => {
 
   async function openPopup(page: Page): Promise<void> {
     const extId = getExtensionId();
-    await page
-      .goto(`chrome-extension://${extId}/popup.html`, {
+    try {
+      await page.goto(`chrome-extension://${extId}/popup.html`, {
         waitUntil: 'domcontentloaded',
         timeout: 15000,
-      })
-      .catch(() => {});
+      });
+    } catch (err) {
+      console.warn('Popup navigation failed, aXe results may be unreliable:', err);
+    }
     await page.waitForTimeout(1000);
   }
 
