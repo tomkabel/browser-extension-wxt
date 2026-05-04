@@ -87,8 +87,8 @@ export function parseChallengeComponents(serialized: Uint8Array): ChallengeCompo
 
   const version = serialized[offset];
   if (version === undefined) throw new Error('Truncated: missing version byte');
-  if (version !== VERSION) {
-    throw new Error(`Unsupported challenge version: ${version}`);
+  if (version !== 0x01 && version !== 0x02) {
+    throw new Error(`Unsupported challenge version: ${version}. Please update both extension and Android companion app.`);
   }
   offset += 1;
 
