@@ -1,33 +1,67 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fakeBrowser } from 'wxt/testing';
 
 vi.spyOn(console, 'info').mockImplementation(() => {});
 vi.spyOn(console, 'warn').mockImplementation(() => {});
 vi.spyOn(console, 'error').mockImplementation(() => {});
 
+const mockStorage = new Map<string, unknown>();
+
+vi.mock('wxt/browser', () => ({
+  browser: {
+    action: {
+      setBadgeText: vi.fn().mockResolvedValue(undefined),
+      setBadgeBackgroundColor: vi.fn().mockResolvedValue(undefined),
+    },
+    storage: {
+      sync: {
+        get: vi.fn(async (key: string) => {
+          const val = mockStorage.get(key);
+          return val ? { [key]: val } : {};
+        }),
+        set: vi.fn(async (entries: Record<string, unknown>) => {
+          for (const [k, v] of Object.entries(entries)) {
+            mockStorage.set(k, v);
+          }
+        }),
+        remove: vi.fn(async (keys: string | string[]) => {
+          const ks = Array.isArray(keys) ? keys : [keys];
+          for (const k of ks) mockStorage.delete(k);
+        }),
+      },
+      session: {
+        get: vi.fn(async (key: string) => {
+          const val = mockStorage.get(key);
+          return val ? { [key]: val } : {};
+        }),
+        set: vi.fn(async (entries: Record<string, unknown>) => {
+          for (const [k, v] of Object.entries(entries)) {
+            mockStorage.set(k, v);
+          }
+        }),
+        remove: vi.fn(async (keys: string | string[]) => {
+          const ks = Array.isArray(keys) ? keys : [keys];
+          for (const k of ks) mockStorage.delete(k);
+        }),
+      },
+    },
+  },
+}));
+
 const mockRegisteredScripts: Array<{ id: string }> = [];
-const mockRegisterContentScripts = vi.fn();
-const mockUnregisterContentScripts = vi.fn();
-const mockGetRegisteredContentScripts = vi.fn().mockResolvedValue(mockRegisteredScripts);
 
 vi.stubGlobal('chrome', {
+  runtime: { id: 'test-extension-id' },
   scripting: {
-    registerContentScripts: mockRegisterContentScripts,
-    unregisterContentScripts: mockUnregisterContentScripts,
-    getRegisteredContentScripts: mockGetRegisteredContentScripts,
+    registerContentScripts: vi.fn(),
+    unregisterContentScripts: vi.fn(),
+    getRegisteredContentScripts: vi.fn().mockResolvedValue(mockRegisteredScripts),
   },
 });
 
 beforeEach(() => {
-  fakeBrowser.reset();
+  mockStorage.clear();
   vi.clearAllMocks();
   mockRegisteredScripts.length = 0;
-  (fakeBrowser.action as Record<string, unknown>).setBadgeText = vi.fn().mockResolvedValue(
-    undefined,
-  );
-  (fakeBrowser.action as Record<string, unknown>).setBadgeBackgroundColor = vi.fn().mockResolvedValue(
-    undefined,
-  );
 });
 
 describe('contentScriptManager', () => {
@@ -47,13 +81,11 @@ describe('contentScriptManager', () => {
     it('registers a script and adds domain to approved list (2.4)', async () => {
       const { registerForDomain, getApprovedDomains } = await import('./contentScriptManager');
 
-      mockRegisterContentScripts.mockResolvedValue(undefined);
-
       const scriptId = await registerForDomain('example.com');
 
       expect(scriptId).toContain('credential-fill-');
       expect(scriptId).toHaveLength('credential-fill-'.length + 64);
-      expect(mockRegisterContentScripts).toHaveBeenCalledWith(
+      expect(chrome.scripting.registerContentScripts).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.objectContaining({
             id: scriptId,
@@ -73,8 +105,6 @@ describe('contentScriptManager', () => {
     it('is idempotent for already approved domains', async () => {
       const { registerForDomain, getApprovedDomains } = await import('./contentScriptManager');
 
-      mockRegisterContentScripts.mockResolvedValue(undefined);
-
       await registerForDomain('example.com');
       await registerForDomain('example.com');
 
@@ -88,13 +118,10 @@ describe('contentScriptManager', () => {
       const { registerForDomain, unregisterForDomain, getApprovedDomains } =
         await import('./contentScriptManager');
 
-      mockRegisterContentScripts.mockResolvedValue(undefined);
-      mockUnregisterContentScripts.mockResolvedValue(undefined);
-
       await registerForDomain('example.com');
       await unregisterForDomain('example.com');
 
-      expect(mockUnregisterContentScripts).toHaveBeenCalled();
+      expect(chrome.scripting.unregisterContentScripts).toHaveBeenCalled();
       const approved = await getApprovedDomains();
       expect(approved).toHaveLength(0);
     });
