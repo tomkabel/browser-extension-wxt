@@ -40,7 +40,7 @@ const PATTERNS: Record<PiiCategory, RegExp> = {
     /\b[A-Z]{2}\d{2}\s?(?:\d{4}\s?){2,7}\d{1,4}\b/g,
 
   [PiiCategory.Passport]:
-    /\b([A-Z]{1,2}\d{6,8}|[A-Z]{2}\d{7}|EE\d{8})\b/g,
+    /\b[A-Z]{2}\d{6,8}\b/g,
 };
 
 const REDACTED = '[REDACTED]';
@@ -65,6 +65,25 @@ function isValidCardNumber(digits: string): boolean {
   const cleaned = digits.replace(/[\s-]/g, '');
   if (cleaned.length < 13 || cleaned.length > 19) return false;
   return luhnCheck(cleaned);
+}
+
+function isValidIban(value: string): boolean {
+  const cleaned = value.replace(/\s/g, '').toUpperCase();
+  if (cleaned.length < 15 || cleaned.length > 34) return false;
+  const rearranged = cleaned.slice(4) + cleaned.slice(0, 4);
+  let numeric = '';
+  for (const ch of rearranged) {
+    if (ch >= 'A' && ch <= 'Z') {
+      numeric += (ch.charCodeAt(0) - 55).toString();
+    } else {
+      numeric += ch;
+    }
+  }
+  let remainder = 0;
+  for (let i = 0; i < numeric.length; i++) {
+    remainder = (remainder * 10 + parseInt(numeric[i]!, 10)) % 97;
+  }
+  return remainder === 1;
 }
 
 function isValidEstonianIdCode(digits: string): boolean {
@@ -109,6 +128,19 @@ export function filterPii(text: string): FilteredContent {
       });
       if (count > 0) {
         categories.add(PiiCategory.CreditCard);
+        redactionCount += count;
+      }
+    } else if (category === PiiCategory.Iban) {
+      let count = 0;
+      result = result.replace(pattern, (match) => {
+        if (isValidIban(match)) {
+          count++;
+          return REDACTED;
+        }
+        return match;
+      });
+      if (count > 0) {
+        categories.add(PiiCategory.Iban);
         redactionCount += count;
       }
     } else if (category === PiiCategory.EstonianIdCode) {
