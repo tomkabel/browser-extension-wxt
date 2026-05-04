@@ -591,6 +591,9 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
     if (
       !data.credentialId ||
       !data.tlvComponents ||
+      !data.sessionNonce ||
+      !data.origin ||
+      !data.controlCode ||
       !data.authenticatorData ||
       !data.signature ||
       !data.clientDataJSON

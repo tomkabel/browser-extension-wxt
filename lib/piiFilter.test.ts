@@ -97,12 +97,49 @@ describe('PII redaction — IBAN', () => {
     expect(result.text).not.toContain('[REDACTED]');
     expect(result.categories.has(PiiCategory.Iban)).toBe(false);
   });
+
+  it('redacts lowercase IBAN (case-insensitive flag)', () => {
+    const result = filterPii('iban: de89370400440532013000');
+    expect(result.text).toContain('[REDACTED]');
+    expect(result.categories.has(PiiCategory.Iban)).toBe(true);
+  });
+
+  it('redacts IBAN with formatted spacing', () => {
+    const result = filterPii('IBAN: DE89 3704 0044 0532 0130 00');
+    expect(result.text).toContain('[REDACTED]');
+    expect(result.categories.has(PiiCategory.Iban)).toBe(true);
+  });
 });
 
 describe('PII redaction — passport', () => {
   it('redacts passport pattern', () => {
     const result = filterPii('Passport: AB123456');
     expect(result.text).toContain('[REDACTED]');
+    expect(result.categories.has(PiiCategory.Passport)).toBe(true);
+  });
+
+  it('redacts lowercase passport (case-insensitive flag)', () => {
+    const result = filterPii('passport: ab123456');
+    expect(result.text).toContain('[REDACTED]');
+    expect(result.categories.has(PiiCategory.Passport)).toBe(true);
+  });
+
+  it('redacts passport with 8-digit number', () => {
+    const result = filterPii('Passport: XY12345678');
+    expect(result.text).toContain('[REDACTED]');
+    expect(result.categories.has(PiiCategory.Passport)).toBe(true);
+  });
+
+  it('does not redact single-letter prefix passport pattern', () => {
+    const result = filterPii('Passport: A1234567');
+    expect(result.text).not.toContain('[REDACTED]');
+    expect(result.categories.has(PiiCategory.Passport)).toBe(false);
+  });
+
+  it('redacts multiple passports in one text', () => {
+    const result = filterPii('Passports: AB123456 and CD789012');
+    expect(result.text).toContain('[REDACTED]');
+    expect(result.redactionCount).toBe(2);
     expect(result.categories.has(PiiCategory.Passport)).toBe(true);
   });
 });
