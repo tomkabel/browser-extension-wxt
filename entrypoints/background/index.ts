@@ -9,6 +9,8 @@ import {
   restorePersistedSession,
   performSilentReauth,
 } from './sessionManager';
+import { reRegisterOnStartup, updateBadgeCount } from './contentScriptManager';
+import { initializeRegistry } from '~/lib/transaction/remoteRegistry';
 import { log } from '~/lib/errors';
 
 async function tryRestoreSession(): Promise<void> {
@@ -34,13 +36,19 @@ export default defineBackground({
 
     browser.runtime.onInstalled.addListener(async (details) => {
       log.info('Extension installed:', details.reason);
+      await reRegisterOnStartup();
+      await updateBadgeCount();
       await tryRestoreSession();
+      initializeRegistry().then(() => log.info('Remote detector registry initialized'));
     });
 
     browser.runtime.onStartup.addListener(async () => {
       log.info('Service worker starting');
       registerMessageHandlers();
+      await reRegisterOnStartup();
+      await updateBadgeCount();
       await tryRestoreSession();
+      initializeRegistry().then(() => log.info('Remote detector registry initialized'));
     });
 
     log.info('Background service worker ready');
