@@ -1,64 +1,85 @@
-## 1. Demo Setup (replaces Bank Coordination)
+## 0. Progressive Tier System Foundation
 
-Bank coordination is NOT feasible for a demo/prototype. Instead, the attestation system uses self-signed demo ECDSA P-256 key pairs bundled with the extension. In `dev`/`demo` mode, the extension can generate locally-signed `SmartID-Attestation` headers for testing.
+- [ ] 0.1 Create `lib/tlsBinding/` directory structure with `index.ts`, `types.ts`
+- [ ] 0.2 Define `TlsBindingProof` interface with tier, secFetch payload, optional tokenBinding, optional decoProof fields
+- [ ] 0.3 Implement `TierNegotiator` class: determines highest available tier based on RP config, browser capabilities, and timeout
 
-- [x] 1.1 Generate real ECDSA P-256 demo key pairs for all 4 whitelisted domains (lhv.ee, swedbank.ee, seb.ee, tara.ria.ee) plus rotation keys
-- [x] 1.2 Update `trusted-rp-keys.json` manifest with real public keys (not placeholders)
-- [x] 1.3 Implement `demoAttestation.ts`: create locally-signed `SmartID-Attestation` headers using Web Crypto API in dev/demo mode, stored as JWK for cross-platform compatibility
-- [x] 1.4 Wire demo mode into `attestationManager.ts`: auto-inject demo attestation headers for whitelisted domains in dev mode
+## 1. Tier 1 — Sec-Fetch Header Capture
 
-## 2. Service Worker Attestation Verifier
+- [ ] 1.1 Create `lib/tlsBinding/secFetchCapture.ts`: register `chrome.webRequest.onHeadersReceived` listener
+- [ ] 1.2 Filter for `main_frame` requests, extract `Sec-Fetch-Site`, `Sec-Fetch-Dest`, `Sec-Fetch-Mode`
+- [ ] 1.3 Store captured headers keyed by tabId in `chrome.storage.session`
+- [ ] 1.4 Implement per-tab content hash computation via content script injection
+- [ ] 1.5 Handle SPA navigation: trigger content hash recomputation on `wxt:locationchange`
+- [ ] 1.6 Unit test: headers captured on main_frame navigation
+- [ ] 1.7 Unit test: content hash changes on DOM mutation
+- [ ] 1.8 Unit test: SPA navigation reuses stored headers, recalculates content hash
 
-- [x] 2.1 Implement `chrome.webRequest.onHeadersReceived` listener for whitelisted RP domains with `["responseHeaders", "extraHeaders"]`
-- [x] 2.2 Implement `parseAttestationHeader()`: split by `;`, base64url-decode payload and signature, parse JSON
-- [x] 2.3 Implement `buildTrustedRpKeyStore()`: import bundled ECDSA P-256 keys via `crypto.subtle.importKey()` with `{ name: 'ECDSA', namedCurve: 'P-256' }`
-- [x] 2.4 Implement `verifyAttestationSignature()`: `crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, pubKey, signature, payloadBytes)`
-- [x] 2.5 Dispatch attested control code to the control code verification pipeline on success
-- [x] 2.6 Handle missing/invalid header: return null, do NOT block the page load
-- [x] 2.7 Unit test: valid attestation header with correct ECDSA P-256 signature passes verification
-- [x] 2.8 Unit test: invalid signature (tampered payload) fails verification
-- [x] 2.9 Unit test: unknown key-id returns null (graceful degradation)
-- [x] 2.10 Implement timestamp validation: reject attestation if |now - ts| > 30 seconds, with graceful fallback to DOM-only mode
+## 2. Tier 2 — WebTransport Token Binding
 
-## 3. TrustedRpSigningKey Manifest
+- [ ] 2.1 Create `lib/tlsBinding/tokenBinding.ts`: WebTransport connection to `/.well-known/token-binding`
+- [ ] 2.2 Run from offscreen document (WebTransport requires a document context)
+- [ ] 2.3 Capture TLS channel ID and serialize as Tier 2 proof
+- [ ] 2.4 Handle connection failure gracefully: return empty proof, allow Tier 1 fallback
+- [ ] 2.5 Unit test: connection to stub endpoint produces valid proof
+- [ ] 2.6 Unit test: connection failure returns empty proof without throwing
 
-- [x] 3.1 Create initial `TrustedRpSigningKey` manifest JSON file bundled with the extension: 4 domains × 1-2 keys each
-- [x] 3.2 Implement manifest loading: import bundled keys at extension startup
-- [x] 3.3 Implement background key refresh: fetch signed manifest from extension update server, verify manifest signature, apply updates
-- [x] 3.4 Implement manifest rollback protection: reject version <= last-seen, persist last-seen version per key
-- [x] 3.5 Implement manual key refresh trigger in popup
-- [x] 3.6 Unit test: manifest with tampered entries is rejected
-- [x] 3.7 Unit test: key rotation with overlap window works (both old and new keys accepted during overlap)
+## 3. Tier 3 — Signed Header Attestation & DECO Oracle
+
+- [x] 3.1 Create `lib/attestation/` directory with `headerParser.ts`, `verifier.ts`, `keyStore.ts`, `env.ts`
+- [x] 3.2 Implement `SmartID-Attestation` header parser: format `v1;<base64url(payload)>;<base64url(sig)>;<key-id>`
+- [x] 3.3 Implement `verifier.ts`: `crypto.subtle.verify()` with ECDSA P-256, SHA-256
+- [x] 3.4 Implement `keyStore.ts`: load and cache `TrustedRpSigningKey` from bundled manifest
+- [x] 3.5 Implement demo key management: 4 unique ECDSA P-256 key pairs in `trusted-rp-keys.json`
+- [x] 3.6 Implement `demoAttestation.ts`: local signed header generation in dev/demo mode
+- [x] 3.7 Create `lib/attestation/audit.ts`: attestation audit logging with minimal field set
+- [ ] 3.8 Create `lib/tlsBinding/decoOracle.ts`: WASM oracle driver (deferred to Phase 3)
+- [ ] 3.9 WASM oracle observes bank's HTTP response, produces succinct proof
+- [ ] 3.10 Cache proofs per-session (max 5, 30s TTL)
 
 ## 4. Control Code Verification Pipeline
 
-- [x] 4.1 Implement `verifyControlCode()`: receive attested code from attestation verifier, compare with DOM-scraped code
-- [x] 4.2 On match: dispatch `attestation-verified` event with the control code for WebAuthn challenge binding
-- [x] 4.3 On mismatch: flag as potential RAT attack, display security warning in popup, use attested code (not DOM code)
-- [x] 4.4 On attestation unavailable: use DOM code only, display "DOM-only verification (no server attestation)" in popup
-- [x] 4.5 Log audit events: log salted hashes of codes, never plaintext
-- [x] 4.6 Unit test: matching codes pass verification
-- [x] 4.7 Unit test: mismatching codes trigger security flag
-- [x] 4.8 Unit test: fallback works when attestation is unavailable
+- [x] 4.1 Create `lib/attestation/headerParser.ts`: extract header value, parse format, handle malformed headers
+- [x] 4.2 Implement `controlCodeVerifier.ts`: extract attested code from binding proof (any tier)
+- [x] 4.3 DOM code scraper: extract control code from page DOM (selector-based)
+- [x] 4.4 Cross-reference logic: compare attested vs DOM code; on mismatch, prefer attested
+- [x] 4.5 `VERIFIED_MATCH`: attested matches DOM → use attested for challenge
+- [x] 4.6 `VERIFIED_MISMATCH`: different from DOM → display "RAT Activity Detected" warning, use attested
+- [x] 4.7 `HEADER_UNAVAILABLE`: no header (Tier 1 only) → use DOM code, log "Attestation not available"
+- [x] 4.8 `SIGNATURE_FAILED`: verification error → fall back to Tier 1 binding, log security event
 
-## 5. Android Attestation Verification
+## 5. TrustedRpSigningKey Manifest
 
-- [x] 5.1 Implement `AttestationVerifier.java` in Android Vault: parse the attested code payload, verify ECDSA P-256 signature using `java.security.Signature` with `SHA256withECDSA`
-- [x] 5.2 Bundle `TrustedRpSigningKey` public keys in the Android companion app (or deliver via the transport layer's signed manifest)
-- [x] 5.3 Extract attested control code from verified payload
-- [x] 5.4 Handle verification failure: reject session, log audit event, do NOT proceed with WebAuthn challenge
-- [ ] 5.5 Unit test: valid ECDSA P-256 signature verifies successfully
-- [ ] 5.6 Unit test: tampered signature fails verification
-- [ ] 5.7 Unit test: expired key (beyond notAfter) fails verification
-- [x] 5.8 Implement session identifier matching: Android Vault rejects attestation if session does not match current WebAuthn transaction
-- [x] 5.9 Implement timestamp validation in Android Vault: reject attestation if |now - ts| > 30 seconds
+- [x] 5.1 Define TrustedRpSigningKey interface: `{ domain, keyId, publicKeyJwk, algorithm, notBefore, notAfter }`
+- [x] 5.2 Bundle key manifest in extension source: `lib/attestation/trusted-rp-keys.json`
+- [x] 5.3 Include 4 demo domains with 1-2 keys each (LHV, Swedbank, SEB, TARA)
+- [x] 5.4 Keys are dedicated ECDSA P-256 signing keys (NOT TLS certificate keys)
+- [x] 5.5 Implement key rotation: `keyStore.ts` supports multiple keys per domain, selects by `keyId`
+- [x] 5.6 Implement key refresh: periodic fetch from update server with manifest signature verification
+- [x] 5.7 Implement rollback protection: manifest version monotonic counter, reject older versions
 
-## 6. Integration & Testing
+## 6. Android Attestation Verification
 
-- [ ] 6.1 Integration test: full attestation flow: RP page → webRequest intercept → header parse → ECDSA verify → cross-reference → transport → Android verify
-- [ ] 6.2 Integration test: non-whitelisted domain does NOT trigger attestation listener
-- [ ] 6.3 Integration test: attestation failure gracefully falls back to DOM-only mode
-- [ ] 6.4 E2E test: Smart-ID login on lhv.ee with attestation completes within normal page load time
-- [ ] 6.5 E2E test: popup shows correct attestation status (verified / DOM-only / RAT-detected)
-- [ ] 6.6 Manual QA: verify control code appears on both Smart-ID app and extension popup
-- [x] 6.7 Run `bun run lint && bun run typecheck` and fix all issues
+- [ ] 6.1 Implement `AttestationVerifier.java` for Tier 3: ECDSA P-256 using Java `Signature` + `KeyFactory`
+- [ ] 6.2 Bundle same `TrustedRpSigningKey` public keys in Android APK (in `res/raw/`)
+- [ ] 6.3 Implement `TlsBindingVerifier.java` for Tier 1/2: validate Sec-Fetch structure, verify content hash
+- [ ] 6.4 Implement tier policy enforcement: `RPPolicyStore` maps domain → minimumTier
+- [ ] 6.5 Unit test: Tier 1 proof verified
+- [ ] 6.6 Unit test: Tier 2 proof verified (with Token Binding stub)
+- [ ] 6.7 Unit test: Tier 3 signed attestation verified (ECDSA P-256)
+- [ ] 6.8 Unit test: proof below minimum tier rejected
+- [ ] 6.9 Unit test: corrupted proof rejected (all tiers)
+
+## 7. Integration & Testing
+
+- [x] 7.1 Unit test: demo key generation produces valid ECDSA P-256 keys
+- [x] 7.2 Unit test: header payload signed by demo key verifies on extension side
+- [x] 7.3 Unit test: full Tier 3 demo pipeline (key gen → sign → parse → verify → cross-reference)
+- [x] 7.4 Unit test: tampered payload fails verification
+- [x] 7.5 Unit test: tampered signature fails verification
+- [x] 7.6 Unit test: unknown key-id returns error
+- [x] 7.7 Unit test: expired key (notBefore, notAfter) returns error
+- [ ] 7.8 Integration test: Tier 1 end-to-end (page load → header capture → content hash → challenge)
+- [ ] 7.9 Integration test: tier auto-negotiation (Tier 3 unavailable → Tier 2 fail → Tier 1)
+- [ ] 7.10 E2E test: browser popup shows attestation tier indicator
+- [ ] 7.11 E2E test: RAT simulation — DOM mutated after attestation → mismatch flag triggered

@@ -1,208 +1,168 @@
 ## Context
 
-The Attestation Context Engine provides mathematical certainty about what a bank's server transmitted to the browser. It uses a simple, standard cryptographic approach: the bank's server includes a signed HTTP response header (`SmartID-Attestation`) containing the control code. The extension verifies the ECDSA P-256 signature using the bank's known public key.
+TLS binding proof is the cryptographic attestation that the extension's browser genuinely navigated to the transaction page and received the server's response. It replaces the monolithic "zkTLS proof" concept with a progressive three-tier system, where each tier provides stronger guarantees with increasing infrastructure requirements.
 
-This replaces the TLSNotary/DECO WASM MPC prover approach (previously specified). The replacement is possible because:
+### Three-Tier Progressive System
 
-1. **Smart-ID RP banks are cooperative**: The whitelist of 4 banks (lhv.ee, swedbank.ee, seb.ee, tara.ria.ee) are known business partners. Adding a response header is trivial for them and requires no protocol change.
+The key insight is that browser security headers (`Sec-Fetch-*`) are immutably set by the browser's HTTP network stack, NOT by page-level JavaScript. A RAT executing in the renderer process cannot modify or forge these headers. This provides a "browser-level" attestation that requires zero infrastructure changes — the browser does the work for free.
 
-2. **The threat model doesn't change**: A RAT on the user's device can strip or modify the header, but cannot forge a valid ECDSA P-256 signature because it lacks the bank's private signing key. The worst outcome is degraded to DOM-only mode (current behavior).
+The tiers are:
 
-3. **No external infrastructure needed**: No Notary server, no WASM compilation, no Offscreen Document prover host, no SharedArrayBuffer.
+```
+Tier 1 (Always Available)
+  ├── Captures: Sec-Fetch-Site, Sec-Fetch-Dest, Sec-Fetch-Mode
+  ├── Source: chrome.webRequest.onHeadersReceived (main_frame)
+  ├── Proof: Immutable browser network stack headers + SHA-256(page content hash)
+  └── Latency: <5ms, synchronous with page load
 
-The proving operates as follows:
-1. The user navigates to a whitelisted RP and initiates a Smart-ID login
-2. The bank's server generates the control code and includes it in both the HTML DOM and a `SmartID-Attestation` response header
-3. The extension intercepts the response via `chrome.webRequest.onHeadersReceived`
-4. The extension parses the header, extracts the signed payload, and verifies the ECDSA P-256 signature using the bank's public key
-5. The attested control code is cross-referenced with the DOM-scraped code
-6. On match: highest confidence; on mismatch: use attested code (RAT detected); on missing header: degrade to DOM-only
+Tier 2 (When RP Supports)
+  ├── Captures: TLS Channel ID / Token Binding
+  ├── Source: WebTransport to /.well-known/token-binding
+  ├── Proof: Cryptographically binds extension's TLS session to the RP's session
+  └── Latency: <50ms
+
+Tier 3 (Bank Cooperation + WASM)
+  ├── Captures: SmartID-Attestation response header + TLS session oracle
+  ├── Source: ECDSA P-256 signed header verification + DECO WASM prover
+  ├── Proof: Bank-level cryptographic signature + MPC-verified TLS observation
+  └── Latency: 1-2s (cached per-session)
+```
 
 ## Goals / Non-Goals
 
 **Goals:**
-- ECDSA P-256 signature verification via `crypto.subtle.verify()` for attested control codes
-- Response header interception via `chrome.webRequest.onHeadersReceived` in service worker
-- `TrustedRpSigningKey` manifest for whitelisted RP domains (lhv.ee, swedbank.ee, seb.ee, tara.ria.ee)
-- Cross-reference attested code with DOM-scraped code for defense-in-depth
-- Secure key rotation with signed manifest and rollback protection
-- Proof delivery to Android Vault over existing transport (USB/WebRTC) for WebAuthn challenge binding
-- Support for multiple active signing keys per RP (for key rotation without window gaps)
+- Tier 1 Sec-Fetch header capture: zero-infra, always-available browser-level attestation
+- Tier 2 Token Binding: transport-level cryptographic TLS session binding
+- Tier 3 SmartID-Attestation header verification: bank-level ECDSA P-256 signed attestation
+- Tier auto-negotiation: highest tier available is used, graceful degradation
+- Control code verification: cross-reference attested code with DOM-scraped code
+- Trusted RP signing key management: bundle, rotate, and update ECDSA P-256 public keys
+- Proof caching: per-session cache of expensive Tier 3 proofs
 
 **Non-Goals:**
-- WASM module loading or compilation (removed — no longer needed)
-- Offscreen Document prover host (removed — attestation runs in service worker)
-- Notary server deployment or operation (removed — no third-party MPC participant)
-- ZKP serialization or compact binary proof format (removed — attestation is a HTTP header)
-- TLS 1.2 support (all Smart-ID RPs use TLS 1.3, and this approach is TLS-version-agnostic)
+- Full TLSNotary MPC prover (replaced by progressive three-tier system)
+- DECO WASM oracle in critical path (deferred to Phase 3, separate from Tier 1/2)
+- Bank-side key generation (banks generate their own signing keys)
+- Certificate transparency or revocation checking of TLS certificates
 
 ## Decisions
 
-### 1. Attestation Flow
+### Decision 1: Tier 1 Sec-Fetch Header Capture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│  BROWSER EXTENSION (Service Worker)                          │
-│                                                              │
-│  1. User navigates to lhv.ee, initiates Smart-ID login       │
-│  2. Server responds with HTML + header:                      │
-│     SmartID-Attestation: v1;cid=<code>;sig=<signature>      │
-│  3. webRequest.onHeadersReceived intercepts the response     │
-│  4. Extension parses header, looks up RP public key          │
-│  5. crypto.subtle.verify() with ECDSA P-256                  │
-│  6. If valid: attested code = what bank sent                 │
-│  7. Cross-reference with DOM-scraped code                    │
-│  8. Attested code sent over USB/WebRTC to Android Vault      │
-│                                                              │
-│  ANDROID VAULT (Java Orchestrator)                           │
-│                                                              │
-│  9. AttestationVerifier receives {controlCode, signature, keyId} │
-│  10. Verifies ECDSA P-256 signature with local public key    │
-│  11. Extracts attested control code for ChallengeVerifier    │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### 2. Header Format
-
-```
-SmartID-Attestation: v1;<base64url(json-payload)>;<base64url(ecdsa-signature)>;<key-id>
-
-Where json-payload = {"code":"4892","session":"abc123","ts":1715000000}
-
-Note: the header JSON uses the compact field name `code`, while the internal transport representation uses `controlCode` for clarity.
-```
-
-The header format uses base64url (RFC 4648 §5, no padding) for safe HTTP transport:
-- `v1` — format version identifier
-- `payload` — UTF-8 JSON, base64url-encoded
-- `signature` — raw ECDSA P-256 signature (r||s, 64 bytes), base64url-encoded
-- `key-id` — plaintext string identifying which signing key was used (e.g. `"lhv-2026q2"`)
-
-Total header size: approximately 150-200 bytes (vs 4KB ZKP proof target and 2MB WASM module).
-
-### 3. Signature Verification
+The extension registers a `chrome.webRequest.onHeadersReceived` listener with `{ urls: ['<all_urls>'], types: ['main_frame'] }`:
 
 ```typescript
-// Pure TypeScript — no WASM, no Offscreen Document
-// Runs in extension service worker via chrome.webRequest.onHeadersReceived
+chrome.webRequest.onHeadersReceived.addListener(
+  (details) => {
+    const secFetchSite = details.responseHeaders?.find(
+      h => h.name.toLowerCase() === 'sec-fetch-site'
+    )?.value;
+    const secFetchDest = details.responseHeaders?.find(
+      h => h.name.toLowerCase() === 'sec-fetch-dest'
+    )?.value;
 
-const encoder = new TextEncoder();
+    // Store per-tabId in chrome.storage.session
+    storeSecFetchHeaders(details.tabId, {
+      site: secFetchSite ?? 'unknown',
+      dest: secFetchDest ?? 'unknown',
+      mode: secFetchMode ?? 'unknown',
+      timestamp: details.timeStamp,
+    });
+  },
+  { urls: ['<all_urls>'], types: ['main_frame'] },
+  ['responseHeaders'],
+);
+```
 
-async function verifyAttestation(
-    rawHeader: string,
-    rpDomain: string
-): Promise<AttestedCode | null> {
-    const parts = rawHeader.split(';');
-    if (parts[0] !== 'v1' || parts.length !== 4) return null;
+For SPA navigations (no new `main_frame` request), the `wxt:locationchange` event triggers a content hash recomputation that reuses the existing stored Sec-Fetch headers.
 
-    const [, payloadB64, sigB64, keyId] = parts;
-    const sig = base64urlDecode(sigB64);
-    const payload = JSON.parse(new TextDecoder().decode(base64urlDecode(payloadB64)));
-    // Sign canonical raw UTF-8 JSON bytes (deterministic serialization with sorted keys)
-    // for cross-layer compatibility with Android java.security.Signature
-    const payloadBytes = new TextEncoder().encode(canonicalJsonStringify(payload));
+### Decision 2: Content Hash Binding
 
-    const pubKey = TRUSTED_RP_KEYS[rpDomain]?.[keyId];
-    if (!pubKey) {
-        log.warn(`Unknown key-id ${keyId} for ${rpDomain}`);
-        return null;
-    }
+To detect DOM mutations by a RAT, the extension computes SHA-256 of the visible page text:
 
-    const valid = await crypto.subtle.verify(
-        { name: 'ECDSA', hash: 'SHA-256' },
-        pubKey,
-        sig,
-        payloadBytes
-    );
-
-    if (!valid) {
-        log.warn(`Invalid attestation signature for ${rpDomain}`);
-        return null;
-    }
-
-    // Timestamp validation: reject if |now - ts| > 30 seconds (clock skew tolerance)
-    const now = Math.floor(Date.now() / 1000);
-    if (Math.abs(now - payload.ts) > 30) {
-        log.warn(`Attestation timestamp skew too large for ${rpDomain}`);
-        return null; // graceful fallback to DOM-only mode
-    }
-
-    return { controlCode: payload.code, keyId, signature: sigB64 };
+```typescript
+async function computePageContentHash(tabId: number): Promise<Uint8Array> {
+  const result = await browser.tabs.sendMessage(tabId, {
+    type: 'compute-content-hash',
+  });
+  return new Uint8Array(result.hash);
 }
 ```
 
-> **Decision note:** The signature is computed over the canonical raw UTF-8 JSON bytes (deterministic serialization with sorted keys), NOT over the base64url-encoded string. This ensures cross-layer compatibility with Android's `java.security.Signature`, which operates on raw byte arrays. Using base64url-encoded strings would introduce an unnecessary encoding layer and risk subtle incompatibilities between TypeScript `TextEncoder` and Java `String.getBytes(UTF_8)`.
+The content hash is included in the TLS binding payload. If a RAT modifies the DOM after the user authenticates, the content hash changes, breaking the binding.
 
-### 4. RP Signing Key Management
+### Decision 3: Tier 2 WebTransport Token Binding
 
-Bank/RP signing keys are ECDSA P-256 keys dedicated to this purpose (NOT the bank's TLS certificate keys):
+When the RP supports `/.well-known/token-binding`, the offscreen document establishes a WebTransport connection:
 
 ```typescript
-interface TrustedRpSigningKey {
-  domain: string          // e.g. "lhv.ee"
-  keyId: string           // e.g. "lhv-2026q2" — used for rotation
-  publicKeyBytes: ArrayBuffer  // raw ECDSA P-256 public key, uncompressed point format, 65 bytes
-  notBefore: string       // ISO 8601
-  notAfter: string        // ISO 8601
+async function captureTokenBinding(rpHost: string): Promise<Uint8Array> {
+  try {
+    const wt = new WebTransport(`https://${rpHost}/.well-known/token-binding`);
+    await wt.ready;
+    const reader = wt.datagrams.readable.getReader();
+    const { value } = await reader.read();
+    reader.releaseLock();
+    wt.close();
+    return new Uint8Array(value!.buffer);
+  } catch {
+    return new Uint8Array(0); // Tier 2 unavailable, degrade gracefully
+  }
 }
-
-Note: `publicKeyBytes` is stored as raw bytes in the manifest. At runtime, the extension imports it via `crypto.subtle.importKey('raw', publicKeyBytes, { name: 'ECDSA', namedCurve: 'P-256' }, true, ['verify'])` to obtain a `CryptoKey`.
 ```
 
-Keys are updated via:
-- Bundled with extension release (initial set, 4 domains × 1-2 keys each)
-- Background update check against a signed key manifest
-- User can manually trigger an update in the popup
+### Decision 4: Tier 3 Signed Header Preservation
 
-Key rotation is handled by pre-distributing the new key before the old key expires (overlap window). Multiple active keys per domain are supported.
+The existing `SmartID-Attestation` header verification (ECDSA P-256 via `crypto.subtle.verify()`) is preserved as the Tier 3 mechanism. The header format remains:
 
-Rollback protection is enforced per-key: the manifest contains a monotonic version for each `TrustedRpSigningKey`, and the extension rejects updates with version <= last-seen for that specific key.
+```
+SmartID-Attestation: v1;<base64url(json-payload)>;<base64url(signature)>;<key-id>
+```
 
-### 5. Performance Budget
+The WASM DECO oracle is added as an optional augmentation for banks that don't support the signed header approach. Proofs are cached per-session with a session-scoped LRU cache (max 5 entries).
 
-| Operation | Budget | Implementation |
-|---|---|---|
-| Response header interception | <1ms | webRequest listener callback |
-| Header parsing + key lookup | <5ms | Local Map lookup |
-| ECDSA P-256 signature verify | <10ms | Web Crypto API (native) |
-| Cross-reference with DOM | <1ms | String comparison |
-| Android-side verification | <10ms | Java crypto API |
-| Total latency added | <20ms | Zero network round trips |
-| Bundle size added | ~200 bytes | Pure TypeScript |
+### Decision 5: Tier Auto-Negotiation
 
-Compare with the prior TLSNotary approach: 2MB WASM module, 1-2s ZKP generation, Notary server RTT.
+At challenge time, the extension attempts tiers from highest to lowest:
 
-### 6. Manifest Signing Key Bootstrap
+```
+1. If RP policy in manifest requires Tier 3 → try Token Binding + WASM oracle
+2. If RP has Token Binding endpoint → try WebTransport (Tier 2)
+3. Always fallback to Sec-Fetch headers (Tier 1)
+4. Encode chosen tier in challenge version byte
+```
 
-The manifest of `TrustedRpSigningKey` entries is itself signed to prevent tampering. The initial manifest signing public key is **hardcoded/bundled with the extension at build time** (key pinning). This key is an ECDSA P-256 public key stored as raw uncompressed bytes (`ArrayBuffer`, 65 bytes), identical in format to `TrustedRpSigningKey.publicKeyBytes`.
+The Android Vault enforces the minimum tier per RP domain. If the proof is below the minimum, the session is rejected.
 
-Trust chain:
-1. **Initial trust**: The build-time pinned public key verifies the first signed manifest.
-2. **Manifest updates**: Every manifest update is signed by the corresponding private key. The extension verifies the manifest signature before applying any key additions or rotations.
-3. **Key rotation for the manifest signing key itself**: If the manifest signing key must be rotated, a signed revocation + replacement message is issued by the **previous** key. The message contains the new public key and a monotonic version number. The extension verifies this message with the old key, then trusts the new key for subsequent manifest updates. The old key is retained in a small revocation history to prevent rollback to a compromised key.
+### Decision 6: Proof Caching
 
-This bootstrap model avoids any external trust anchor (no CA, no DNSSEC) and ensures the extension only accepts manifest updates signed by a key it already trusts.
+Tier 3 proofs involve WASM computation (1-2s). These are cached per-session:
 
-## Demo Mode Implementation
+```typescript
+const proofCache = new Map<string, { proof: Uint8Array; expiresAt: number }>();
+const PROOF_CACHE_TTL_MS = 30_000;
+const PROOF_CACHE_MAX = 5;
+```
 
-Since bank coordination is not feasible for development, the attestation system includes a demo mode:
+Cache key = `rpDomain:tabId:pageUrl`. Expired entries are evicted lazily on read.
 
-- **Activation**: `import.meta.env.DEV` (development) or `MODE=demo` environment
-- **Key material**: 4 unique ECDSA P-256 key pairs (one per whitelisted domain) plus 4 rotation keys, generated and bundled in `trusted-rp-keys.json`
-- **Private key storage**: JWK format embedded in `demoAttestation.ts` for Web Crypto API compatibility
-- **Header injection**: In demo mode, `attestationManager.ts` activates an `onBeforeRequest` listener to detect matching URLs/domains. On a match the background directly invokes the attestation pipeline with synthetically generated `AttestedCode` (skipping HTTP header parsing). `onBeforeRequest` is used for **detection only** — header modification is not possible from this event and is not needed since the pipeline synthesizes attestation data directly.
-- **Private key exclusion**: `demoAttestation.ts` (`DEMO_PRIVATE_KEYS`) is **never statically imported** from production code paths. It is imported dynamically inside `if (isDemoMode()) { await import('...') }` so Vite dead-code-eliminates the module in production builds. Additionally, `createDemoAttestationHeader` and `isDemoMode` are excluded from the shared attestation barrel (`index.ts`) — only `isDemoMode` (from the key-free `env.ts`) is exported. The `trusted-rp-keys.json` manifest contains only public keys and is safe to bundle.
-- **Verification path**: The same `crypto.subtle.verify()` code used in production verifies the demo-signed headers — no code path differences
-- **Test coverage**: 6 end-to-end crypto tests validate the full pipeline (key import → sign → parse → verify → cross-reference → timestamp validation)
-- **Production switch**: Replace `trusted-rp-keys.json` with bank-provided public keys, disable demo injector, enable manifest refresh from update server
+## Alliance with Challenge-Bound WebAuthn
 
-The demo mode exercises every code path used in production except the manifest refresh/download path (which requires the update server).
+The TLS binding proof is the first input to the challenge derivation (version 0x02):
+
+```
+Challenge = SHA-256(TlsBindingProof || Origin || Control_Code || Session_Nonce)
+```
+
+The `challenge-bound-webauthn` change consumes this proof. Separating the concerns:
+- **This change (zktls-context-engine)**: Generates the TLS binding proof from whatever tier is available
+- **challenge-bound-webauthn**: Incorporates the proof into the WebAuthn challenge and verifies the assertion
 
 ## Risks / Trade-offs
 
-- [Risk] Bank must add a response header — This requires coordination with each of the 4 whitelisted RPs. However, the implementation cost per bank is trivial: add one response header on the Smart-ID login endpoint. This is substantially simpler than deploying a Notary server or modifying TLS behavior.
-- [Risk] Header may be stripped by intermediaries — Proxies, AV software, or the RAT can strip the `SmartID-Attestation` header. The extension gracefully degrades to DOM-only mode in this case (same security level as today's V5). The RAT cannot forge a valid signature.
-- [Risk] Key rotation synchronization — If the bank rotates their signing key and the extension's manifest is outdated, verification fails until the manifest refreshes. Mitigated by: bundling keys with overlap windows, background manifest refresh, and graceful degradation to DOM-only.
-- [Trade-off] No TLSNotary, no witness of the TLS transcript — This approach proves "the bank's signing key committed to this control code" rather than "the bank's TLS session contained this string." The security level is equivalent for the threat model: a RAT cannot forge either, and both degrade to DOM-only on failure. The operational complexity is drastically lower.
-- [Trade-off] No WASM, no Offscreen Document — Attestation runs entirely in the service worker. The existing Offscreen Document is preserved for WebRTC only. No `SharedArrayBuffer` or `COOP/COEP` headers needed anywhere.
-- [Risk] Replay of old attestation headers — Mitigated by including a session identifier and timestamp in the signed payload. The Android Vault checks that the session matches the current WebAuthn transaction. The extension also validates the timestamp: attestation is rejected if `|now - ts| > 30 seconds`, with graceful fallback to DOM-only mode.
+- [Risk] Tier 1 Sec-Fetch headers are not available in all browser contexts (e.g., extension pages, `data:` URIs) — Filter to `http://` and `https://` URLs only. For non-HTTP schemes, degrade to Tier 0 (no TLS binding, require Tier 2+).
+- [Risk] `Sec-Fetch-Dest: document` may not be present on all navigation types — Some redirect chains strip headers. Mitigation: use `Sec-Fetch-Site` as primary signal; `Sec-Fetch-Dest` is secondary.
+- [Risk] Tier 2 WebTransport may not be available in all Chrome versions — Check `typeof WebTransport !== 'undefined'` before attempting. Degrade gracefully to Tier 1.
+- [Risk] Tier 3 WASM oracle has ~2MB bundle impact — Load on-demand only when RP policy requires Tier 3. Use dynamic `import()` in offscreen document.
+- [Risk] Signed header bank coordination is slow — Tier 1/2 provide meaningful security without bank changes. Tier 3 is an enhancement, not a requirement.
+- [Trade-off] Content hash detects DOM mutations but not all RAT vectors — A sophisticated RAT could intercept the content hash computation. Combined with Sec-Fetch headers, the attack surface is dramatically reduced.

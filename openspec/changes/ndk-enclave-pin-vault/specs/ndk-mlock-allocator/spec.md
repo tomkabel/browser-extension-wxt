@@ -25,3 +25,11 @@ The NDK enclave SHALL implement a memory allocator using `mlock()` for physical 
 - **WHEN** `allocate()` is called
 - **THEN** the allocator SHALL check `getrlimit(RLIMIT_MEMLOCK)` for sufficient budget
 - **AND** if budget is inadequate, SHALL log a warning and fall back to two sequential madvise calls: `madvise(..., MADV_WILLNEED)` followed by `madvise(..., MADV_DONTDUMP)`
+
+---
+:test-resources
+| Scenario | Test File | Test Name |
+|---|---|---|
+| Buffer allocated with guard pages | `apps/android-vault/libvault_enclave/tests/allocator_test.cpp` | `AllocatesWithGuardPages` |
+| Buffer deallocated securely | `apps/android-vault/libvault_enclave/tests/allocator_test.cpp` | `DeallocatesSecurely` |
+| mlock budget check | `apps/android-vault/libvault_enclave/tests/allocator_test.cpp` | `FallsBackOnInsufficientMlock` |

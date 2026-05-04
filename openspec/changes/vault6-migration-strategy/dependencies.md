@@ -41,26 +41,33 @@ All leaf paths converge → FULL V6 INTEGRATION
 
 ## GitHub Issue Tracking
 
-Each V6 change should have a corresponding GitHub issue for tracking progress,
+Each V6 change has a corresponding GitHub issue for tracking progress,
 blocking notifications, and cross-linking PRs.
 
 | Change | Issue Link | Status |
 |---|---|---|
-| `usb-aoa-transport-proxy` | <!-- GH-ISSUE-LINK --> | ✅ Completed (74 tasks) |
-| `ndk-enclave-pin-vault` | <!-- GH-ISSUE-LINK --> | ❓ Issue not yet created |
-| `ghost-actuator-gesture-injection` | <!-- GH-ISSUE-LINK --> | ❓ Issue not yet created |
-| `zktls-context-engine` | <!-- GH-ISSUE-LINK --> | ❓ Issue not yet created |
-| `challenge-bound-webauthn` | <!-- GH-ISSUE-LINK --> | ❓ Issue not yet created |
-| `eidas-qes-hardware-gate` | <!-- GH-ISSUE-LINK --> | ❓ Issue not yet created |
+| `usb-aoa-transport-proxy` | — | ✅ Completed (74 tasks) — issue closed |
+| `ndk-enclave-pin-vault` | — | ❌ Issue not yet created — blocked on challenge-bound-webauthn |
+| `ghost-actuator-gesture-injection` | — | ❌ Issue not yet created — blocked on ndk-enclave-pin-vault |
+| `zktls-context-engine` | — | ❌ Issue not yet created — blocked on usb-aoa-transport-proxy |
+| `challenge-bound-webauthn` | — | ❌ Issue not yet created — blocked on zktls-context-engine |
+| `eidas-qes-hardware-gate` | — | ❌ Issue not yet created — blocked on prior 3 phases |
+
+**Action**: Create a tracking issue per change when implementation begins.
+The issue should link to this dependency tracker for upstream/downstream
+blocking context. Use the following naming convention:
+- Title: `[V6] <change-name>: <1-line summary>`
+- Body: Include the full dependency table row and link to this file.
+- Labels: `v6`, `enhancement`
 
 ## Phase Mapping
 
-| V6 Phase | Changes | Trigger Condition |
-|---|---|---|
-| **Phase 1.5** (Bridge) | usb-aoa-transport-proxy (COMPLETED) | Go Native Host binary released |
-| **Phase 2A** (Core Enclave) | ndk-enclave-pin-vault, ghost-actuator-gesture-injection | NDK enclave + actuator release |
-| **Phase 2B** (zkTLS + WebAuthn) | zktls-context-engine, challenge-bound-webauthn | zkTLS prover release |
-| **Phase 2C** (eIDAS QES) | eidas-qes-hardware-gate | All prior phases complete |
+| V6 Phase | Changes | Trigger Condition | Prerequisite Phase |
+|---|---|---|---|
+| **Phase 1.5** (Bridge) | usb-aoa-transport-proxy (COMPLETED) | Go Native Host binary released | None |
+| **Phase 2A** (Core Enclave) | ndk-enclave-pin-vault, ghost-actuator-gesture-injection | NDK enclave + actuator release | 1.5 |
+| **Phase 2B** (zkTLS + WebAuthn) | zktls-context-engine, challenge-bound-webauthn | zkTLS prover release | 1.5 (parallel to 2A) |
+| **Phase 2C** (eIDAS QES) | eidas-qes-hardware-gate | All prior phases complete | 2A + 2B |
 
 ---
 

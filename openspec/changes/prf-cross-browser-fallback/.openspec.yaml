@@ -1,2 +1,17 @@
 schema: spec-driven
 created: 2026-05-04
+updated: 2026-05-04
+specs:
+  - specs/cross-browser-prf-detection
+  - specs/phone-approval-resume
+  - specs/offscreen-polyfill
+context: |
+  PRF-unavailable fallback for non-Chrome browsers (Firefox, Safari). When PRF is
+  unavailable (detected via checkPrfSupport()), session resume falls back to a
+  phone-side approval flow using a new resume-session command over the existing
+  transport channel. Phone shows notification with Approve/Deny. 30-second timeout.
+  Reuses existing CommandClient infrastructure — ACK/retry, encryption, sequencing.
+  Transport reconnection via IK handshake before resume if no active transport.
+  Offscreen document polyfill: creates hidden tab for Firefox/Safari where the
+  native chrome.offscreen API is unavailable. Hidden tab hosts WebRTC and WebUSB
+  with message passthrough via runtime.sendMessage.

@@ -1,2 +1,16 @@
 schema: spec-driven
 created: 2026-05-04
+updated: 2026-05-04
+specs:
+  - specs/device-registry
+  - specs/device-switching
+  - specs/signed-revocation
+  - specs/key-rotation-on-revoke
+context: |
+  Multi-device support: device registry in chrome.storage.session storing up to 5
+  paired phones with ID, name, static key fingerprint, and last-seen. Popup device
+  list with active-device radio selection and switching. Signed revocation broadcasts
+  to the signaling server which blacklists the deviceId. Revocation Merkle tree
+  proves device status per command — revoked devices rejected. Key rotation on
+  revocation: extension generates new Noise static keypair; old keypair zeroed.
+  Recovery flow from Shamir shares (any 2 of 3) allows re-pairing new phone.

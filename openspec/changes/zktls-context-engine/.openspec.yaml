@@ -1,18 +1,17 @@
 schema: spec-driven
 created: 2026-05-03
+updated: 2026-05-04
 specs:
-  - specs/signed-header-attestation
-  - specs/control-code-verification
-  - specs/zkp-key-management
-context: |
-  Phase 2 — Signed HTTP response header attestation for Smart-ID control codes.
-  The bank's server includes a SmartID-Attestation response header: base64url
-  payload + ECDSA P-256 signature. The extension intercepts via webRequest.onHeadersReceived,
-  verifies the signature using Web Crypto API and the RP's known signing key
-  (TrustedRpSigningKey manifest). No WASM, no Notary server, no Offscreen
-  Document involvement. Pure TypeScript implementation (~100 lines).
-  V6 Alignment: Core V6 Layer 1 defense. No longer blocked on licensing/audit.
-    Removes all prior TLSNotary risks (AGPL, Notary infra, SharedArrayBuffer, <2MB WASM).
-    Blocking challenge-bound-webauthn which needs the attested control code as
-    WebAuthn challenge input. Depends on completed usb-aoa-transport-proxy
-    for proof delivery to Android for verification.
+  - signed-header-attestation
+  - control-code-verification
+  - zkp-key-management
+context: >
+  Phase 2 progressive TLS binding proof system (three tiers):
+  Tier 1: Sec-Fetch-* header capture via webRequest (zero infra, works today)
+  Tier 2: WebTransport Token Binding (requires RP endpoint)
+  Tier 3: SmartID-Attestation ECDSA P-256 signed header verification
+  Replaces the monolithic zkTLS/zkTLS concept with a tiered approach.
+v6_alignment: >
+  Core V6 Layer 1 defense. Three tiers provide progressively stronger
+  cryptographic guarantees with graduated infrastructure requirements.
+  Tier 1 requires no bank cooperation. Blocks challenge-bound-webauthn.

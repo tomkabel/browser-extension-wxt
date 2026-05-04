@@ -28,7 +28,7 @@
 - [x] 1.3 Add accessibility fallback: detect TalkBack → show 6-digit numeric SAS + "Confirm" button
 - [x] 1.4 Send `pairing-confirmed` message to extension after user confirms match
 - [x] 1.5 Send `pairing-rejected` message to extension if user cancels; abort pairing
-- [ ] 1.6 Test: verify both sides derive identical emoji SAS from same Noise session key
+- [x] 1.6 Test: verify both sides derive identical emoji SAS from same Noise session key
 
 ## 2. Context-Aware Biometric Prompt (Phase 4 — JIT Auth)
 
@@ -72,14 +72,14 @@
 
 - [x] 5.1 Update `WebRTCManager.kt` to fetch TURN credentials from signaling server before RTCPeerConnection creation
 - [x] 5.2 Configure ICE servers with relay credentials: `[{ urls: 'stun:...' }, { urls: ['turn:...', 'turns:...'], credential, username }]`
-- [ ] 5.3 Test connection on home Wi-Fi (local, <5ms)
-- [ ] 5.4 Test connection behind UDP-blocking firewall (TURN/TCP 443)
+- [x] 5.3 Test connection on home Wi-Fi (local, <5ms)
+- [x] 5.4 Test connection behind UDP-blocking firewall (TURN/TCP 443)
 
 ## 6. Testing & Integration
 
-- [ ] 6.1 Test end-to-end: extension shows QR → phone scans → emoji SAS → Match → paired
-- [ ] 6.2 Test credential request: extension detects login → sends credential-request → phone auto-approves → vault lookup → micro-payload returned
-- [ ] 6.3 Test credential request: phone locked → notification → user authenticates → credentials returned
-- [ ] 6.4 Test PRF re-auth: pair → close → reopen → verify IK handshake with PRF-derived key
+- [x] 6.1 Test end-to-end: extension shows QR → phone scans → emoji SAS → Match → paired
+- [x] 6.2 Test credential request: extension detects login → sends credential-request → phone auto-approves → vault lookup → micro-payload returned
+- [x] 6.3 Test credential request: phone locked → notification → user authenticates → credentials returned
+- [x] 6.4 Test PRF re-auth: pair → close → reopen → verify IK handshake with PRF-derived key
 - [x] 6.5 Run `bun run lint && bun run typecheck` on extension side
-- [ ] 6.6 Run interop test suite: TS ↔ Java Noise handshake, encrypt/decrypt, key rotation
+- [x] 6.6 Run interop test suite: TS ↔ Java Noise handshake, encrypt/decrypt, key rotation
