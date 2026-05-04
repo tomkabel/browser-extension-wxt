@@ -86,7 +86,9 @@ export type MessageType =
   | 'get-attestation-status'
   | 'refresh-rp-keys'
   | 'deliver-attested-code'
-  | 'scrape-control-code';
+  | 'scrape-control-code'
+  | 'passkey-credential-created'
+  | 'passkey-credential-error';
 
 export interface ExtensionMessage<T = unknown> {
   type: MessageType;

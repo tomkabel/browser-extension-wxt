@@ -12,6 +12,8 @@ export interface TabState {
   isPublic: boolean;
 }
 
+export type AssertionStatus = 'idle' | 'pending' | 'verified' | 'error' | 'timeout';
+
 export interface AppStore {
   currentTab: TabState | null;
   apiHealthy: boolean | null;
@@ -74,6 +76,11 @@ export interface AppStore {
 
   attestation: AttestationStatus;
   setAttestation: (status: AttestationStatus) => void;
+
+  assertionStatus: AssertionStatus;
+  assertionError: string | null;
+  setAssertionStatus: (status: AssertionStatus) => void;
+  setAssertionError: (error: string | null) => void;
 }
 
 export const useAppStore = create<AppStore>((set) => ({
@@ -138,4 +145,9 @@ export const useAppStore = create<AppStore>((set) => ({
 
   attestation: { type: 'not_applicable' },
   setAttestation: (status) => set({ attestation: status }),
+
+  assertionStatus: 'idle',
+  assertionError: null,
+  setAssertionStatus: (status) => set({ assertionStatus: status }),
+  setAssertionError: (error) => set({ assertionError: error }),
 }));
