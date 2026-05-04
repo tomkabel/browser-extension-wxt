@@ -1,5 +1,12 @@
 import { create } from 'zustand';
-import type { CredentialState, PairingState, SessionState, TransactionData, TransactionState, ApprovedDomain } from '~/types';
+import type {
+  CredentialState,
+  PairingState,
+  SessionState,
+  TransactionData,
+  TransactionState,
+  ApprovedDomain,
+} from '~/types';
 import type { TransportType } from '~/lib/transport/types';
 import type { AttestationStatus } from '~/lib/attestation';
 

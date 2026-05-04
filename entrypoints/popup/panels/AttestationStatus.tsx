@@ -13,7 +13,10 @@ export function AttestationStatus() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const response = await browser.runtime.sendMessage({ type: 'get-attestation-status', payload: {} });
+      const response = await browser.runtime.sendMessage({
+        type: 'get-attestation-status',
+        payload: {},
+      });
       if (response.success) {
         const status = response.data?.status as AttestationStatusType | undefined;
         if (status) {

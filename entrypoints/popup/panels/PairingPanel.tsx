@@ -116,7 +116,15 @@ export function PairingPanel() {
     return () => {
       mounted = false;
     };
-  }, [pairingState, sasCode, setPairingState, setPairingError, setDeviceName, setEmojiSas, setConnectionState]);
+  }, [
+    pairingState,
+    sasCode,
+    setPairingState,
+    setPairingError,
+    setDeviceName,
+    setEmojiSas,
+    setConnectionState,
+  ]);
 
   const handleConfirmMatch = useCallback(async () => {
     try {
@@ -195,13 +203,15 @@ export function PairingPanel() {
     const showEmoji = sasMode === 'emoji';
     const showNumeric = sasMode === 'numeric';
 
-    if (connectionState === 'disconnected' && generatedAt > 0 && Date.now() - generatedAt > 15_000) {
+    if (
+      connectionState === 'disconnected' &&
+      generatedAt > 0 &&
+      Date.now() - generatedAt > 15_000
+    ) {
       return (
         <div className="p-4 bg-white rounded-lg border text-center">
           <h2 className="text-lg font-bold text-gray-800 mb-3">Unable to Connect</h2>
-          <p className="text-sm text-gray-500 mb-4">
-            Check your network and try again.
-          </p>
+          <p className="text-sm text-gray-500 mb-4">Check your network and try again.</p>
           <div className="flex flex-col gap-2">
             <button
               type="button"
@@ -253,14 +263,10 @@ export function PairingPanel() {
         </div>
         <div className="flex flex-col gap-2">
           {connectionState === 'reconnecting' && (
-            <p className="text-xs text-amber-600 text-center">
-              Reconnecting...
-            </p>
+            <p className="text-xs text-amber-600 text-center">Reconnecting...</p>
           )}
           {connectionState === 'connected' && (
-            <p className="text-xs text-green-600 text-center">
-              Connected
-            </p>
+            <p className="text-xs text-green-600 text-center">Connected</p>
           )}
           <button
             type="button"
@@ -328,9 +334,7 @@ export function PairingPanel() {
     return (
       <div className="p-4 bg-white rounded-lg border">
         <h2 className="text-lg font-bold text-gray-800 mb-3">Verify Symbols</h2>
-        <p className="text-sm text-gray-500 mb-4">
-          Do these symbols match your phone screen?
-        </p>
+        <p className="text-sm text-gray-500 mb-4">Do these symbols match your phone screen?</p>
         <div className="flex justify-center gap-4 mb-4">
           {emojiSas ? (
             <>

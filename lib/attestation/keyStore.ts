@@ -2,12 +2,7 @@ import { browser } from 'wxt/browser';
 import type { TrustedRpSigningKey, SignedKeyManifest, RpKeyStore } from './types';
 import { log } from '~/lib/errors';
 
-export const WHITELISTED_RP_DOMAINS = [
-  'lhv.ee',
-  'swedbank.ee',
-  'seb.ee',
-  'tara.ria.ee',
-] as const;
+export const WHITELISTED_RP_DOMAINS = ['lhv.ee', 'swedbank.ee', 'seb.ee', 'tara.ria.ee'] as const;
 
 export class KeyStore implements RpKeyStore {
   private keys: Map<string, TrustedRpSigningKey> = new Map();
@@ -87,7 +82,9 @@ export class KeyStore implements RpKeyStore {
       this.addKey(key);
     }
     this.manifestVersion = manifest.version;
-    log.info(`Key manifest updated to version ${manifest.version} with ${manifest.keys.length} keys`);
+    log.info(
+      `Key manifest updated to version ${manifest.version} with ${manifest.keys.length} keys`,
+    );
     return true;
   }
 

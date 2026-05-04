@@ -71,7 +71,10 @@ describe('end-to-end crypto verification', () => {
 
     const parts = header!.split(';');
     const encoder = new TextEncoder();
-    const tamperedPayload = base64urlEncode(encoder.encode(JSON.stringify({ code: '0000', ts: Math.floor(Date.now() / 1000) })).buffer as ArrayBuffer);
+    const tamperedPayload = base64urlEncode(
+      encoder.encode(JSON.stringify({ code: '0000', ts: Math.floor(Date.now() / 1000) }))
+        .buffer as ArrayBuffer,
+    );
     const tampered = `v1;${tamperedPayload};${parts[2]};${parts[3]}`;
 
     const result = await verifier.verifyHeader(tampered, 'lhv.ee');
@@ -97,9 +100,13 @@ describe('end-to-end crypto verification', () => {
     expect(header).not.toBeNull();
 
     const parts = header!.split(';');
-    const payload = JSON.parse(new TextDecoder().decode(
-      Uint8Array.from(atob(parts[1]!.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0)),
-    ));
+    const payload = JSON.parse(
+      new TextDecoder().decode(
+        Uint8Array.from(atob(parts[1]!.replace(/-/g, '+').replace(/_/g, '/')), (c) =>
+          c.charCodeAt(0),
+        ),
+      ),
+    );
     payload.ts = Math.floor(Date.now() / 1000) - 35;
 
     const encoder = new TextEncoder();

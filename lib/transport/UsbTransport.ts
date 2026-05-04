@@ -98,24 +98,22 @@ export class UsbTransport implements Transport {
       return;
     }
 
-    this.port.onMessage.addListener(
-      (msg: NativeHostMessage & { id?: string }) => {
-        if (msg.id && this.pendingRequests.has(msg.id)) {
-          const pending = this.pendingRequests.get(msg.id)!;
-          clearTimeout(pending.timer);
-          this.pendingRequests.delete(msg.id);
-          pending.resolve(msg);
-          return;
-        }
+    this.port.onMessage.addListener((msg: NativeHostMessage & { id?: string }) => {
+      if (msg.id && this.pendingRequests.has(msg.id)) {
+        const pending = this.pendingRequests.get(msg.id)!;
+        clearTimeout(pending.timer);
+        this.pendingRequests.delete(msg.id);
+        pending.resolve(msg);
+        return;
+      }
 
-        if (msg.type === 'payload-received' && msg.data) {
-          const bytes = this.base64ToArrayBuffer(msg.data);
-          for (const cb of this.messageCallbacks) {
-            cb(bytes);
-          }
+      if (msg.type === 'payload-received' && msg.data) {
+        const bytes = this.base64ToArrayBuffer(msg.data);
+        for (const cb of this.messageCallbacks) {
+          cb(bytes);
         }
-      },
-    );
+      }
+    });
 
     this.port.onDisconnect.addListener(() => {
       this.handleDisconnect();
@@ -194,10 +192,7 @@ export class UsbTransport implements Transport {
       connected: payload.connected,
       transport: payload.transport as TransportType,
       latencyMs: payload.latencyMs,
-      deviceSerial:
-        typeof payload.deviceSerial === 'string'
-          ? payload.deviceSerial
-          : undefined,
+      deviceSerial: typeof payload.deviceSerial === 'string' ? payload.deviceSerial : undefined,
     };
   }
 

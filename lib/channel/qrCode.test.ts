@@ -37,9 +37,7 @@ describe('detectAccessibilityPrefs', () => {
   });
 
   it('returns false for normal user agent', () => {
-    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(
-      'Mozilla/5.0 Chrome/131.0.0.0',
-    );
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 Chrome/131.0.0.0');
 
     const prefs = detectAccessibilityPrefs();
     expect(prefs.screenReader).toBe(false);

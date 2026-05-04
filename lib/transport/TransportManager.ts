@@ -115,10 +115,7 @@ export class TransportManager {
     }
   }
 
-  private async switchTransport(
-    target: TransportType,
-    reason: string,
-  ): Promise<void> {
+  private async switchTransport(target: TransportType, reason: string): Promise<void> {
     const previous = this.activeTransport?.type ?? null;
     const current = this.activeTransport;
 
@@ -196,11 +193,7 @@ export class TransportManager {
     }, TRANSPORT_CONFIG.hostAvailabilityCheckIntervalMs);
   }
 
-  private emitChange(
-    previous: TransportType | null,
-    current: TransportType,
-    reason: string,
-  ): void {
+  private emitChange(previous: TransportType | null, current: TransportType, reason: string): void {
     this.emit('transport-changed', { previous, current, reason } as TransportChangeEvent);
 
     try {

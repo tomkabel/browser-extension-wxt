@@ -4,7 +4,12 @@ import { base64urlEncode, sortedJsonStringify } from '../base64url';
 
 const encoder = new TextEncoder();
 
-function makeHeader(code: string, ts: number, session?: string, overrides?: Record<string, unknown>): string {
+function makeHeader(
+  code: string,
+  ts: number,
+  session?: string,
+  overrides?: Record<string, unknown>,
+): string {
   const payload: Record<string, unknown> = { code, ts, ...overrides };
   if (session) payload.session = session;
   const payloadBytes = encoder.encode(sortedJsonStringify(payload)).buffer as ArrayBuffer;

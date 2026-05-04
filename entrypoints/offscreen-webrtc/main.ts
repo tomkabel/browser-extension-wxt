@@ -35,9 +35,7 @@ function log(message: string): void {
 }
 
 function notifyBackground(type: string, payload?: unknown): void {
-  chrome.runtime
-    .sendMessage({ type, payload })
-    .catch(() => {});
+  chrome.runtime.sendMessage({ type, payload }).catch(() => {});
 }
 
 async function fetchTurnCredentials(): Promise<TurnCredentials | null> {
@@ -73,9 +71,7 @@ function scheduleCredsRefresh(ttlSeconds: number): void {
 }
 
 export function buildIceServers(creds: TurnCredentials | null): RTCIceServer[] {
-  const servers: RTCIceServer[] = [
-    { urls: 'stun:stun.l.google.com:19302' },
-  ];
+  const servers: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }];
 
   if (creds) {
     if (Array.isArray(creds.stunUrls)) {
@@ -107,43 +103,41 @@ function logConnectionMetrics(): void {
   try {
     const stats = pc.getStats();
 
-    stats.then((report) => {
-      let candidateType = 'unknown';
-      let transportProtocol = 'unknown';
-      let rtt: number | undefined;
+    stats
+      .then((report) => {
+        let candidateType = 'unknown';
+        let transportProtocol = 'unknown';
+        let rtt: number | undefined;
 
-      for (const stat of report.values()) {
-        if (
-          stat.type === 'candidate-pair' &&
-          stat.state === 'succeeded' &&
-          stat.nominated
-        ) {
-          rtt = stat.currentRoundTripTime ? stat.currentRoundTripTime * 1000 : undefined;
+        for (const stat of report.values()) {
+          if (stat.type === 'candidate-pair' && stat.state === 'succeeded' && stat.nominated) {
+            rtt = stat.currentRoundTripTime ? stat.currentRoundTripTime * 1000 : undefined;
 
-          const localCandidate = report.get(stat.localCandidateId);
-          if (localCandidate) {
-            const lc = localCandidate as { candidateType?: string; protocol?: string };
-            candidateType = lc.candidateType ?? 'unknown';
-            transportProtocol = lc.protocol ?? 'unknown';
+            const localCandidate = report.get(stat.localCandidateId);
+            if (localCandidate) {
+              const lc = localCandidate as { candidateType?: string; protocol?: string };
+              candidateType = lc.candidateType ?? 'unknown';
+              transportProtocol = lc.protocol ?? 'unknown';
+            }
+            break;
           }
-          break;
         }
-      }
 
-      log(
-        `Connection metrics: type=${candidateType}, protocol=${transportProtocol}, rtt=${rtt?.toFixed(1) ?? 'N/A'}ms`,
-      );
+        log(
+          `Connection metrics: type=${candidateType}, protocol=${transportProtocol}, rtt=${rtt?.toFixed(1) ?? 'N/A'}ms`,
+        );
 
-      if (candidateType === 'relay') {
-        log('Using TURN relay transport');
-      }
+        if (candidateType === 'relay') {
+          log('Using TURN relay transport');
+        }
 
-      notifyBackground('webrtc-metrics', {
-        candidateType,
-        rtt,
-        transportProtocol,
-      });
-    }).catch(() => {});
+        notifyBackground('webrtc-metrics', {
+          candidateType,
+          rtt,
+          transportProtocol,
+        });
+      })
+      .catch(() => {});
   } catch {
     // getStats may not be available
   }
@@ -173,10 +167,12 @@ function setupPeerConnection(relayOnly = false): void {
 
   dataChannel.onmessage = (event: MessageEvent) => {
     if (event.data instanceof ArrayBuffer) {
-      chrome.runtime.sendMessage({
-        type: 'webrtc-data-received',
-        payload: { data: Array.from(new Uint8Array(event.data)) },
-      }).catch(() => {});
+      chrome.runtime
+        .sendMessage({
+          type: 'webrtc-data-received',
+          payload: { data: Array.from(new Uint8Array(event.data)) },
+        })
+        .catch(() => {});
     }
   };
 

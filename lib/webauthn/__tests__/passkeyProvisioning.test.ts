@@ -17,19 +17,21 @@ beforeEach(() => {
 
 describe('passkeyProvisioning', () => {
   it('creates credential with correct options structure', async () => {
-    mockCredentialsCreate.mockImplementation(async ({ publicKey }: { publicKey: PublicKeyCredentialCreationOptions }) => {
-      expect(publicKey.rp.id).toBe('extension.example.com');
-      expect(publicKey.rp.name).toBe('SmartID2 Vault');
-      expect(publicKey.pubKeyCredParams).toEqual([{ type: 'public-key', alg: -7 }]);
-      expect(publicKey.authenticatorSelection?.authenticatorAttachment).toBe('platform');
-      expect(publicKey.authenticatorSelection?.userVerification).toBe('required');
-      expect(publicKey.authenticatorSelection?.residentKey).toBe('required');
-      expect(publicKey.timeout).toBe(60000);
-      expect(publicKey.extensions).toBeDefined();
-      expect((publicKey.extensions as Record<string, unknown>)?.prf).toBeDefined();
+    mockCredentialsCreate.mockImplementation(
+      async ({ publicKey }: { publicKey: PublicKeyCredentialCreationOptions }) => {
+        expect(publicKey.rp.id).toBe('extension.example.com');
+        expect(publicKey.rp.name).toBe('SmartID2 Vault');
+        expect(publicKey.pubKeyCredParams).toEqual([{ type: 'public-key', alg: -7 }]);
+        expect(publicKey.authenticatorSelection?.authenticatorAttachment).toBe('platform');
+        expect(publicKey.authenticatorSelection?.userVerification).toBe('required');
+        expect(publicKey.authenticatorSelection?.residentKey).toBe('required');
+        expect(publicKey.timeout).toBe(60000);
+        expect(publicKey.extensions).toBeDefined();
+        expect((publicKey.extensions as Record<string, unknown>)?.prf).toBeDefined();
 
-      return null;
-    });
+        return null;
+      },
+    );
 
     const { createPasskeyCredential } = await import('../passkeyProvisioning');
 

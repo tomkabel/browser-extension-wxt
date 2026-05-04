@@ -85,10 +85,7 @@ export function isKeepaliveActive(): boolean {
   return keepalivePort !== null;
 }
 
-export function updateConnectionState(
-  state: ConnectionState,
-  error?: string,
-): void {
+export function updateConnectionState(state: ConnectionState, error?: string): void {
   connectionState = state;
   if (error !== undefined) {
     connectionError = error;

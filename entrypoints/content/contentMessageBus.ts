@@ -76,7 +76,11 @@ function handleDetectTransaction(
 }
 
 async function handleScrapeControlCode(
-  sendResponse: (response: { success: boolean; controlCode?: string | null; error?: string }) => void,
+  sendResponse: (response: {
+    success: boolean;
+    controlCode?: string | null;
+    error?: string;
+  }) => void,
 ): Promise<void> {
   try {
     const controlCode = scrapeControlCode();
@@ -99,14 +103,25 @@ async function handleCredentialResponse(
       return;
     }
 
-    const ok = injectCredentials(payload.username, payload.password, selectors.usernameSelector, selectors.passwordSelector);
+    const ok = injectCredentials(
+      payload.username,
+      payload.password,
+      selectors.usernameSelector,
+      selectors.passwordSelector,
+    );
     if (!ok) {
-      sendResponse({ success: false, error: 'Login form changed. Please reload the page and try again.' });
+      sendResponse({
+        success: false,
+        error: 'Login form changed. Please reload the page and try again.',
+      });
       return;
     }
 
     sendResponse({ success: true });
   } catch (err) {
-    sendResponse({ success: false, error: err instanceof Error ? err.message : 'Injection failed' });
+    sendResponse({
+      success: false,
+      error: err instanceof Error ? err.message : 'Injection failed',
+    });
   }
 }

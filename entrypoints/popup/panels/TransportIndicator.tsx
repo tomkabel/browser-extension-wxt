@@ -14,18 +14,21 @@ export function TransportIndicator() {
   useEffect(() => {
     let mounted = true;
 
-    browser.runtime.sendMessage({ type: 'transport-changed', payload: null }).then((response) => {
-      if (!mounted || !response?.success) return;
-      const data = response.data as { activeTransport?: string; usbAvailable?: boolean };
-      if (data.activeTransport) {
-        setActiveTransport(data.activeTransport as 'usb' | 'webrtc');
-      }
-      if (data.usbAvailable !== undefined) {
-        setUsbAvailable(data.usbAvailable);
-      }
-    }).catch(() => {
-      // transport manager not ready
-    });
+    browser.runtime
+      .sendMessage({ type: 'transport-changed', payload: null })
+      .then((response) => {
+        if (!mounted || !response?.success) return;
+        const data = response.data as { activeTransport?: string; usbAvailable?: boolean };
+        if (data.activeTransport) {
+          setActiveTransport(data.activeTransport as 'usb' | 'webrtc');
+        }
+        if (data.usbAvailable !== undefined) {
+          setUsbAvailable(data.usbAvailable);
+        }
+      })
+      .catch(() => {
+        // transport manager not ready
+      });
 
     const listener = (message: { type?: string; payload?: unknown }) => {
       if (message.type === 'transport-changed' && message.payload) {

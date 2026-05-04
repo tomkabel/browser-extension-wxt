@@ -75,7 +75,9 @@ const httpServer = createServer((req, res) => {
     const credentials = generateTurnCredentials(roomId);
     if (!credentials) {
       res.writeHead(503, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'TURN credentials unavailable: TURN_SECRET not configured' }));
+      res.end(
+        JSON.stringify({ error: 'TURN credentials unavailable: TURN_SECRET not configured' }),
+      );
       return;
     }
     pendingCredentials.set(roomId, credentials);

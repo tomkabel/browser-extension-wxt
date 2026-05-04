@@ -36,7 +36,9 @@ export function DomainPermissionPrompt() {
       {pendingDomains.map((d) => (
         <div key={d.domain} className="p-3 bg-amber-50 rounded-lg border border-amber-200">
           <p className="text-sm font-medium text-gray-800 truncate">{d.domain}</p>
-          <p className="text-xs text-gray-500 mt-1 truncate">Allow credential auto-fill for this domain?</p>
+          <p className="text-xs text-gray-500 mt-1 truncate">
+            Allow credential auto-fill for this domain?
+          </p>
           <div className="flex gap-2 mt-3">
             <button
               type="button"

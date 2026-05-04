@@ -226,9 +226,7 @@ export async function confirmSasMatch(): Promise<boolean> {
 
       if (commandClient) {
         try {
-          const encoded = new TextEncoder().encode(
-            JSON.stringify({ type: 'pairing-confirmed' }),
-          );
+          const encoded = new TextEncoder().encode(JSON.stringify({ type: 'pairing-confirmed' }));
           const encrypted = encryptMessage(currentSession, encoded);
           const framed = new Uint8Array(2 + encrypted.length);
           framed.set(PROTOCOL_VERSION, 0);

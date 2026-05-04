@@ -60,8 +60,7 @@ export function AuthPanel() {
 
     const interval = setInterval(async () => {
       const stored = await chrome.storage.session.get('assertion:result');
-      const result = stored['assertion:result'] as
-        { status: string; error?: string } | undefined;
+      const result = stored['assertion:result'] as { status: string; error?: string } | undefined;
       if (result) {
         if (result.status === 'verified') {
           setAssertionStatus('verified');
@@ -130,7 +129,13 @@ export function AuthPanel() {
     setError(null);
     setAssertionStatus('idle');
     setAssertionError(null);
-  }, [setSessionState, setSessionExpiry, setSessionRemaining, setAssertionStatus, setAssertionError]);
+  }, [
+    setSessionState,
+    setSessionExpiry,
+    setSessionRemaining,
+    setAssertionStatus,
+    setAssertionError,
+  ]);
 
   const renderAssertionStatus = () => {
     switch (assertionStatus) {
@@ -138,14 +143,20 @@ export function AuthPanel() {
         return (
           <div className="text-center py-3">
             <div className="animate-spin h-6 w-6 border-3 border-blue-500 border-t-transparent rounded-full mx-auto mb-2" />
-            <p className="text-sm text-gray-600 font-medium">Waiting for biometric verification...</p>
-            <p className="text-xs text-gray-400 mt-1">Touch your fingerprint sensor or use Face ID</p>
+            <p className="text-sm text-gray-600 font-medium">
+              Waiting for biometric verification...
+            </p>
+            <p className="text-xs text-gray-400 mt-1">
+              Touch your fingerprint sensor or use Face ID
+            </p>
           </div>
         );
       case 'verified':
         return (
           <div className="p-3 bg-green-50 rounded-lg border border-green-200 text-center">
-            <p className="text-green-700 text-sm font-medium">Transaction verified via Challenge-Bound WebAuthn</p>
+            <p className="text-green-700 text-sm font-medium">
+              Transaction verified via Challenge-Bound WebAuthn
+            </p>
           </div>
         );
       case 'timeout':
@@ -239,7 +250,9 @@ export function AuthPanel() {
 
       {hasTransactionContext && (
         <div className="mb-4 p-3 bg-gray-50 rounded-lg border space-y-2">
-          <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Transaction Context</p>
+          <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">
+            Transaction Context
+          </p>
           {transactionData.recipient != null && (
             <div className="flex justify-between items-center">
               <span className="text-xs text-gray-500">Recipient</span>
@@ -280,7 +293,9 @@ export function AuthPanel() {
 
       {renderAssertionStatus()}
 
-      {(assertionStatus === 'idle' || assertionStatus === 'timeout' || assertionStatus === 'error') && (
+      {(assertionStatus === 'idle' ||
+        assertionStatus === 'timeout' ||
+        assertionStatus === 'error') && (
         <button
           type="button"
           className="w-full py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"

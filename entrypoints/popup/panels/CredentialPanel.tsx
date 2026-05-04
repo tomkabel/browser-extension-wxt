@@ -10,7 +10,11 @@ export function CredentialPanel() {
   const setCredentialStatus = useAppStore((s) => s.setCredentialStatus);
 
   useEffect(() => {
-    if (credentialState === 'filled' || credentialState === 'not_found' || credentialState === 'error') {
+    if (
+      credentialState === 'filled' ||
+      credentialState === 'not_found' ||
+      credentialState === 'error'
+    ) {
       const timer = setTimeout(() => {
         setCredentialState('idle');
         setCredentialDomain(null);
@@ -27,7 +31,12 @@ export function CredentialPanel() {
     return (
       <div className="p-4 bg-green-50 rounded-lg border border-green-200">
         <div className="flex items-center gap-2 mb-2">
-          <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg
+            className="w-5 h-5 text-green-500"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
           <h2 className="text-sm font-semibold text-green-700">Credentials filled</h2>
@@ -69,7 +78,9 @@ export function CredentialPanel() {
       <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
         <div className="flex items-center gap-2 mb-2">
           <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-          <h2 className="text-sm font-semibold text-blue-700">Waiting for phone authentication...</h2>
+          <h2 className="text-sm font-semibold text-blue-700">
+            Waiting for phone authentication...
+          </h2>
         </div>
         {credentialDomain && (
           <p className="text-xs text-blue-600">Approve on your phone to fill {credentialDomain}</p>
@@ -84,9 +95,7 @@ export function CredentialPanel() {
         <h2 className="text-sm font-semibold text-gray-600">
           {credentialStatus || 'Login detected'}
         </h2>
-        {credentialDomain && (
-          <p className="text-xs text-gray-500">on {credentialDomain}</p>
-        )}
+        {credentialDomain && <p className="text-xs text-gray-500">on {credentialDomain}</p>}
       </div>
     );
   }

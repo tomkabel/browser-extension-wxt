@@ -38,7 +38,13 @@ test.describe('Challenge-Bound WebAuthn', () => {
   });
 
   test('handler registered for begin-challenge-assertion in messageHandlers', () => {
-    const handlersPath = path.resolve(__dirname, '..', 'entrypoints', 'background', 'messageHandlers.ts');
+    const handlersPath = path.resolve(
+      __dirname,
+      '..',
+      'entrypoints',
+      'background',
+      'messageHandlers.ts',
+    );
     expect(fs.existsSync(handlersPath)).toBe(true);
 
     const content = fs.readFileSync(handlersPath, 'utf-8');
@@ -48,7 +54,14 @@ test.describe('Challenge-Bound WebAuthn', () => {
   });
 
   test('AuthPanel exports assertion status UI renderer', () => {
-    const panelPath = path.resolve(__dirname, '..', 'entrypoints', 'popup', 'panels', 'AuthPanel.tsx');
+    const panelPath = path.resolve(
+      __dirname,
+      '..',
+      'entrypoints',
+      'popup',
+      'panels',
+      'AuthPanel.tsx',
+    );
     expect(fs.existsSync(panelPath)).toBe(true);
 
     const content = fs.readFileSync(panelPath, 'utf-8');
@@ -70,9 +83,45 @@ test.describe('Challenge-Bound WebAuthn', () => {
   });
 
   test('Android vault has ChallengeVerifier and WebAuthnVerifier classes', () => {
-    const cvPath = path.resolve(__dirname, '..', 'vault-android', 'src', 'main', 'java', 'org', 'smartid', 'vault', 'webauthn', 'ChallengeVerifier.java');
-    const wvPath = path.resolve(__dirname, '..', 'vault-android', 'src', 'main', 'java', 'org', 'smartid', 'vault', 'webauthn', 'WebAuthnVerifier.java');
-    const tsPath = path.resolve(__dirname, '..', 'vault-android', 'src', 'main', 'java', 'org', 'smartid', 'vault', 'truststore', 'CredentialTrustStore.java');
+    const cvPath = path.resolve(
+      __dirname,
+      '..',
+      'vault-android',
+      'src',
+      'main',
+      'java',
+      'org',
+      'smartid',
+      'vault',
+      'webauthn',
+      'ChallengeVerifier.java',
+    );
+    const wvPath = path.resolve(
+      __dirname,
+      '..',
+      'vault-android',
+      'src',
+      'main',
+      'java',
+      'org',
+      'smartid',
+      'vault',
+      'webauthn',
+      'WebAuthnVerifier.java',
+    );
+    const tsPath = path.resolve(
+      __dirname,
+      '..',
+      'vault-android',
+      'src',
+      'main',
+      'java',
+      'org',
+      'smartid',
+      'vault',
+      'truststore',
+      'CredentialTrustStore.java',
+    );
 
     expect(fs.existsSync(cvPath)).toBe(true);
     expect(fs.existsSync(wvPath)).toBe(true);
@@ -101,7 +150,13 @@ test.describe('Challenge-Bound WebAuthn', () => {
   });
 
   test('challengeDerivation has no dead AssertionResult interface', () => {
-    const derivationPath = path.resolve(__dirname, '..', 'lib', 'webauthn', 'challengeDerivation.ts');
+    const derivationPath = path.resolve(
+      __dirname,
+      '..',
+      'lib',
+      'webauthn',
+      'challengeDerivation.ts',
+    );
     const content = fs.readFileSync(derivationPath, 'utf-8');
     expect(content).not.toContain('interface AssertionResult');
   });

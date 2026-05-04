@@ -15,13 +15,10 @@ export class WebRtcTransport implements Transport {
       type: 'get-connection-state',
       payload: null,
     });
-    const state = (response?.data as { connectionState?: string } | undefined)
-      ?.connectionState;
+    const state = (response?.data as { connectionState?: string } | undefined)?.connectionState;
     this.connected = state === 'connected';
     if (!this.connected) {
-      throw new Error(
-        `WebRTC is not connected (state: ${state ?? 'unknown'})`,
-      );
+      throw new Error(`WebRTC is not connected (state: ${state ?? 'unknown'})`);
     }
 
     if (!this.listenerAttached) {
