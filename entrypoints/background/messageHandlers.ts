@@ -488,6 +488,11 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       return { success: false, error: 'No sender tab' };
     }
 
+    if (authInProgress) {
+      return { success: false, error: 'Authentication already in progress' };
+    }
+    authInProgress = true;
+
     try {
       const origin = new URL(sender.tab.url ?? '').origin;
       if (!origin || origin === 'null') {
@@ -495,7 +500,6 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       }
 
       const controlCode = await getDomCode(sender.tab.id);
-
       const proofBytes = new Uint8Array(64);
       crypto.getRandomValues(proofBytes);
 
@@ -538,6 +542,7 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       };
     } catch (err) {
       log.error('Failed to begin challenge assertion:', err);
+      authInProgress = false;
       return { success: false, error: err instanceof Error ? err.message : 'Assertion initiation failed' };
     }
   },
@@ -561,12 +566,14 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       await browser.storage.session.set({
         'assertion:result': { status: data.status, error: data.error ?? 'Assertion failed' },
       });
+      authInProgress = false;
       return { success: false, error: data.error ?? 'Assertion failed' };
     }
 
     if (!data.credentialId || !data.tlvComponents || !data.authenticatorData || !data.signature || !data.clientDataJSON) {
       const error = 'Incomplete assertion data';
       await browser.storage.session.set({ 'assertion:result': { status: 'error', error } });
+      authInProgress = false;
       return { success: false, error };
     }
 
@@ -601,12 +608,14 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       });
       await browser.storage.session.remove('pending:assertion');
 
+      authInProgress = false;
       return { success: true, data: { status: 'verified' } };
     } catch (err) {
       log.error('Failed to transmit assertion:', err);
       await browser.storage.session.set({
         'assertion:result': { status: 'error', error: err instanceof Error ? err.message : 'Transmission failed' },
       });
+      authInProgress = false;
       return { success: false, error: err instanceof Error ? err.message : 'Transmission failed' };
     }
   },
@@ -687,6 +696,8 @@ function isValidMessage(
     typeof (message as Record<string, unknown>).type === 'string'
   );
 }
+
+let authInProgress = false;
 
 const MFA_RATE_LIMIT_WINDOW_MS = 60_000;
 const MFA_RATE_LIMIT_MAX = 3;
