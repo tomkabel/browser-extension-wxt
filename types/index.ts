@@ -146,7 +146,6 @@ export interface LoginFormDetection {
   url: string;
   usernameSelector: string;
   passwordSelector: string;
-  formAction: string;
 }
 
 export interface CredentialRequestPayload {
@@ -163,7 +162,15 @@ export interface CredentialResponse {
   approval_mode?: 'auto' | 'biometric';
 }
 
-export type CredentialState = 'idle' | 'detecting' | 'requesting' | 'waiting_phone' | 'filling' | 'filled' | 'not_found' | 'error';
+export type CredentialState =
+  | 'idle'
+  | 'detecting'
+  | 'requesting'
+  | 'waiting_phone'
+  | 'filling'
+  | 'filled'
+  | 'not_found'
+  | 'error';
 
 export interface ApprovedDomain {
   domain: string;
@@ -176,7 +183,6 @@ export interface UnapprovedLoginForm {
   url: string;
   usernameSelector: string;
   passwordSelector: string;
-  formAction: string;
 }
 
 export interface AttestedCodePayload {

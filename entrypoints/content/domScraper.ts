@@ -105,16 +105,23 @@ export function scrapeControlCode(): string | null {
   for (const selector of semanticSelectors) {
     const elements = document.querySelectorAll(selector);
     for (const el of elements) {
-      if (el instanceof HTMLElement && (el.offsetParent === null || el.getClientRects().length === 0)) continue;
+      if (
+        el instanceof HTMLElement &&
+        (el.offsetParent === null || el.getClientRects().length === 0)
+      )
+        continue;
       const text = el.textContent?.trim() ?? '';
       const match = text.match(codePattern);
       if (match) return match[1]!;
     }
   }
 
-  const strongEls = document.querySelectorAll('strong, b, [style*="font-weight"], [class*="bold"], [class*="highlight"]');
+  const strongEls = document.querySelectorAll(
+    'strong, b, [style*="font-weight"], [class*="bold"], [class*="highlight"]',
+  );
   for (const el of strongEls) {
-    if (el instanceof HTMLElement && (el.offsetParent === null || el.getClientRects().length === 0)) continue;
+    if (el instanceof HTMLElement && (el.offsetParent === null || el.getClientRects().length === 0))
+      continue;
     const text = el.textContent?.trim() ?? '';
     if (/^\d{4}$/.test(text)) return text;
     const match = text.match(codePattern);
@@ -185,6 +192,5 @@ export function detectLoginForm(): LoginFormDetection | null {
     url: document.location.href,
     usernameSelector: buildSelector(usernameField),
     passwordSelector: buildSelector(passwordField),
-    formAction: (form as HTMLFormElement | null)?.action || document.location.href,
   };
 }
