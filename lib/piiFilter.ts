@@ -19,7 +19,7 @@ export enum PiiCategory {
 }
 
 const PATTERNS: Record<PiiCategory, RegExp> = {
-  [PiiCategory.Password]: /\b(password|passwd|pwd|pin[12]?)\s*[:=]\s*\S{1,64}\b/gi,
+  [PiiCategory.Password]: /\b(password|passwd|pwd|pin[12]?)\s*[:=]\s*\S{1,64}(?=\s|$)/gi,
 
   [PiiCategory.CreditCard]: /\b(?:\d[\s-]?){13,19}\b/g,
 
@@ -37,10 +37,10 @@ const PATTERNS: Record<PiiCategory, RegExp> = {
   [PiiCategory.EstonianIdCode]: /\b\d{11}\b(?:\s*[A-Z]{2})?/g,
 
   [PiiCategory.Iban]:
-    /\b[A-Z]{2}\d{2}\s?(?:\d{4}\s?){2,7}\d{1,4}\b/g,
+    /\b[A-Z]{2}\d{2}\s?(?:\d{4}\s?){2,7}\d{1,4}\b/gi,
 
   [PiiCategory.Passport]:
-    /\b[A-Z]{2}\d{6,8}\b/g,
+    /\b[A-Z]{2}\d{6,8}\b/gi,
 };
 
 const REDACTED = '[REDACTED]';
@@ -67,7 +67,7 @@ function isValidCardNumber(digits: string): boolean {
   return luhnCheck(cleaned);
 }
 
-function isValidIban(value: string): boolean {
+export function isValidIban(value: string): boolean {
   const cleaned = value.replace(/\s/g, '').toUpperCase();
   if (cleaned.length < 15 || cleaned.length > 34) return false;
   const rearranged = cleaned.slice(4) + cleaned.slice(0, 4);
@@ -86,7 +86,7 @@ function isValidIban(value: string): boolean {
   return remainder === 1;
 }
 
-function isValidEstonianIdCode(digits: string): boolean {
+export function isValidEstonianIdCode(digits: string): boolean {
   const cleaned = digits.replace(/\D/g, '');
   if (cleaned.length !== 11) return false;
   const multipliers1 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 1];
