@@ -31,7 +31,6 @@ export const PairingPanel = forwardRef<HTMLHeadingElement>(function PairingPanel
   const [generatedAt, setGeneratedAt] = useState<number>(0);
 
   const nonceRef = useRef<Uint8Array | null>(null);
-  const commitmentRef = useRef<string | null>(null);
   const [pairingUrl, setPairingUrl] = useState<string | null>(null);
 
   const startPairing = useCallback(async () => {
@@ -71,7 +70,6 @@ export const PairingPanel = forwardRef<HTMLHeadingElement>(function PairingPanel
       if (publicKeyBytes && nonceRef.current) {
         const extStaticKey = new Uint8Array(publicKeyBytes);
         const commitment = await computeCommitment(extStaticKey, nonceRef.current, code);
-        commitmentRef.current = commitment;
         setPairingUrl(buildPairingUrl(code, nonceRef.current, commitment));
       }
     } catch (err) {
