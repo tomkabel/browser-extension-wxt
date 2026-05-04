@@ -1,4 +1,4 @@
-import { bufferToBase64 } from '~/lib/asyncUtils';
+import { bufferToBase64, base64ToBuffer } from '~/lib/asyncUtils';
 
 const EXTENSION_ID = chrome.runtime.id;
 const RELYING_PARTY_ID = EXTENSION_ID;
@@ -35,15 +35,6 @@ function log(msg: string): void {
     logEl.textContent += '\n' + msg;
     logEl.scrollTop = logEl.scrollHeight;
   }
-}
-
-function base64ToBuffer(base64: string): ArrayBuffer {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes.buffer;
 }
 
 function setButtonsEnabled(enabled: boolean): void {
