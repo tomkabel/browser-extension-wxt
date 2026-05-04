@@ -5,6 +5,9 @@ export class RttEstimator {
   private readonly beta = 0.25;
 
   updateRtt(sample: number): void {
+    if (!Number.isFinite(sample) || sample < 0) {
+      return;
+    }
     this.rttVar = (1 - this.beta) * this.rttVar + this.beta * Math.abs(sample - this.rttAvg);
     this.rttAvg = (1 - this.alpha) * this.rttAvg + this.alpha * sample;
   }

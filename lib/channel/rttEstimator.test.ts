@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { RttEstimator } from './rttEstimator';
+import { RttEstimator } from '~/lib/channel/rttEstimator';
 
 describe('RttEstimator', () => {
   it('converges to actual RTT within 10 samples', () => {
@@ -44,5 +44,20 @@ describe('RttEstimator', () => {
     expect(estimator.getRttAvg()).toBe(200);
     expect(estimator.getRttVar()).toBe(100);
     expect(estimator.getRto()).toBeGreaterThanOrEqual(1000);
+  });
+
+  it('ignores invalid RTT samples', () => {
+    const estimator = new RttEstimator();
+    const avgBefore = estimator.getRttAvg();
+    const varBefore = estimator.getRttVar();
+    const rtoBefore = estimator.getRto();
+
+    estimator.updateRtt(Number.NaN);
+    estimator.updateRtt(-1);
+    estimator.updateRtt(Infinity);
+
+    expect(estimator.getRttAvg()).toBe(avgBefore);
+    expect(estimator.getRttVar()).toBe(varBefore);
+    expect(estimator.getRto()).toBe(rtoBefore);
   });
 });
