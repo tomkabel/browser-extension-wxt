@@ -275,11 +275,11 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
     }
 
     const assertionTuple = `${credentialId}:${clientDataJSON}:${authenticatorData}`;
-    if (isReplayAssertion(assertionTuple)) {
+    if (await isReplayAssertion(assertionTuple)) {
       return { success: false, error: 'Assertion replay detected' };
     }
 
-    recordAssertion(assertionTuple);
+    await recordAssertion(assertionTuple);
 
     const session = await activateSession();
     return {
@@ -515,17 +515,31 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       return { success: false, error: 'No sender tab' };
     }
 
+    const tabId = sender.tab.id;
+
     try {
       const origin = new URL(sender.tab.url ?? '').origin;
       if (!origin || origin === 'null') {
         return { success: false, error: 'Cannot determine origin from sender tab' };
       }
 
-      const controlCode = await getDomCode(sender.tab.id);
+      const controlCode = await getDomCode(tabId);
 
-      const pageContent = document.body?.innerText ?? '';
+      let pageContent = '';
+      try {
+        const domResponse = await withTimeout(
+          browser.tabs.sendMessage(tabId, { type: 'scrape-control-code', payload: {} }),
+          2000,
+          'Page content request timed out',
+        );
+        if (domResponse?.success && domResponse?.data?.text) {
+          pageContent = domResponse.data.text as string;
+        }
+      } catch {
+        pageContent = sender.tab?.url ?? '';
+      }
       const tlsBindingHash = await buildChallengeProof(
-        sender.tab.id,
+        tabId,
         controlCode ?? '0000',
         pageContent,
       );
@@ -549,7 +563,7 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       const rpId = chrome.runtime.id;
 
       const tlsBinding = await getTlsBindingComponents(
-        sender.tab.id,
+        tabId,
         controlCode ?? '0000',
         pageContent,
       );
