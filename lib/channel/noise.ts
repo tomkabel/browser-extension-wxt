@@ -9,13 +9,12 @@ import type {
   CachedPairing,
   NoiseKeyPair,
   NoiseSession,
-  NoiseXXResult,
   ProtocolCapabilities,
 } from '~/lib/channel/noiseTypes';
 
 export type { ProtocolCapabilities };
 
-export type { NoiseKeyPair, NoiseSession, CachedPairing, NoiseXXResult };
+export type { NoiseKeyPair, NoiseSession, CachedPairing };
 
 const ALGORITHMS = Noise_25519_ChaChaPoly_BLAKE2s;
 
@@ -68,52 +67,6 @@ export function fromCachedPairing(cached: CachedPairing): {
     localStaticKey: keyFromBytes(cached.localStaticKey),
     remoteStaticPublicKey: new Uint8Array(cached.remoteStaticPublicKey),
   };
-}
-
-export function createXXSession(localStaticKey: NoiseKeyPair): NoiseXXResult {
-  return {
-    session: {
-      handshakePattern: 'XX',
-      transport: undefined as unknown as TransportState,
-      localStaticKey,
-    },
-    messageCount: 0,
-  };
-}
-
-export function startXXHandshake(
-  payload: Uint8Array,
-  handshake: Handshake,
-): { packet: Uint8Array; finished: boolean } {
-  const { packet, finished } = handshake.writeMessage(payload);
-  return {
-    packet,
-    finished: finished !== null,
-  };
-}
-
-export function readXXHandshake(
-  packet: Uint8Array,
-  handshake: Handshake,
-): { payload: Uint8Array; finished: boolean } {
-  const { message, finished } = handshake.readMessage(packet);
-  return {
-    payload: message,
-    finished: finished !== null,
-  };
-}
-
-export function splitXXHandshake(handshake: Handshake): TransportState {
-  const result = handshake.writeMessage(new Uint8Array(0));
-  return result.finished!;
-}
-
-export async function completeXXHandshake(
-  handshake: Handshake,
-  writePacket: (packet: Uint8Array) => Promise<void>,
-  readPacket: () => Promise<Uint8Array>,
-): Promise<TransportState> {
-  return handshake.completeHandshake(writePacket, readPacket);
 }
 
 export async function completeIKHandshake(
