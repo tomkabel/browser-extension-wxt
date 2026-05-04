@@ -1,4 +1,5 @@
 import { bufferToBase64 } from '~/lib/asyncUtils';
+import { createAssertionRequest } from '~/lib/webauthn';
 
 const EXTENSION_ID = chrome.runtime.id;
 const RELYING_PARTY_ID = EXTENSION_ID;
@@ -381,6 +382,17 @@ async function handleChallengeAssert(): Promise<void> {
   log('Challenge assertion mode...');
 
   try {
+    const params = new URLSearchParams(window.location.search);
+    const challengeB64 = params.get('challenge');
+    if (!challengeB64) {
+      status('No challenge provided');
+      log('ERROR: Missing challenge parameter');
+      window.close();
+      return;
+    }
+
+    const challengeBytes = Uint8Array.from(atob(challengeB64), (c) => c.charCodeAt(0));
+
     const stored = await chrome.storage.session.get('pending:assertion');
     const pending = stored['pending:assertion'] as {
       derivedChallenge: number[];
@@ -403,39 +415,26 @@ async function handleChallengeAssert(): Promise<void> {
       { success: boolean; data?: { credentialId?: string; rawId?: number[] } };
 
     const rawId = cachedResult?.data?.rawId;
-    const challenge = new Uint8Array(pending.derivedChallenge);
-
-    const publicKey: PublicKeyCredentialRequestOptions = {
-      challenge,
-      rpId: pending.rpId,
-      userVerification: 'required',
-      timeout: 60000,
-    };
-
-    if (rawId && rawId.length > 0) {
-      publicKey.allowCredentials = [
-        {
-          id: new Uint8Array(rawId).buffer,
-          type: 'public-key',
-        },
-      ];
-    }
+    const allowCredentialId = rawId && rawId.length > 0 ? new Uint8Array(rawId) : undefined;
 
     status('Waiting for biometric verification...');
     log('Prompting for fingerprint/Face ID...');
 
-    const assertion = (await navigator.credentials.get({
-      publicKey,
-    })) as PublicKeyCredential | null;
+    const assertionResult = await createAssertionRequest({
+      challenge: challengeBytes,
+      rpId: pending.rpId,
+      allowCredentialId,
+    });
 
-    if (!assertion) {
-      status('Biometric verification cancelled');
-      log('Assertion was cancelled by user');
+    if (!assertionResult.success) {
+      status(assertionResult.error);
+      log(`Assertion failed: ${assertionResult.error}`);
 
       await chrome.runtime.sendMessage({
         type: 'assertion-complete',
         payload: {
-          status: 'cancelled',
+          status: assertionResult.timedOut ? 'timeout' : 'cancelled',
+          error: assertionResult.error,
         },
       });
 
@@ -443,7 +442,7 @@ async function handleChallengeAssert(): Promise<void> {
       return;
     }
 
-    const response = assertion.response as AuthenticatorAssertionResponse;
+    const assertionData = assertionResult.data;
 
     status('Assertion captured. Sending to vault...');
     log('Assertion data captured, transmitting to background...');
@@ -452,15 +451,15 @@ async function handleChallengeAssert(): Promise<void> {
       type: 'assertion-complete',
       payload: {
         status: 'verified',
-        credentialId: bufferToBase64(assertion.rawId),
+        credentialId: assertionData.credentialId,
         tlvComponents: pending.tlvComponents,
         sessionNonce: pending.sessionNonce,
         origin: pending.origin,
         controlCode: pending.controlCode,
-        authenticatorData: Array.from(new Uint8Array(response.authenticatorData)),
-        signature: Array.from(new Uint8Array(response.signature)),
-        clientDataJSON: Array.from(new Uint8Array(response.clientDataJSON)),
-        rawId: Array.from(new Uint8Array(assertion.rawId)),
+        authenticatorData: Array.from(assertionData.authenticatorData),
+        signature: Array.from(assertionData.signature),
+        clientDataJSON: Array.from(assertionData.clientDataJSON),
+        rawId: Array.from(assertionData.rawId),
       },
     });
 
