@@ -70,7 +70,8 @@ describe('end-to-end crypto verification', () => {
     expect(header).not.toBeNull();
 
     const parts = header!.split(';');
-    const tamperedPayload = btoa(JSON.stringify({ code: '0000', ts: Math.floor(Date.now() / 1000) }));
+    const encoder = new TextEncoder();
+    const tamperedPayload = base64urlEncode(encoder.encode(JSON.stringify({ code: '0000', ts: Math.floor(Date.now() / 1000) })).buffer as ArrayBuffer);
     const tampered = `v1;${tamperedPayload};${parts[2]};${parts[3]}`;
 
     const result = await verifier.verifyHeader(tampered, 'lhv.ee');

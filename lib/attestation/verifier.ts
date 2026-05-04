@@ -7,6 +7,11 @@ import { log } from '~/lib/errors';
 const TIMESTAMP_TOLERANCE_SECONDS = 30;
 const encoder = new TextEncoder();
 
+function redactControlCode(code: string): string {
+  if (code.length <= 4) return code.slice(0, 2) + '**';
+  return code.slice(0, 4) + '****';
+}
+
 export function createVerifier(keyStore: KeyStore) {
   async function verifyHeader(
     rawHeader: string,
@@ -74,7 +79,7 @@ export function createVerifier(keyStore: KeyStore) {
       return { type: 'verified', attestedCode };
     }
 
-    log.warn(`Control code mismatch! Attested: ${attestedCode.controlCode}, DOM: ${domCode}`);
+    log.warn(`Control code mismatch! Attested: ${redactControlCode(attestedCode.controlCode)}, DOM: ${redactControlCode(domCode)}`);
     return {
       type: 'rat_detected',
       attestedCode,

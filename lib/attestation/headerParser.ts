@@ -2,7 +2,7 @@ import type { AttestationHeaderPayload } from './types';
 import { base64urlDecode } from './base64url';
 import { log } from '~/lib/errors';
 
-const encoder = new TextDecoder();
+const decoder = new TextDecoder();
 
 export interface ParsedAttestationHeader {
   version: string;
@@ -25,7 +25,7 @@ export function parseAttestationHeader(rawHeader: string): ParsedAttestationHead
 
   try {
     const payloadBytes = base64urlDecode(payloadB64);
-    const payloadText = encoder.decode(payloadBytes);
+    const payloadText = decoder.decode(payloadBytes);
     const payload = JSON.parse(payloadText) as AttestationHeaderPayload;
 
     if (typeof payload.code !== 'string' || payload.code.length === 0) {

@@ -8,6 +8,7 @@ export function AttestationStatus() {
   const setAttestation = useAppStore((s) => s.setAttestation);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshResult, setRefreshResult] = useState<string | null>(null);
+  const [refreshSuccess, setRefreshSuccess] = useState<boolean | null>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -18,8 +19,10 @@ export function AttestationStatus() {
           setAttestation(status);
         }
       }
-    } catch {
-      // Silently handle fetch failure
+    } catch (err) {
+      if (import.meta.env.DEV) {
+        console.warn('AttestationStatus fetch error:', err);
+      }
     }
   }, [setAttestation]);
 
@@ -30,16 +33,20 @@ export function AttestationStatus() {
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     setRefreshResult(null);
+    setRefreshSuccess(null);
     try {
       const response = await browser.runtime.sendMessage({ type: 'refresh-rp-keys' });
       if (response.success) {
         setRefreshResult('Keys refreshed successfully');
+        setRefreshSuccess(true);
         await fetchStatus();
       } else {
         setRefreshResult(response.error ?? 'Refresh failed');
+        setRefreshSuccess(false);
       }
     } catch (err) {
       setRefreshResult(err instanceof Error ? err.message : 'Refresh failed');
+      setRefreshSuccess(false);
     } finally {
       setRefreshing(false);
     }
@@ -91,7 +98,7 @@ export function AttestationStatus() {
         <p className="mt-1 opacity-80">No server attestation header received.</p>
       )}
       {refreshResult && (
-        <p className={`mt-1 ${refreshResult.includes('success') ? 'text-green-700' : 'text-red-700'}`}>
+        <p className={`mt-1 ${refreshSuccess === true ? 'text-green-700' : 'text-red-700'}`}>
           {refreshResult}
         </p>
       )}
