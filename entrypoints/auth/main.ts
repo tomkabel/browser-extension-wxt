@@ -1,4 +1,4 @@
-import { bufferToBase64, base64ToBuffer, uint8ArrayToArrayBuffer } from '~/lib/asyncUtils';
+import { bufferToBase64, base64ToBuffer } from '~/lib/asyncUtils';
 import { createAssertionRequest } from '~/lib/webauthn';
 
 const EXTENSION_ID = chrome.runtime.id;
