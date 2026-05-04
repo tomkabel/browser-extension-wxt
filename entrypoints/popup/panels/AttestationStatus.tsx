@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { browser } from 'wxt/browser';
 import { useAppStore } from '~/lib/store';
+import { log } from '~/lib/errors';
 import type { AttestationStatus as AttestationStatusType } from '~/lib/attestation';
 
 export function AttestationStatus() {
@@ -12,7 +13,7 @@ export function AttestationStatus() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const response = await browser.runtime.sendMessage({ type: 'get-attestation-status' });
+      const response = await browser.runtime.sendMessage({ type: 'get-attestation-status', payload: {} });
       if (response.success) {
         const status = response.data?.status as AttestationStatusType | undefined;
         if (status) {
@@ -20,9 +21,7 @@ export function AttestationStatus() {
         }
       }
     } catch (err) {
-      if (import.meta.env.DEV) {
-        console.warn('AttestationStatus fetch error:', err);
-      }
+      log.warn('AttestationStatus fetch error:', err);
     }
   }, [setAttestation]);
 
@@ -35,7 +34,7 @@ export function AttestationStatus() {
     setRefreshResult(null);
     setRefreshSuccess(null);
     try {
-      const response = await browser.runtime.sendMessage({ type: 'refresh-rp-keys' });
+      const response = await browser.runtime.sendMessage({ type: 'refresh-rp-keys', payload: {} });
       if (response.success) {
         setRefreshResult('Keys refreshed successfully');
         setRefreshSuccess(true);
