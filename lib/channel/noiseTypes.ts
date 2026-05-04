@@ -57,7 +57,17 @@ export function encodeCapabilities(): Uint8Array {
 
 export function decodeCapabilities(data: Uint8Array): ProtocolCapabilities | null {
   try {
-    return JSON.parse(new TextDecoder().decode(data)) as ProtocolCapabilities;
+    const parsed = JSON.parse(new TextDecoder().decode(data));
+    if (
+      typeof parsed !== 'object' ||
+      parsed === null ||
+      typeof parsed.version !== 'number' ||
+      !Array.isArray(parsed.features) ||
+      !Array.isArray(parsed.supportedTransports)
+    ) {
+      return null;
+    }
+    return parsed as ProtocolCapabilities;
   } catch {
     return null;
   }
@@ -67,11 +77,15 @@ export function intersectCapabilities(
   local: ProtocolCapabilities,
   remote: ProtocolCapabilities,
 ): ProtocolCapabilities {
+  const localFeatures = local.features ?? [];
+  const remoteFeatures = remote.features ?? [];
+  const localTransports = local.supportedTransports ?? [];
+  const remoteTransports = remote.supportedTransports ?? [];
   return {
-    version: Math.min(local.version, remote.version),
-    features: local.features.filter((f) => remote.features.includes(f)),
-    supportedTransports: local.supportedTransports.filter((t) =>
-      remote.supportedTransports.includes(t),
+    version: Math.min(local.version ?? 0, remote.version ?? 0),
+    features: localFeatures.filter((f) => remoteFeatures.includes(f)),
+    supportedTransports: localTransports.filter((t) =>
+      remoteTransports.includes(t),
     ),
   };
 }

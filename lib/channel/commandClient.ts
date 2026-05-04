@@ -109,8 +109,12 @@ export function createCommandClient(
       if (pendingPingSeq === response.sequence) {
         pendingPingSeq = null;
         missedPings = 0;
+        const ac = pendingTimeouts.get(response.sequence);
+        if (ac) {
+          ac.abort();
+          pendingTimeouts.delete(response.sequence);
+        }
       }
-      return;
     }
 
     const entry = pending.get(response.sequence);
@@ -157,6 +161,7 @@ export function createCommandClient(
       if (signal.aborted) return;
       if (pendingPingSeq === sequence) {
         pendingPingSeq = null;
+        pendingTimeouts.delete(sequence);
         missedPings++;
         if (missedPings >= MAX_MISSED_PINGS) {
           stopHeartbeat();
@@ -235,7 +240,9 @@ export function createCommandClient(
     }
 
     lastCommandTime = Date.now();
-    startHeartbeat();
+    if (command !== CommandType.Ping) {
+      startHeartbeat();
+    }
 
     const sequence = await getNextSequence();
     const cmd = createCommand(command, payload, sequence);
@@ -253,6 +260,14 @@ export function createCommandClient(
   }
 
   async function sendPing(): Promise<ControlResponse> {
+    if (pendingPingSeq !== null) {
+      return Promise.reject(new Error('A ping command is already in-flight'));
+    }
+    for (const entry of pending.values()) {
+      if (entry.command.command === CommandType.Ping) {
+        return Promise.reject(new Error('A ping command is already in-flight'));
+      }
+    }
     return sendCommand(CommandType.Ping, { ts: performance.now() });
   }
 
