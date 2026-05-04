@@ -1,6 +1,13 @@
 /// <reference types="w3c-web-usb" />
 import { io, type Socket } from 'socket.io-client';
 import { BackpressureQueue } from '~/lib/channel/backpressureQueue';
+import { ANDROID_VENDOR_IDS } from '~/lib/transport/vendorIds';
+
+interface QrSdpData {
+  type: RTCSdpType;
+  sdp: string;
+  candidates: string[];
+}
 
 export interface TurnCredentials {
   username: string;
@@ -20,11 +27,19 @@ let socket: Socket | null = null;
 let sasCode: string | null = null;
 let nonce: number[] | null = null;
 let extensionStaticKey: number[] | null = null;
+export const DATA_CHANNEL_CONFIG: RTCDataChannelInit = {
+  ordered: true,
+  maxPacketLifeTime: 3000,
+  negotiated: false,
+  id: 0,
+};
+
 let keepalivePort: chrome.runtime.Port | null = null;
 let turnCredentials: TurnCredentials | null = null;
 let usbDevice: USBDevice | null = null;
 let pendingSdpOffer: RTCSessionDescriptionInit | null = null;
 let backpressureQueue: BackpressureQueue | null = null;
+let offerAlreadyCreated = false;
 
 const RECONNECT_BACKOFF_INITIAL = 1000;
 const RECONNECT_BACKOFF_MAX = 30_000;
@@ -160,12 +175,7 @@ function setupPeerConnection(relayOnly = false): void {
   });
 
   // SCTP ordered delivery ensures command sequencing; maxPacketLifeTime drops stale retransmissions
-  dataChannel = pc.createDataChannel('smartid2', {
-    ordered: true,
-    maxPacketLifeTime: 3000,
-    negotiated: false,
-    id: 0,
-  });
+  dataChannel = pc.createDataChannel('smartid2', DATA_CHANNEL_CONFIG);
 
   backpressureQueue = new BackpressureQueue();
   dataChannel.binaryType = 'arraybuffer';
@@ -330,7 +340,7 @@ function connectSignaling(code: string, roomNonce?: number[], extStaticKey?: num
 
   socket.on('room-joined', ({ peerCount }: { peerCount: number }) => {
     log(`Room joined. Peers: ${peerCount}`);
-    if (peerCount >= 2 && pc && pc.signalingState === 'stable') {
+    if (peerCount >= 2 && pc && pc.signalingState === 'stable' && !offerAlreadyCreated) {
       createOffer().catch((err) => log(`Offer error: ${err}`));
     }
   });
@@ -373,6 +383,7 @@ function connectSignaling(code: string, roomNonce?: number[], extStaticKey?: num
 async function createOffer(): Promise<void> {
   if (!pc || !sasCode) return;
   try {
+    offerAlreadyCreated = true;
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     pendingSdpOffer = offer;
@@ -382,24 +393,27 @@ async function createOffer(): Promise<void> {
   }
 }
 
-async function generateQrSdp(): Promise<RTCSessionDescriptionInit | null> {
+async function generateQrSdp(): Promise<QrSdpData | null> {
   if (!pc) return null;
   try {
     const offer = await pc.createOffer({ iceRestart: false });
     await pc.setLocalDescription(offer);
     pendingSdpOffer = offer;
+    offerAlreadyCreated = true;
     const iceCandidates: string[] = [];
+    const originalHandler = pc.onicecandidate;
     pc.onicecandidate = (event) => {
       if (event.candidate) {
         iceCandidates.push(event.candidate.candidate);
       }
     };
     await new Promise<void>((resolve) => setTimeout(resolve, 2000));
+    pc.onicecandidate = originalHandler;
     return {
       type: offer.type,
       sdp: compressSdp(offer.sdp ?? ''),
       candidates: iceCandidates,
-    } as unknown as RTCSessionDescriptionInit;
+    };
   } catch (err) {
     log(`generateQrSdp error: ${err}`);
     return null;
@@ -408,6 +422,15 @@ async function generateQrSdp(): Promise<RTCSessionDescriptionInit | null> {
 
 function compressSdp(sdp: string): string {
   return btoa(new TextEncoder().encode(sdp).reduce((acc, b) => acc + String.fromCharCode(b), ''));
+}
+
+function base64ToUint8Array(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
 }
 
 function sendData(data: Uint8Array): boolean {
@@ -425,15 +448,8 @@ async function connectWebUsb(): Promise<boolean> {
       return false;
     }
 
-    const device = await navigator.usb.requestDevice({
-      filters: [
-        { vendorId: 0x18d1 }, // Google
-        { vendorId: 0x04e8 }, // Samsung
-        { vendorId: 0x22b8 }, // Motorola
-        { vendorId: 0x0fce }, // Sony
-        { vendorId: 0x2b4c }, // OnePlus
-      ],
-    });
+    const filters = Array.from(ANDROID_VENDOR_IDS).map((vendorId) => ({ vendorId }));
+    const device = await navigator.usb.requestDevice({ filters });
 
     await device.open();
     await device.selectConfiguration(1);
@@ -456,10 +472,26 @@ async function connectWebUsb(): Promise<boolean> {
   }
 }
 
+function findUsbInputEndpoint(device: USBDevice): USBEndpoint | undefined {
+  for (const iface of device.configuration?.interfaces ?? []) {
+    for (const alt of iface.alternates) {
+      for (const ep of alt.endpoints) {
+        if (ep.direction === 'in') return ep;
+      }
+    }
+  }
+  return undefined;
+}
+
 async function startUsbReadLoop(device: USBDevice): Promise<void> {
+  const endpoint = findUsbInputEndpoint(device);
+  if (!endpoint) {
+    log('No USB input endpoint found');
+    return;
+  }
   while (device.opened) {
     try {
-      const result = await device.transferIn(0x81, 16384);
+      const result = await device.transferIn(endpoint.endpointNumber, endpoint.packetSize);
       if (result.data && result.data.byteLength > 0) {
         const data = new Uint8Array(result.data.buffer);
         chrome.runtime
@@ -547,6 +579,7 @@ function disconnect(): void {
   extensionStaticKey = null;
   turnCredentials = null;
   pendingSdpOffer = null;
+  offerAlreadyCreated = false;
   reconnectAttempt = 0;
 }
 
@@ -606,17 +639,23 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       return true;
 
     case 'webrtc-send':
-      if (usbDevice?.opened) {
-        sendViaUsb(new Uint8Array(message.payload.data as number[]));
-        break;
-      }
-      if (message.payload?.data && dataChannel && backpressureQueue) {
-        const data = new Uint8Array(message.payload.data as number[]);
-        backpressureQueue
-          .send(data, dataChannel)
-          .catch((err) => log(`Backpressure send error: ${err}`));
-      } else if (message.payload?.data) {
-        sendData(new Uint8Array(message.payload.data as number[]));
+      if (message.payload?.data) {
+        const raw = message.payload.data;
+        let data: Uint8Array;
+        if (typeof raw === 'string') {
+          data = base64ToUint8Array(raw);
+        } else if (Array.isArray(raw)) {
+          data = new Uint8Array(raw);
+        } else {
+          break;
+        }
+        if (usbDevice?.opened) {
+          sendViaUsb(data);
+        } else if (dataChannel && backpressureQueue) {
+          backpressureQueue.send(data, dataChannel).catch((err) => log(`Backpressure send error: ${err}`));
+        } else {
+          sendData(data);
+        }
       }
       break;
 
