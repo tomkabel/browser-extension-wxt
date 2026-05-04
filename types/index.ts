@@ -88,7 +88,10 @@ export type MessageType =
   | 'deliver-attested-code'
   | 'scrape-control-code'
   | 'passkey-credential-created'
-  | 'passkey-credential-error';
+  | 'passkey-credential-error'
+  | 'begin-challenge-assertion'
+  | 'assertion-complete'
+  | 'get-cached-credential-id';
 
 export interface ExtensionMessage<T = unknown> {
   type: MessageType;

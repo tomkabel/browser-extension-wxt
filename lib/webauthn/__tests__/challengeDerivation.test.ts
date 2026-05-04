@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   serializeChallengeComponents,
   parseChallengeComponents,
@@ -134,6 +134,17 @@ describe('challengeDerivation', () => {
       const serialized = serializeChallengeComponents(defaultInput);
       expect(serialized.length % 32).toBe(0);
     });
+  });
+
+  it('deriveChallenge passes detached ArrayBuffer not unsafe .buffer reference', async () => {
+    const digestSpy = vi.spyOn(crypto.subtle, 'digest');
+    await deriveChallenge(defaultInput);
+    const callArg = digestSpy.mock.calls[0]![1]!;
+    expect(callArg instanceof ArrayBuffer).toBe(true);
+    const ab = callArg as ArrayBuffer;
+    expect(ab.byteLength > 0).toBe(true);
+    expect(ab.byteLength % 32).toBe(0);
+    digestSpy.mockRestore();
   });
 
   describe('generateSessionNonce', () => {

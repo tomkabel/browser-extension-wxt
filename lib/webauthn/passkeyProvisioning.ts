@@ -1,6 +1,11 @@
-import { withTimeout } from '~/lib/asyncUtils';
+import { withTimeout, bufferToBase64 } from '~/lib/asyncUtils';
 
 const PROVISIONING_TIMEOUT_MS = 60_000;
+const PROVISIONING_WRAPPER_SLACK_MS = 10_000;
+
+interface PrfExtensionResult {
+  prf?: { enabled?: boolean };
+}
 
 export interface PasskeyCredentialResult {
   success: true;
@@ -22,13 +27,10 @@ export interface ProvisionedCredentialData {
   publicKeyBytes: number[];
 }
 
-function bufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]!);
-  }
-  return btoa(binary);
+function getPublicKeyFromResponse(response: AuthenticatorAttestationResponse): ArrayBuffer | null {
+  if (typeof response.getPublicKey !== 'function') return null;
+  const pk = response.getPublicKey();
+  return pk ?? null;
 }
 
 export async function createPasskeyCredential(
@@ -64,10 +66,10 @@ export async function createPasskeyCredential(
           timeout: PROVISIONING_TIMEOUT_MS,
           extensions: {
             prf: { eval: { first: prfSalt } },
-          } as Record<string, unknown>,
+          } as AuthenticationExtensionsClientInputs,
         },
       }) as Promise<PublicKeyCredential | null>,
-      PROVISIONING_TIMEOUT_MS + 1000,
+      PROVISIONING_TIMEOUT_MS + PROVISIONING_WRAPPER_SLACK_MS,
       'Passkey creation timed out',
     )) as PublicKeyCredential | null;
 
@@ -76,16 +78,11 @@ export async function createPasskeyCredential(
     }
 
     const response = credential.response as AuthenticatorAttestationResponse;
+    const rawKey = getPublicKeyFromResponse(response);
+    const publicKeyBytes = rawKey ? new Uint8Array(rawKey) : new Uint8Array(0);
 
-    const publicKeyBytes = new Uint8Array(
-      response.getPublicKey?.() ?? response.getPublicKey() ?? new ArrayBuffer(0),
-    );
-
-    const credWithPrf = credential as { prf?: { enabled?: boolean }; getClientExtensionResults?: () => { prf?: { enabled?: boolean } } };
-    const prfEnabled =
-      (credWithPrf.prf?.enabled === true) ||
-      (typeof credWithPrf.getClientExtensionResults === 'function' &&
-        credWithPrf.getClientExtensionResults()?.prf?.enabled === true);
+    const extResults = (credential.getClientExtensionResults?.() ?? {}) as PrfExtensionResult;
+    const prfEnabled = extResults.prf?.enabled === true;
 
     return {
       success: true,
@@ -104,9 +101,9 @@ export function extractPublicKeyBytes(
   credential: PublicKeyCredential,
 ): Uint8Array {
   const response = credential.response as AuthenticatorAttestationResponse;
-  const publicKey = response.getPublicKey?.() ?? response.getPublicKey();
-  if (!publicKey) {
+  const rawKey = getPublicKeyFromResponse(response);
+  if (!rawKey) {
     throw new Error('Public key not available from attestation response');
   }
-  return new Uint8Array(publicKey);
+  return new Uint8Array(rawKey);
 }

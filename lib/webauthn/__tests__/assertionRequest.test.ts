@@ -21,14 +21,15 @@ describe('assertionRequest', () => {
     const allowCredentialId = new Uint8Array(16).fill(0x02);
 
     mockCredentialsGet.mockImplementation(async ({ publicKey }: { publicKey: PublicKeyCredentialRequestOptions }) => {
-      expect(publicKey.challenge).toEqual(challenge);
+      expect(new Uint8Array(publicKey.challenge as ArrayBuffer)).toEqual(challenge);
       expect(publicKey.rpId).toBe('extension.example.com');
       expect(publicKey.userVerification).toBe('required');
       expect(publicKey.timeout).toBe(60000);
       expect(publicKey.allowCredentials).toBeDefined();
       expect(publicKey.allowCredentials).toHaveLength(1);
-      expect(publicKey.allowCredentials![0]!.id).toEqual(allowCredentialId);
+      expect(new Uint8Array(publicKey.allowCredentials![0]!.id as ArrayBuffer)).toEqual(allowCredentialId);
       expect(publicKey.allowCredentials![0]!.type).toBe('public-key');
+      expect(publicKey.allowCredentials![0]!.transports).toBeUndefined();
 
       return null;
     });
@@ -101,5 +102,22 @@ describe('assertionRequest', () => {
     if (!result.success) {
       expect(result.error).toContain('cancelled');
     }
+  });
+
+  it('passes challenge as isolated ArrayBuffer (no backing-buffer leak)', async () => {
+    const challenge = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
+
+    const subarray = challenge.subarray(0, 4);
+    expect(subarray.buffer.byteLength).toBe(8);
+
+    mockCredentialsGet.mockImplementation(async ({ publicKey }: { publicKey: PublicKeyCredentialRequestOptions }) => {
+      const received = new Uint8Array(publicKey.challenge as ArrayBuffer);
+      expect(received.length).toBe(4);
+      expect(Array.from(received)).toEqual([1, 2, 3, 4]);
+      return null;
+    });
+
+    const { createAssertionRequest } = await import('../assertionRequest');
+    await createAssertionRequest({ challenge: subarray, rpId: 'test.com' });
   });
 });

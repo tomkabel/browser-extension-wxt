@@ -1,3 +1,5 @@
+import { uint8ArrayToArrayBuffer } from '~/lib/asyncUtils';
+
 export interface ChallengeComponents {
   version: number;
   zkTlsProof: Uint8Array;
@@ -11,13 +13,6 @@ export interface ChallengeDerivationInput {
   origin: string;
   controlCode: string;
   sessionNonce: Uint8Array;
-}
-
-export interface AssertionResult {
-  rawId: Uint8Array;
-  authenticatorData: Uint8Array;
-  signature: Uint8Array;
-  clientDataJSON: Uint8Array;
 }
 
 const VERSION = 0x01;
@@ -141,7 +136,7 @@ export function parseChallengeComponents(serialized: Uint8Array): ChallengeCompo
 
 export async function deriveChallenge(input: ChallengeDerivationInput): Promise<Uint8Array> {
   const serialized = serializeChallengeComponents(input);
-  const hash = await crypto.subtle.digest('SHA-256', serialized.buffer as ArrayBuffer);
+  const hash = await crypto.subtle.digest('SHA-256', uint8ArrayToArrayBuffer(serialized));
   return new Uint8Array(hash);
 }
 

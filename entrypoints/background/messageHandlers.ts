@@ -18,12 +18,13 @@ import {
   setPrfAvailable,
 } from './sessionManager';
 import { confirmSasMatch, rejectSasMatch, getCommandClient } from './pairingCoordinator';
-import { cachePrfCredentialId } from '~/lib/crypto/fallbackAuth';
+import { cachePrfCredentialId, getCachedPrfCredentialId } from '~/lib/crypto/fallbackAuth';
 import { withTimeout } from '~/lib/asyncUtils';
 import { createSlidingWindowLimiter, createDomainRateLimiter } from '~/lib/rateLimit/slidingWindow';
 import { isReplayAssertion, recordAssertion } from '~/lib/replayProtection';
 import { TransportManager } from '~/lib/transport';
-import { getAttestationStatus, refreshRpKeys } from './attestationManager';
+import { getAttestationStatus, refreshRpKeys, getDomCode } from './attestationManager';
+import { deriveChallenge, generateSessionNonce, serializeChallengeComponents } from '~/lib/webauthn';
 import type {
   AttestedCodePayload,
   CredentialRequestPayload,
@@ -456,6 +457,142 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
     const { error } = payload as { error: string };
     log.warn('Passkey credential creation failed:', error);
     return { success: false, error: 'Passkey creation failed, PRF-only fallback activated' };
+  },
+
+  'get-cached-credential-id': async () => {
+    const credentialId = await getCachedPrfCredentialId();
+    if (!credentialId) {
+      return { success: false, error: 'No cached credential' };
+    }
+    const rawId = Uint8Array.from(atob(credentialId), (c) => c.charCodeAt(0));
+    return { success: true, data: { credentialId, rawId: Array.from(rawId) } };
+  },
+
+  'begin-challenge-assertion': async (payload, sender) => {
+    const { amount, recipient } = payload as { amount?: string | null; recipient?: string | null };
+
+    if (!sender.tab?.id) {
+      return { success: false, error: 'No sender tab' };
+    }
+
+    try {
+      const origin = new URL(sender.tab.url ?? '').origin;
+      if (!origin || origin === 'null') {
+        return { success: false, error: 'Cannot determine origin from sender tab' };
+      }
+
+      const controlCode = await getDomCode(sender.tab.id);
+
+      const proofBytes = new Uint8Array(64);
+      crypto.getRandomValues(proofBytes);
+
+      const sessionNonce = generateSessionNonce();
+
+      const tlvComponents = serializeChallengeComponents({
+        zkTlsProof: proofBytes,
+        origin,
+        controlCode: controlCode ?? '0000',
+        sessionNonce,
+      });
+
+      const derivedChallenge = await deriveChallenge({
+        zkTlsProof: proofBytes,
+        origin,
+        controlCode: controlCode ?? '0000',
+        sessionNonce,
+      });
+
+      const rpId = chrome.runtime.id;
+
+      await browser.storage.session.set({
+        'pending:assertion': {
+          derivedChallenge: Array.from(derivedChallenge),
+          tlvComponents: Array.from(tlvComponents),
+          sessionNonce: Array.from(sessionNonce),
+          origin,
+          controlCode: controlCode ?? '0000',
+          rpId,
+          transactionData: { amount: amount ?? null, recipient: recipient ?? null },
+        },
+      });
+
+      const authUrl = chrome.runtime.getURL('auth.html?mode=challenge-assert');
+      await browser.tabs.create({ url: authUrl, active: false });
+
+      return { success: true, data: { status: 'pending' } };
+    } catch (err) {
+      log.error('Failed to begin challenge assertion:', err);
+      return { success: false, error: err instanceof Error ? err.message : 'Assertion initiation failed' };
+    }
+  },
+
+  'assertion-complete': async (payload) => {
+    const data = payload as {
+      status: string;
+      error?: string;
+      credentialId?: string;
+      tlvComponents?: number[];
+      sessionNonce?: number[];
+      origin?: string;
+      controlCode?: string;
+      authenticatorData?: number[];
+      signature?: number[];
+      clientDataJSON?: number[];
+      rawId?: number[];
+    };
+
+    if (data.status !== 'verified') {
+      await browser.storage.session.set({
+        'assertion:result': { status: data.status, error: data.error ?? 'Assertion failed' },
+      });
+      return { success: false, error: data.error ?? 'Assertion failed' };
+    }
+
+    if (!data.credentialId || !data.tlvComponents || !data.authenticatorData || !data.signature || !data.clientDataJSON) {
+      const error = 'Incomplete assertion data';
+      await browser.storage.session.set({ 'assertion:result': { status: 'error', error } });
+      return { success: false, error };
+    }
+
+    try {
+      await initializeTransportManager();
+      const tm = getTransportManager();
+
+      if (tm) {
+        const message = new TextEncoder().encode(
+          JSON.stringify({
+            type: 'webauthn-assertion',
+            credentialId: data.credentialId,
+            tlvBytes: data.tlvComponents,
+            authenticatorData: data.authenticatorData,
+            signature: data.signature,
+            clientDataJSON: data.clientDataJSON,
+            sessionNonce: data.sessionNonce,
+            origin: data.origin,
+            controlCode: data.controlCode,
+            timestamp: Math.floor(Date.now() / 1000),
+          }),
+        );
+
+        await tm.send(message);
+        log.info('Challenge-bound assertion transmitted to Android Vault');
+      } else {
+        log.warn('No transport available to transmit assertion to Android');
+      }
+
+      await browser.storage.session.set({
+        'assertion:result': { status: 'verified' },
+      });
+      await browser.storage.session.remove('pending:assertion');
+
+      return { success: true, data: { status: 'verified' } };
+    } catch (err) {
+      log.error('Failed to transmit assertion:', err);
+      await browser.storage.session.set({
+        'assertion:result': { status: 'error', error: err instanceof Error ? err.message : 'Transmission failed' },
+      });
+      return { success: false, error: err instanceof Error ? err.message : 'Transmission failed' };
+    }
   },
 
   'deliver-attested-code': async (payload) => {

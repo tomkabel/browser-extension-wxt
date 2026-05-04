@@ -44,7 +44,6 @@ describe('passkeyProvisioning', () => {
     const mockCredential = {
       rawId: mockRawId,
       id: btoa(String.fromCharCode(...mockRawId)),
-      prf: { enabled: true },
       response: {
         getPublicKey: () => {
           const pk = new Uint8Array(65).fill(0x04);
@@ -82,6 +81,60 @@ describe('passkeyProvisioning', () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error).toContain('cancelled');
+    }
+  });
+
+  it('reads prfEnabled from getClientExtensionResults not credential.prf', async () => {
+    const mockRawId = new Uint8Array(16).fill(0x30);
+
+    const mockCredential = {
+      rawId: mockRawId,
+      id: btoa(String.fromCharCode(...mockRawId)),
+      prf: { enabled: false },
+      response: {
+        getPublicKey: () => {
+          const pk = new Uint8Array(65).fill(0x04);
+          pk[0] = 0x04;
+          return pk.buffer;
+        },
+      },
+      getClientExtensionResults: () => ({
+        prf: { enabled: true },
+      }),
+    };
+
+    mockCredentialsCreate.mockResolvedValue(mockCredential);
+
+    const { createPasskeyCredential } = await import('../passkeyProvisioning');
+
+    const result = await createPasskeyCredential('example.com', 'Test');
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.prfEnabled).toBe(true);
+    }
+  });
+
+  it('handles missing getPublicKey gracefully', async () => {
+    const mockRawId = new Uint8Array(16).fill(0x30);
+
+    const mockCredential = {
+      rawId: mockRawId,
+      id: btoa(String.fromCharCode(...mockRawId)),
+      response: {},
+      getClientExtensionResults: () => ({}),
+    };
+
+    mockCredentialsCreate.mockResolvedValue(mockCredential);
+
+    const { createPasskeyCredential } = await import('../passkeyProvisioning');
+
+    const result = await createPasskeyCredential('example.com', 'Test');
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.publicKeyBytes.length).toBe(0);
+      expect(result.prfEnabled).toBe(false);
     }
   });
 });

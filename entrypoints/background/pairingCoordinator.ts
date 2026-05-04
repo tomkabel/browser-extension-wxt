@@ -224,7 +224,7 @@ export async function confirmSasMatch(): Promise<boolean> {
     if (currentSession) {
       await browser.storage.session.remove(EMOJI_SAS_STORAGE_KEY);
 
-      if (currentSession && commandClient) {
+      if (commandClient) {
         try {
           const encoded = new TextEncoder().encode(
             JSON.stringify({ type: 'pairing-confirmed' }),
@@ -240,15 +240,13 @@ export async function confirmSasMatch(): Promise<boolean> {
         }
       }
 
-      if (pendingRemoteStaticPk) {
-        try {
-          const authUrl = chrome.runtime.getURL('auth.html?mode=passkey-create');
-          await browser.tabs.create({ url: authUrl, active: false });
-          log.info('[Coordinator] Opened passkey creation page');
-        } catch (err) {
-          log.warn('[Coordinator] Failed to open passkey creation page:', err);
-          await fallbackToPrfOnly(pendingRemoteStaticPk);
-        }
+      try {
+        const authUrl = chrome.runtime.getURL('auth.html?mode=passkey-create');
+        await browser.tabs.create({ url: authUrl, active: false });
+        log.info('[Coordinator] Opened passkey creation page');
+      } catch (err) {
+        log.warn('[Coordinator] Failed to open passkey creation page:', err);
+        await fallbackToPrfOnly(pendingRemoteStaticPk);
       }
 
       pendingRemoteStaticPk = null;

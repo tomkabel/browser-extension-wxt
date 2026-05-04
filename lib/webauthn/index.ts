@@ -1,4 +1,4 @@
-export { deriveChallenge, parseChallengeComponents, generateSessionNonce } from './challengeDerivation';
+export { deriveChallenge, parseChallengeComponents, generateSessionNonce, serializeChallengeComponents } from './challengeDerivation';
 export type { ChallengeComponents, ChallengeDerivationInput } from './challengeDerivation';
 export { createAssertionRequest } from './assertionRequest';
 export type { AssertionRequestOptions, AssertionResponseData, AssertionRequestOutcome, AssertionRequestResult, AssertionRequestError } from './assertionRequest';

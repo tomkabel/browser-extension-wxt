@@ -1,6 +1,7 @@
-import { withTimeout } from '~/lib/asyncUtils';
+import { withTimeout, bufferToBase64, uint8ArrayToArrayBuffer } from '~/lib/asyncUtils';
 
 const ASSERTION_TIMEOUT_MS = 60_000;
+const ASSERTION_WRAPPER_SLACK_MS = 10_000;
 
 export interface AssertionRequestOptions {
   challenge: Uint8Array;
@@ -29,20 +30,15 @@ export interface AssertionRequestError {
 
 export type AssertionRequestOutcome = AssertionRequestResult | AssertionRequestError;
 
-function bufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]!);
-  }
-  return btoa(binary);
+function uint8ArrayToWebAuthnBuffer(uint8: Uint8Array): ArrayBuffer {
+  return uint8ArrayToArrayBuffer(uint8);
 }
 
 export async function createAssertionRequest(
   options: AssertionRequestOptions,
 ): Promise<AssertionRequestOutcome> {
   const publicKey: PublicKeyCredentialRequestOptions = {
-    challenge: options.challenge.buffer as ArrayBuffer,
+    challenge: uint8ArrayToWebAuthnBuffer(options.challenge),
     rpId: options.rpId,
     userVerification: 'required',
     timeout: ASSERTION_TIMEOUT_MS,
@@ -51,9 +47,8 @@ export async function createAssertionRequest(
   if (options.allowCredentialId) {
     publicKey.allowCredentials = [
       {
-        id: options.allowCredentialId.buffer as ArrayBuffer,
+        id: uint8ArrayToWebAuthnBuffer(options.allowCredentialId),
         type: 'public-key',
-        transports: ['internal', 'usb', 'nfc'],
       },
     ];
   }
@@ -61,7 +56,7 @@ export async function createAssertionRequest(
   try {
     const assertion = (await withTimeout(
       navigator.credentials.get({ publicKey }) as Promise<PublicKeyCredential>,
-      ASSERTION_TIMEOUT_MS + 1000,
+      ASSERTION_TIMEOUT_MS + ASSERTION_WRAPPER_SLACK_MS,
       'Biometric verification timed out',
     )) as PublicKeyCredential | null;
 

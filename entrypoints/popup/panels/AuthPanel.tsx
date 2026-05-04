@@ -55,15 +55,63 @@ export function AuthPanel() {
     };
   }, [pairingState, setSessionState, setSessionExpiry, setSessionRemaining]);
 
+  useEffect(() => {
+    if (assertionStatus !== 'pending') return;
+
+    const interval = setInterval(async () => {
+      const stored = await chrome.storage.session.get('assertion:result');
+      const result = stored['assertion:result'] as
+        { status: string; error?: string } | undefined;
+      if (result) {
+        if (result.status === 'verified') {
+          setAssertionStatus('verified');
+        } else if (result.status === 'error') {
+          setAssertionStatus('error');
+          setAssertionError(result.error ?? 'Verification failed');
+        } else if (result.status === 'cancelled') {
+          setAssertionStatus('idle');
+        }
+      }
+    }, 500);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [assertionStatus, setAssertionStatus, setAssertionError]);
+
   const handleAuthenticate = useCallback(async () => {
-    try {
-      const authUrl = chrome.runtime.getURL('auth.html');
-      await browser.tabs.create({ url: authUrl });
-      window.close();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to open authentication page');
+    if (transactionData.amount || transactionData.recipient) {
+      setAssertionStatus('pending');
+      setAssertionError(null);
+
+      try {
+        await chrome.storage.session.remove('assertion:result');
+        const response = await browser.runtime.sendMessage({
+          type: 'begin-challenge-assertion',
+          payload: {
+            amount: transactionData.amount,
+            recipient: transactionData.recipient,
+          },
+        });
+
+        if (!response.success) {
+          setAssertionStatus('error');
+          setAssertionError(response.error ?? 'Failed to start assertion');
+        }
+      } catch (err) {
+        setAssertionStatus('error');
+        setAssertionError(err instanceof Error ? err.message : 'Failed to start assertion');
+      }
+    } else {
+      try {
+        const authUrl = chrome.runtime.getURL('auth.html');
+        await browser.tabs.create({ url: authUrl });
+        window.close();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to open authentication page');
+      }
     }
-  }, []);
+  }, [transactionData, setAssertionStatus, setAssertionError]);
 
   const handleReauth = useCallback(() => {
     setSessionState('none');
@@ -109,8 +157,7 @@ export function AuthPanel() {
     }
   };
 
-  const showTransactionContext = assertionStatus === 'pending' || assertionStatus === 'idle';
-  const hasTransactionContext = transactionData.amount || transactionData.recipient;
+  const hasTransactionContext = !!transactionData.amount || !!transactionData.recipient;
 
   if (checking) {
     return (
@@ -159,9 +206,11 @@ export function AuthPanel() {
         <button
           type="button"
           className="mt-3 w-full py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
-          onClick={handleAuthenticate}
+          onClick={() => {
+            setAssertionStatus('idle');
+          }}
         >
-          Continue
+          Dismiss
         </button>
       </div>
     );
@@ -169,12 +218,16 @@ export function AuthPanel() {
 
   return (
     <div className="p-4 bg-white rounded-lg border">
-      <h2 className="text-lg font-bold text-gray-800 mb-3">Authenticate</h2>
-      <p className="text-sm text-gray-500 mb-4">
-        Verify your identity to enable transaction signing on this device.
-      </p>
+      <h2 className="text-lg font-bold text-gray-800 mb-3">
+        {hasTransactionContext ? 'Verify Transaction' : 'Authenticate'}
+      </h2>
+      {!hasTransactionContext && (
+        <p className="text-sm text-gray-500 mb-4">
+          Verify your identity to enable transaction signing on this device.
+        </p>
+      )}
 
-      {hasTransactionContext && showTransactionContext && (
+      {hasTransactionContext && (
         <div className="mb-4 p-3 bg-gray-50 rounded-lg border space-y-2">
           <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Transaction Context</p>
           {transactionData.recipient && (
@@ -204,10 +257,14 @@ export function AuthPanel() {
       {(assertionStatus === 'idle' || assertionStatus === 'timeout' || assertionStatus === 'error') && (
         <button
           type="button"
-          className="w-full py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+          className="w-full py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={handleAuthenticate}
         >
-          {assertionStatus === 'timeout' ? 'Try Again' : 'Authenticate'}
+          {assertionStatus === 'timeout'
+            ? 'Try Again'
+            : hasTransactionContext
+              ? 'Verify with Biometrics'
+              : 'Authenticate'}
         </button>
       )}
 

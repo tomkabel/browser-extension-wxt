@@ -196,7 +196,7 @@ async function processAttestationHeader(
   }
 }
 
-async function getDomCode(tabId: number): Promise<string | null> {
+export async function getDomCode(tabId: number): Promise<string | null> {
   try {
     const response = await withTimeout(
       browser.tabs.sendMessage(tabId, { type: 'scrape-control-code', payload: {} }),
