@@ -66,22 +66,9 @@ describe('UsbTransport', () => {
   });
 
   describe('checkAvailability', () => {
-    it('returns false when relay is unreachable', async () => {
-      (browser.runtime.sendMessage as ReturnType<typeof vi.fn>).mockRejectedValue(
-        new Error('unreachable'),
-      );
-
+    it('returns false when no WebUSB device enumerated', async () => {
       const available = await transport.checkAvailability();
       expect(available).toBe(false);
-    });
-
-    it('returns true when relay responds', async () => {
-      (browser.runtime.sendMessage as ReturnType<typeof vi.fn>).mockResolvedValue({
-        success: true,
-      });
-
-      const available = await transport.checkAvailability();
-      expect(available).toBe(true);
     });
   });
 
