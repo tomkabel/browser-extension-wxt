@@ -57,3 +57,4 @@
 - [x] 7.3 Integration test: end-to-end with WebRTC fallback (no USB tether) (stub)
 - [x] 7.4 E2E test: browser popup shows transaction context, user taps biometric, assertion is generated and verified (stub)
 - [x] 7.5 Run `bun run lint && bun run typecheck` and fix all issues
+- [x] 7.6 E2E test: full challenge-bound WebAuthn assertion cycle (commit: a7c6157d)
