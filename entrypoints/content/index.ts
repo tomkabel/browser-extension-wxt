@@ -5,6 +5,7 @@ import { startCleanupInterval, stopCleanupInterval } from './rateLimiter';
 import { detectLoginForm } from './domScraper';
 import { detectTransaction } from '~/lib/transaction/transactionDetector';
 import { log } from '~/lib/errors';
+import { parseDomain } from '~/lib/domainParser';
 
 let loginFormEmitted = false;
 let loginDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -13,21 +14,18 @@ let contentInitDone = false;
 let checkedApproval = false;
 let isApprovedDomain = false;
 
-function getRegistrableDomain(hostname: string): string {
-  const parts = hostname.split('.');
-  if (parts.length >= 2) {
-    return parts.slice(-2).join('.');
-  }
-  return hostname;
-}
-
-async function checkDynamicApproval(domain: string): Promise<boolean> {
+async function checkDynamicApproval(domain: string, timeoutMs = 1500): Promise<boolean> {
   try {
-    const response = await browser.runtime.sendMessage({
-      type: 'check-domain-approved',
-      payload: { domain },
-    });
-    const data = response as { success?: boolean; data?: { approved?: boolean } } | undefined;
+    const result = await Promise.race([
+      browser.runtime.sendMessage({
+        type: 'check-domain-approved',
+        payload: { domain },
+      }),
+      new Promise<undefined>((_, reject) =>
+        setTimeout(() => reject(new Error('Approval check timed out')), timeoutMs),
+      ),
+    ]);
+    const data = result as { success?: boolean; data?: { approved?: boolean } } | undefined;
     return !!data?.data?.approved;
   } catch {
     return false;
@@ -70,7 +68,10 @@ function startMutationObserver(): void {
     for (const mutation of mutations) {
       for (const node of mutation.addedNodes) {
         if (node instanceof HTMLElement) {
-          if (node.querySelector?.('input[type="password"]') || node.matches?.('input[type="password"]')) {
+          if (
+            node.querySelector?.('input[type="password"]') ||
+            node.matches?.('input[type="password"]')
+          ) {
             scheduleLoginDetection();
             return;
           }
@@ -108,7 +109,12 @@ function reportDomainTransaction(): void {
   }
 }
 
-export function injectCredentials(username: string, password: string, usernameSelector: string, passwordSelector: string): boolean {
+export function injectCredentials(
+  username: string,
+  password: string,
+  usernameSelector: string,
+  passwordSelector: string,
+): boolean {
   const usernameField = document.querySelector(usernameSelector) as HTMLInputElement | null;
   const passwordField = document.querySelector(passwordSelector) as HTMLInputElement | null;
 
@@ -148,7 +154,8 @@ export default defineContentScript({
     contentInitDone = true;
 
     const hostname = window.location.hostname;
-    const registrableDomain = getRegistrableDomain(hostname);
+    const parsed = parseDomain(window.location.href);
+    const registrableDomain = parsed.success ? parsed.data.registrableDomain : hostname;
 
     registerContentHandlers();
     startCleanupInterval();
@@ -181,8 +188,8 @@ export default defineContentScript({
       if (!checkedApproval) {
         isApprovedDomain = false;
         checkedApproval = true;
+        if (!loginFormEmitted) emitLoginForm();
       }
-      if (!loginFormEmitted) emitLoginForm();
     }, 2000);
 
     startMutationObserver();
@@ -204,7 +211,11 @@ export default defineContentScript({
             },
           })
           .catch(() => {});
-        checkDynamicApproval(getRegistrableDomain(url.hostname)).then((approved) => {
+        const newParsed = parseDomain(newUrlStr);
+        const newRegistrableDomain = newParsed.success
+          ? newParsed.data.registrableDomain
+          : url.hostname;
+        checkDynamicApproval(newRegistrableDomain).then((approved) => {
           isApprovedDomain = approved;
           if (approved) {
             setTimeout(reportDomainTransaction, 1000);
