@@ -34,7 +34,7 @@ test.afterAll(async () => {
   await context?.close();
 });
 
-test.describe('Emoji SAS Pairing Flow', () => {
+test.describe('Pairing UI Smoke Tests', () => {
   test.afterEach(async () => {
     await page?.close().catch(() => {});
   });
