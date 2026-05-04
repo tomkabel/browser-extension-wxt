@@ -1,6 +1,6 @@
 import { io, type Socket } from 'socket.io-client';
 
-interface TurnCredentials {
+export interface TurnCredentials {
   username: string;
   password: string;
   ttl: number;
@@ -60,7 +60,7 @@ async function fetchTurnCredentials(): Promise<TurnCredentials | null> {
   }
 }
 
-function buildIceServers(creds: TurnCredentials | null): RTCIceServer[] {
+export function buildIceServers(creds: TurnCredentials | null): RTCIceServer[] {
   const servers: RTCIceServer[] = [
     { urls: 'stun:stun.l.google.com:19302' },
   ];
