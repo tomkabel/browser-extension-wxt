@@ -21,6 +21,15 @@ export interface ControlCodeSelector {
   attribute?: string;
 }
 
+const KNOWN_LABELS = /^(?:amount|sum|total|recipient|saaja|makse|viitenumber|selgitus|payment|transfer)[:\s]*/i;
+
+function extractCleanText(element: Element): string | null {
+  const raw = element.textContent?.trim() ?? null;
+  if (!raw) return null;
+  const cleaned = raw.replace(KNOWN_LABELS, '').replace(/\s+/g, ' ').trim();
+  return cleaned || null;
+}
+
 const REGISTRY_URL = 'https://raw.githubusercontent.com/smartid2/registry/main/detectors.json';
 const CACHE_KEY = 'registry:detectors';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -134,9 +143,17 @@ function querySelectors(selectors: string[]): string | null {
   for (const sel of selectors) {
     try {
       const element = document.querySelector(sel);
-      if (element?.textContent) {
-        return element.textContent.trim();
+      if (!element) continue;
+
+      const direct = element.firstChild?.nodeType === Node.TEXT_NODE
+        ? element.firstChild.textContent?.trim()
+        : null;
+      if (direct && direct.length > 0 && !KNOWN_LABELS.test(direct)) {
+        return direct;
       }
+
+      const cleaned = extractCleanText(element);
+      if (cleaned) return cleaned;
     } catch {
       continue;
     }
