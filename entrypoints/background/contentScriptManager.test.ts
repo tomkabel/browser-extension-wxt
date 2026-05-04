@@ -78,7 +78,7 @@ describe('contentScriptManager', () => {
   });
 
   describe('registerForDomain', () => {
-    it('registers a script and adds domain to approved list (2.4)', async () => {
+    it('registers a script and adds domain to approved list', async () => {
       const { registerForDomain, getApprovedDomains } = await import('./contentScriptManager');
 
       const scriptId = await registerForDomain('example.com');
@@ -105,23 +105,30 @@ describe('contentScriptManager', () => {
     it('is idempotent for already approved domains', async () => {
       const { registerForDomain, getApprovedDomains } = await import('./contentScriptManager');
 
+      const callCountBeforeFirst = (chrome.scripting.registerContentScripts as any).mock.calls.length;
       await registerForDomain('example.com');
+      const callCountAfterFirst = (chrome.scripting.registerContentScripts as any).mock.calls.length;
       await registerForDomain('example.com');
+      const callCountAfterSecond = (chrome.scripting.registerContentScripts as any).mock.calls.length;
 
       const approved = await getApprovedDomains();
       expect(approved).toHaveLength(1);
+      expect(callCountAfterSecond).toBe(callCountAfterFirst);
+      expect(callCountAfterFirst).toBeGreaterThan(callCountBeforeFirst);
     });
   });
 
   describe('unregisterForDomain', () => {
-    it('unregisters script and removes domain from approved list (2.5)', async () => {
+    it('unregisters script and removes domain from approved list', async () => {
       const { registerForDomain, unregisterForDomain, getApprovedDomains } =
         await import('./contentScriptManager');
 
-      await registerForDomain('example.com');
+      const scriptId = await registerForDomain('example.com');
       await unregisterForDomain('example.com');
 
-      expect(chrome.scripting.unregisterContentScripts).toHaveBeenCalled();
+      expect(chrome.scripting.unregisterContentScripts).toHaveBeenCalledWith(
+        expect.objectContaining({ ids: [scriptId] }),
+      );
       const approved = await getApprovedDomains();
       expect(approved).toHaveLength(0);
     });
@@ -173,7 +180,7 @@ describe('contentScriptManager', () => {
   });
 
   describe('session deny list', () => {
-    it('addDeniedDomain adds to deny list (4.6)', async () => {
+    it('addDeniedDomain adds to deny list', async () => {
       const { addDeniedDomain, isDomainDeniedInSession } = await import('./contentScriptManager');
 
       await addDeniedDomain('example.com');

@@ -35,7 +35,12 @@ export class TransportManager {
 
     this.webrtcTransport.onDisconnect(() => {
       if (this.activeTransport?.type === 'webrtc') {
-        this.emit('status-change', { connected: false });
+        this.switchTransport('usb', 'WebRTC disconnected').then((switched) => {
+          if (!switched) {
+            this.activeTransport = null;
+            this.emit('status-change', { connected: false, reason: 'WebRTC disconnected, USB unavailable' });
+          }
+        });
       }
     });
   }
@@ -111,7 +116,7 @@ export class TransportManager {
   async switchTransport(
     target: TransportType,
     reason: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const previous = this.activeTransport?.type ?? null;
     const current = this.activeTransport;
 
@@ -126,7 +131,7 @@ export class TransportManager {
           this.usbTransport.onMessage(this.messageCallback);
         }
         this.emitChange(previous, 'usb', reason);
-        return;
+        return true;
       } catch {
         // USB connect failed, stay on current
       }
@@ -139,10 +144,12 @@ export class TransportManager {
       await this.connectWebRtc();
       if (this.activeTransport?.type === 'webrtc') {
         this.emitChange(previous, 'webrtc', reason);
-      } else {
-        this.emit('status-change', { connected: false, reason });
+        return true;
       }
+      this.emit('status-change', { connected: false, reason });
     }
+
+    return false;
   }
 
   private async connectWebRtc(): Promise<void> {

@@ -530,7 +530,7 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
     if (!sender.tab?.id) {
       return { success: false, error: 'No sender tab' };
     }
-
+    authInProgress = true;
     const tabId = sender.tab.id;
 
     try {
@@ -601,13 +601,19 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
         },
       });
 
-      authInProgress = true;
-
       const challengeB64 = btoa(String.fromCharCode(...Array.from(derivedChallenge)));
       const authUrl = chrome.runtime.getURL(
         `auth.html?mode=challenge-assert&challenge=${encodeURIComponent(challengeB64)}`,
       );
-      await browser.tabs.create({ url: authUrl, active: false });
+      const tab = await browser.tabs.create({ url: authUrl, active: false });
+      authTabId = tab.id ?? null;
+
+      clearAuthTimeout();
+      authTimeoutHandle = setTimeout(() => {
+        if (authInProgress) {
+          resetAuthInProgress('timeout');
+        }
+      }, AUTH_TIMEOUT_MS);
 
       return {
         success: true,
@@ -615,10 +621,8 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       };
     } catch (err) {
       log.error('Failed to begin challenge assertion:', err);
-      return {
-        success: false,
-        error: err instanceof Error ? err.message : 'Assertion initiation failed',
-      };
+      resetAuthInProgress('begin-challenge-assertion error');
+      return { success: false, error: err instanceof Error ? err.message : 'Assertion initiation failed' };
     }
   },
 
@@ -675,7 +679,7 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
   },
 
   'assertion-complete': async (payload) => {
-    authInProgress = false;
+    clearAuthTimeout();
     const data = payload as {
       status: string;
       error?: string;
@@ -694,6 +698,7 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       await browser.storage.session.set({
         'assertion:result': { status: data.status, error: data.error ?? 'Assertion failed' },
       });
+      resetAuthInProgress('assertion-complete not verified');
       return { success: false, error: data.error ?? 'Assertion failed' };
     }
 
@@ -709,6 +714,7 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
     ) {
       const error = 'Incomplete assertion data';
       await browser.storage.session.set({ 'assertion:result': { status: 'error', error } });
+      resetAuthInProgress('assertion-complete incomplete data');
       return { success: false, error };
     }
 
@@ -743,6 +749,7 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       });
       await browser.storage.session.remove('pending:assertion');
 
+      resetAuthInProgress('assertion-complete success');
       return { success: true, data: { status: 'verified' } };
     } catch (err) {
       log.error('Failed to transmit assertion:', err);
@@ -752,6 +759,7 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
           error: err instanceof Error ? err.message : 'Transmission failed',
         },
       });
+      resetAuthInProgress('assertion-complete transmission error');
       return { success: false, error: err instanceof Error ? err.message : 'Transmission failed' };
     }
   },
@@ -846,6 +854,32 @@ function isValidMessage(message: unknown): message is { type: string; payload?: 
   );
 }
 
+let authInProgress = false;
+let authTabId: number | null = null;
+let authTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
+
+const AUTH_TIMEOUT_MS = 120_000;
+
+function clearAuthTimeout(): void {
+  if (authTimeoutHandle !== null) {
+    clearTimeout(authTimeoutHandle);
+    authTimeoutHandle = null;
+  }
+}
+
+function resetAuthInProgress(reason: string): void {
+  clearAuthTimeout();
+  authInProgress = false;
+  authTabId = null;
+  log.info('[authInProgress] Reset:', reason);
+}
+
+browser.tabs.onRemoved.addListener((tabId) => {
+  if (tabId === authTabId) {
+    resetAuthInProgress('auth tab closed');
+  }
+});
+
 const MFA_RATE_LIMIT_WINDOW_MS = 60_000;
 const MFA_RATE_LIMIT_MAX = 3;
 const mfaRateLimiter = createSlidingWindowLimiter(MFA_RATE_LIMIT_WINDOW_MS, MFA_RATE_LIMIT_MAX);
@@ -856,10 +890,8 @@ const credentialRateLimiter = createDomainRateLimiter(CREDENTIAL_RATE_LIMIT_MS);
 let transportManager: TransportManager | null = null;
 let transportManagerInitPromise: Promise<void> | null = null;
 
-let authInProgress = false;
-
 export function clearAuthInProgress(): void {
-  authInProgress = false;
+  resetAuthInProgress('clearAuthInProgress');
 }
 
 export function getTransportManager(): TransportManager | null {

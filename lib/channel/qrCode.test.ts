@@ -205,7 +205,6 @@ describe('E2E: Commitment-based pairing flow', () => {
 
     expect(wrongNonceCommitment).not.toBe(commitment);
 
-    const emptyCommitment = '';
     const emptyParsed = parsePairingUrl(buildPairingUrl(sasCode));
     expect(emptyParsed?.commitment).toBeNull();
   });

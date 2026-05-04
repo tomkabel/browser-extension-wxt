@@ -15,6 +15,7 @@ export interface ControlCommand {
   command: CommandType;
   payload: Record<string, unknown>;
   timestamp: number;
+  signature?: string;
 }
 
 export interface ControlResponse {

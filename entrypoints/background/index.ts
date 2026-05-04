@@ -18,6 +18,8 @@ async function tryRestoreSession(): Promise<void> {
   if (!reauthOk) {
     await restorePersistedSession();
   }
+  await reRegisterOnStartup();
+  await updateBadgeCount();
 }
 
 export default defineBackground({
@@ -44,11 +46,7 @@ export default defineBackground({
 
     browser.runtime.onStartup.addListener(async () => {
       log.info('Service worker starting');
-      registerMessageHandlers();
-      await reRegisterOnStartup();
-      await updateBadgeCount();
       await tryRestoreSession();
-      initializeRegistry().then(() => log.info('Remote detector registry initialized'));
     });
 
     log.info('Background service worker ready');

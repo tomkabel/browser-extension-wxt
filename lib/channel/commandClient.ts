@@ -51,19 +51,34 @@ export function createCommandClient(
     return next;
   }
 
+  let messageCountLock: Promise<void> = Promise.resolve();
+
   async function getAndIncrementMessageCount(): Promise<number> {
-    const stored = await browser.storage.session.get(STORAGE_KEY_MSG_COUNT);
-    const current =
-      typeof stored[STORAGE_KEY_MSG_COUNT] === 'number' ? stored[STORAGE_KEY_MSG_COUNT] : 0;
-    const next = current + 1;
-    await browser.storage.session.set({ [STORAGE_KEY_MSG_COUNT]: next });
-    return next;
+    let result!: number;
+    messageCountLock = messageCountLock.then(async () => {
+      const stored = await browser.storage.session.get(STORAGE_KEY_MSG_COUNT);
+      const current =
+        typeof stored[STORAGE_KEY_MSG_COUNT] === 'number' ? stored[STORAGE_KEY_MSG_COUNT] : 0;
+      result = current + 1;
+      await browser.storage.session.set({ [STORAGE_KEY_MSG_COUNT]: result });
+    });
+    await messageCountLock;
+    return result;
   }
 
   async function handleKeyRotation(): Promise<void> {
     const count = await getAndIncrementMessageCount();
     if (count > 0 && count % ROTATION_THRESHOLD === 0) {
       await keyRotationProvider.rotate(count);
+    }
+  }
+
+  async function signPayload(payload: Record<string, unknown>): Promise<string | undefined> {
+    const data = JSON.stringify(payload);
+    try {
+      return await signatureProvider.sign(data);
+    } catch {
+      return undefined;
     }
   }
 
@@ -239,17 +254,20 @@ export function createCommandClient(
       await options.sessionGuard();
     }
 
-    lastCommandTime = Date.now();
-    if (command !== CommandType.Ping) {
-      startHeartbeat();
-    }
-
     const sequence = await getNextSequence();
     const cmd = createCommand(command, payload, sequence);
+    const signature = await signPayload(payload);
+    if (signature) {
+      cmd.signature = signature;
+    }
 
     await handleKeyRotation();
 
     const encoded = encodeMessage(cmd);
+    lastCommandTime = Date.now();
+    if (command !== CommandType.Ping) {
+      startHeartbeat();
+    }
     return sendCommandWithRetry(cmd, encoded);
   }
 
@@ -260,15 +278,12 @@ export function createCommandClient(
   }
 
   async function sendPing(): Promise<ControlResponse> {
-    if (pendingPingSeq !== null) {
-      return Promise.reject(new Error('A ping command is already in-flight'));
-    }
     for (const entry of pending.values()) {
       if (entry.command.command === CommandType.Ping) {
         return Promise.reject(new Error('A ping command is already in-flight'));
       }
     }
-    return sendCommand(CommandType.Ping, { ts: performance.now() });
+    return sendCommand(CommandType.Ping, {});
   }
 
   async function sendCredentialRequest(
@@ -289,10 +304,20 @@ export function createCommandClient(
     return pending.size;
   }
 
-  function getState(): CommandState {
+  async function getState(): Promise<CommandState> {
+    const [seqStored, countStored] = await Promise.all([
+      browser.storage.session.get(STORAGE_KEY_SEQUENCE),
+      browser.storage.session.get(STORAGE_KEY_MSG_COUNT),
+    ]);
     return {
-      lastSequence: 0,
-      messageCount: 0,
+      lastSequence:
+        typeof seqStored[STORAGE_KEY_SEQUENCE] === 'number'
+          ? seqStored[STORAGE_KEY_SEQUENCE]
+          : 0,
+      messageCount:
+        typeof countStored[STORAGE_KEY_MSG_COUNT] === 'number'
+          ? countStored[STORAGE_KEY_MSG_COUNT]
+          : 0,
       rotationThreshold: ROTATION_THRESHOLD,
       pendingCommands: pending,
     };
