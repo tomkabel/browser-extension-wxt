@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"testing"
-	"time"
 )
 
 func TestShimResultJSON(t *testing.T) {
@@ -27,6 +26,16 @@ func TestShimResultJSON(t *testing.T) {
 			result: ShimResult{Success: true},
 			want:   `{"success":true}`,
 		},
+		{
+			name:   "success with reenumeration flag",
+			result: ShimResult{Success: true, VID: 0x18D1, PID: 0x2D01, Reenumerated: true},
+			want:   `{"success":true,"vid":6353,"pid":11521,"reenumerated":true}`,
+		},
+		{
+			name:   "reenumerated false is omitted",
+			result: ShimResult{Success: true, VID: 0x18D1, PID: 0x2D01, Reenumerated: false},
+			want:   `{"success":true,"vid":6353,"pid":11521}`,
+		},
 	}
 
 	for _, tt := range tests {
@@ -43,24 +52,49 @@ func TestShimResultJSON(t *testing.T) {
 }
 
 func TestShimResultUnmarshal(t *testing.T) {
-	input := `{"success":true,"vid":6353,"pid":11521}`
-	var result ShimResult
-	if err := json.Unmarshal([]byte(input), &result); err != nil {
-		t.Fatalf("json.Unmarshal failed: %v", err)
+	tests := []struct {
+		name        string
+		input       string
+		wantSuccess bool
+		wantVID     int
+		wantPID     int
+		wantReenum  bool
+	}{
+		{
+			name:        "basic success",
+			input:       `{"success":true,"vid":6353,"pid":11521}`,
+			wantSuccess: true,
+			wantVID:     0x18D1,
+			wantPID:     0x2D01,
+		},
+		{
+			name:        "success with reenumeration",
+			input:       `{"success":true,"vid":6353,"pid":11521,"reenumerated":true}`,
+			wantSuccess: true,
+			wantVID:     0x18D1,
+			wantPID:     0x2D01,
+			wantReenum:  true,
+		},
 	}
-	if !result.Success {
-		t.Error("expected Success=true")
-	}
-	if result.VID != 0x18D1 {
-		t.Errorf("VID = 0x%04X, want 0x18D1", result.VID)
-	}
-	if result.PID != 0x2D01 {
-		t.Errorf("PID = 0x%04X, want 0x2D01", result.PID)
-	}
-}
 
-func TestAoaReEnumerateWaitConstant(t *testing.T) {
-	if aoaReEnumerateWait != 2*time.Second {
-		t.Errorf("aoaReEnumerateWait = %v, want 2s", aoaReEnumerateWait)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var result ShimResult
+			if err := json.Unmarshal([]byte(tt.input), &result); err != nil {
+				t.Fatalf("json.Unmarshal failed: %v", err)
+			}
+			if result.Success != tt.wantSuccess {
+				t.Errorf("Success = %v, want %v", result.Success, tt.wantSuccess)
+			}
+			if result.VID != tt.wantVID {
+				t.Errorf("VID = 0x%04X, want 0x%04X", result.VID, tt.wantVID)
+			}
+			if result.PID != tt.wantPID {
+				t.Errorf("PID = 0x%04X, want 0x%04X", result.PID, tt.wantPID)
+			}
+			if result.Reenumerated != tt.wantReenum {
+				t.Errorf("Reenumerated = %v, want %v", result.Reenumerated, tt.wantReenum)
+			}
+		})
 	}
 }

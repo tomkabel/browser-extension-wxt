@@ -4,19 +4,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/google/gousb"
 	"github.com/smartid/vault6-native-host/aoa"
 )
 
-const aoaReEnumerateWait = 2 * time.Second
-
 type ShimResult struct {
-	Success bool   `json:"success"`
-	Error   string `json:"error,omitempty"`
-	VID     int    `json:"vid,omitempty"`
-	PID     int    `json:"pid,omitempty"`
+	Success      bool   `json:"success"`
+	Error        string `json:"error,omitempty"`
+	VID          int    `json:"vid,omitempty"`
+	PID          int    `json:"pid,omitempty"`
+	Reenumerated bool   `json:"reenumerated,omitempty"`
 }
 
 func main() {
@@ -57,14 +55,10 @@ func run() ShimResult {
 		return ShimResult{Success: false, Error: fmt.Sprintf("AOA negotiation failed: %v", negErr)}
 	}
 
-	// After AOA negotiation the device re-enumerates on the USB bus.
-	// The caller (extension) must wait for the new device node before
-	// attempting WebUSB communication.
-	time.Sleep(aoaReEnumerateWait)
-
 	return ShimResult{
-		Success: true,
-		VID:     int(aoa.AccessoryVID),
-		PID:     int(aoa.AccessoryPID),
+		Success:      true,
+		VID:          int(aoa.AccessoryVID),
+		PID:          int(aoa.AccessoryPID),
+		Reenumerated: true,
 	}
 }
