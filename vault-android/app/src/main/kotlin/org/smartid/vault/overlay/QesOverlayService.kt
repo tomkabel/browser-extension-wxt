@@ -20,34 +20,27 @@ import android.view.WindowManager
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
 import org.smartid.vault.R
+import org.smartid.vault.hig.HardwareInterruptGate
 
 class QesOverlayService : Service() {
 
     private var overlayView: View? = null
-    private var countdownSeconds = 30
     private var countdownHandler: Handler? = null
     private var countdownRunnable: Runnable? = null
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        val notification = buildNotification()
-        startForeground(NOTIFICATION_ID, notification)
+        startForeground(NOTIFICATION_ID, buildNotification())
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_SHOW -> showOverlay()
-            ACTION_DISMISS -> {
-                stopCountdown()
-                removeOverlay()
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
-                Log.i(TAG, "QES overlay dismissed")
-            }
+            ACTION_DISMISS -> dismissOverlay()
             ACTION_UPDATE_COUNTDOWN -> {
-                val seconds = intent.getIntExtra(EXTRA_SECONDS, 30)
-                updateCountdown(seconds)
+                val seconds = intent.getIntExtra(EXTRA_SECONDS, INITIAL_COUNTDOWN_SECONDS)
+                restartCountdownFrom(seconds)
             }
         }
         return START_NOT_STICKY
@@ -56,7 +49,9 @@ class QesOverlayService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        stopCountdown()
         removeOverlay()
+        cancelFallbackNotification()
         super.onDestroy()
     }
 
@@ -80,34 +75,43 @@ class QesOverlayService : Service() {
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT,
-        )
-
-        params.gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-        params.y = 0
+        ).apply {
+            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            y = 0
+        }
 
         overlayView = inflater.inflate(R.layout.qes_overlay, null)
-        overlayView?.let { view ->
-            wm.addView(view, params)
-            Log.i(TAG, "QES overlay displayed at bottom third of screen")
-        }
+        overlayView?.let { view -> wm.addView(view, params) }
+        Log.i(TAG, "QES overlay displayed at bottom third of screen")
 
-        startCountdown()
+        restartCountdownFrom(INITIAL_COUNTDOWN_SECONDS)
     }
 
-    private fun updateCountdown(seconds: Int) {
-        countdownSeconds = seconds
+    private fun dismissOverlay() {
+        stopCountdown()
+        removeOverlay()
+        cancelFallbackNotification()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+        Log.i(TAG, "QES overlay dismissed")
+    }
+
+    private fun updateCountdownDisplay(seconds: Int) {
         overlayView?.findViewById<TextView>(R.id.countdown_text)?.let {
-            it.text = "Expires in: ${seconds}s"
+            it.text = getString(R.string.qes_overlay_countdown_format, seconds)
         }
     }
 
-    private fun startCountdown() {
+    private fun restartCountdownFrom(seconds: Int) {
+        stopCountdown()
+        updateCountdownDisplay(seconds)
         countdownHandler = Handler(Looper.getMainLooper())
         countdownRunnable = object : Runnable {
+            private var remaining = seconds.coerceIn(0, INITIAL_COUNTDOWN_SECONDS)
             override fun run() {
-                countdownSeconds--
-                if (countdownSeconds >= 0) {
-                    updateCountdown(countdownSeconds)
+                remaining--
+                if (remaining >= 0) {
+                    updateCountdownDisplay(remaining)
                     countdownHandler?.postDelayed(this, 1000L)
                 }
             }
@@ -134,36 +138,43 @@ class QesOverlayService : Service() {
     }
 
     private fun showFallbackNotification() {
-        val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("QES Signature Armed")
-            .setContentText("Verify transaction on Smart-ID app. Press VOLUME DOWN to authorize.")
-            .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setOngoing(true)
-            .build()
-        notificationManager.notify(FALLBACK_NOTIFICATION_ID, notification)
+        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        nm.notify(
+            FALLBACK_NOTIFICATION_ID,
+            NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle(getString(R.string.qes_overlay_title))
+                .setContentText(getString(R.string.qes_overlay_authorize_hint))
+                .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setOngoing(true)
+                .build()
+        )
         Log.w(TAG, "Overlay not available, showing notification fallback")
+    }
+
+    private fun cancelFallbackNotification() {
+        (getSystemService(NOTIFICATION_SERVICE) as? NotificationManager)
+            ?.cancel(FALLBACK_NOTIFICATION_ID)
     }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "QES Overlay Service",
+                getString(R.string.qes_notification_channel_name),
                 NotificationManager.IMPORTANCE_LOW,
             ).apply {
-                description = "Required for overlay foreground service"
+                description = getString(R.string.qes_notification_channel_desc)
             }
-            val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.createNotificationChannel(channel)
+            (getSystemService(NOTIFICATION_SERVICE) as NotificationManager)
+                .createNotificationChannel(channel)
         }
     }
 
     private fun buildNotification(): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("SmartID Vault")
-            .setContentText("QES signature service active")
+            .setContentTitle(getString(R.string.app_name))
+            .setContentText(getString(R.string.qes_notification_active_text))
             .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
@@ -175,6 +186,7 @@ class QesOverlayService : Service() {
         private const val CHANNEL_ID = "qes_overlay"
         private const val NOTIFICATION_ID = 1001
         private const val FALLBACK_NOTIFICATION_ID = 1002
+        private const val INITIAL_COUNTDOWN_SECONDS = 30
 
         const val ACTION_SHOW = "org.smartid.vault.action.SHOW_OVERLAY"
         const val ACTION_DISMISS = "org.smartid.vault.action.DISMISS_OVERLAY"
@@ -182,21 +194,24 @@ class QesOverlayService : Service() {
         const val EXTRA_SECONDS = "seconds"
 
         fun show(context: Context) {
-            val intent = Intent(context, QesOverlayService::class.java).apply { action = ACTION_SHOW }
-            context.startForegroundService(intent)
+            context.startForegroundService(
+                Intent(context, QesOverlayService::class.java).apply { action = ACTION_SHOW }
+            )
         }
 
         fun dismiss(context: Context) {
-            val intent = Intent(context, QesOverlayService::class.java).apply { action = ACTION_DISMISS }
-            context.startService(intent)
+            context.startService(
+                Intent(context, QesOverlayService::class.java).apply { action = ACTION_DISMISS }
+            )
         }
 
         fun updateCountdown(context: Context, seconds: Int) {
-            val intent = Intent(context, QesOverlayService::class.java).apply {
-                action = ACTION_UPDATE_COUNTDOWN
-                putExtra(EXTRA_SECONDS, seconds)
-            }
-            context.startService(intent)
+            context.startService(
+                Intent(context, QesOverlayService::class.java).apply {
+                    action = ACTION_UPDATE_COUNTDOWN
+                    putExtra(EXTRA_SECONDS, seconds)
+                }
+            )
         }
     }
 }

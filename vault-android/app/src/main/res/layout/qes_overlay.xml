@@ -10,7 +10,7 @@
         android:id="@+id/overlay_title"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="QES SIGNATURE ARMED"
+        android:text="@string/qes_overlay_title"
         android:textColor="#FFCC00"
         android:textSize="15sp"
         android:textStyle="bold" />
@@ -19,7 +19,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
-        android:text="Verify transaction on Smart-ID app"
+        android:text="@string/qes_overlay_subtitle"
         android:textColor="#FFFFFF"
         android:textSize="12sp" />
 
@@ -28,7 +28,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        android:text="Expires in: 30s"
+        android:text="@string/qes_overlay_countdown_default"
         android:textColor="#FFCC00"
         android:textSize="13sp" />
 
@@ -36,7 +36,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        android:text="VOLUME DOWN to authorize"
+        android:text="@string/qes_overlay_authorize_hint"
         android:textColor="#FFFFFF"
         android:textSize="12sp" />
 
@@ -44,7 +44,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="2dp"
-        android:text="VOLUME UP to cancel"
+        android:text="@string/qes_overlay_cancel_hint"
         android:textColor="#AAAAAA"
         android:textSize="12sp" />
 

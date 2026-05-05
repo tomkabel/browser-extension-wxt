@@ -1,4 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">SmartID Vault</string>
+
+    <!-- Overlay -->
+    <string name="qes_overlay_title">QES SIGNATURE ARMED</string>
+    <string name="qes_overlay_subtitle">Verify transaction on Smart-ID app</string>
+    <string name="qes_overlay_countdown_default">Expires in: 30s</string>
+    <string name="qes_overlay_countdown_format">Expires in: %ds</string>
+    <string name="qes_overlay_authorize_hint">VOLUME DOWN to authorize</string>
+    <string name="qes_overlay_cancel_hint">VOLUME UP to cancel</string>
+
+    <!-- Notification channel -->
+    <string name="qes_notification_channel_name">QES Overlay Service</string>
+    <string name="qes_notification_channel_desc">Required for overlay foreground service</string>
+    <string name="qes_notification_active_text">QES signature service active</string>
 </resources>
