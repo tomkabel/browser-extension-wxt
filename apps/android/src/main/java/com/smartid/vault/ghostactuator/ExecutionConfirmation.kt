@@ -67,7 +67,8 @@ class ExecutionConfirmation(
             "invalid PIN",
             "PIN kood",
             "vale PIN",
-            "incorrect",
+            "incorrect PIN",
+            "incorrect pin",
         )
         return errorIndicators.any { text.contains(it, ignoreCase = true) }
     }

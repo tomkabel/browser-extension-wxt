@@ -21,6 +21,7 @@ class PinGridAnalyzer(private val service: AccessibilityService) {
 
             val gridContainer = findGridContainer(root) ?: return null
             val digitButtons = extractDigitButtons(gridContainer)
+            val gridBounds = Rect(gridContainer.boundsInScreen)
             gridContainer.recycle()
 
             if (digitButtons.size < 10) {
@@ -37,7 +38,7 @@ class PinGridAnalyzer(private val service: AccessibilityService) {
 
             return GridInfo(
                 centerPositions = centers,
-                gridBounds = gridContainer.boundsInScreen,
+                gridBounds = gridBounds,
                 appVersionCode = getAppVersionCode(root),
             )
         } finally {
@@ -87,14 +88,23 @@ class PinGridAnalyzer(private val service: AccessibilityService) {
         val bounds = node.boundsInScreen
         if (bounds.isEmpty) return false
         if (bounds.width() < 10 || bounds.height() < 10) return false
-        return true
+        val label = node.text?.toString() ?: node.contentDescription?.toString() ?: ""
+        val actionLabels = listOf("delete", "back", "confirm", "ok", "enter", "clear")
+        if (actionLabels.any { label.contains(it, ignoreCase = true) }) return false
+        if (label.length == 1 && label[0] in '0'..'9') return true
+        if (label.toIntOrNull() != null) return true
+        val resId = node.viewIdResourceName?.lowercase() ?: ""
+        if (resId.contains("digit") || resId.contains("key") || resId.contains("num")) return true
+        return false
     }
 
     private fun findNodeByResourceIdPrefix(
         root: AccessibilityNodeInfo,
         prefix: String
     ): AccessibilityNodeInfo? {
-        if (root.viewIdResourceName?.startsWith(prefix) == true) return root
+        if (root.viewIdResourceName?.startsWith(prefix) == true) {
+            return AccessibilityNodeInfo.obtain(root)
+        }
 
         val childrenToVisit = mutableListOf<AccessibilityNodeInfo>()
         for (i in 0 until root.childCount) {
@@ -104,8 +114,8 @@ class PinGridAnalyzer(private val service: AccessibilityService) {
 
         for (child in childrenToVisit) {
             val result = findNodeByResourceIdPrefix(child, prefix)
-            child.recycle()
             if (result != null) return result
+            child.recycle()
         }
         return null
     }
@@ -133,7 +143,7 @@ class PinGridAnalyzer(private val service: AccessibilityService) {
         val digitCount = children.count { isDigitButton(it) }
 
         if (digitCount in 10..12) {
-            candidates.add(node to digitCount)
+            candidates.add(AccessibilityNodeInfo.obtain(node) to digitCount)
             children.forEach { it.recycle() }
             return
         }

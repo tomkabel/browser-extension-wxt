@@ -4,7 +4,9 @@ import android.app.KeyguardManager
 import android.content.Context
 import android.os.PowerManager
 import android.os.SystemClock
+import android.util.Log
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.Executors
 import java.util.concurrent.ThreadLocalRandom
 import java.util.concurrent.TimeUnit
 
@@ -17,9 +19,14 @@ class ErrorRecovery(private val context: Context) {
     )
 
     private companion object {
+        private const val TAG = "ErrorRecovery"
         private const val SCREEN_CHECK_INTERVAL_MS = 500L
         private const val SCREEN_CHECK_MAX_RETRIES = 2
         private const val COORDINATE_JITTER_PX = 5f
+    }
+
+    private val scheduler = Executors.newSingleThreadScheduledExecutor { r ->
+        Thread(r, "ScreenCheckScheduler").apply { isDaemon = true }
     }
 
     fun executeWithRetry(
@@ -39,12 +46,22 @@ class ErrorRecovery(private val context: Context) {
     }
 
     private fun checkScreenReady(options: GestureOptions): CompletableFuture<Boolean> {
-        return CompletableFuture.supplyAsync {
-            for (attempt in 0..SCREEN_CHECK_MAX_RETRIES) {
-                if (isScreenReady()) return@supplyAsync true
-                SystemClock.sleep(SCREEN_CHECK_INTERVAL_MS)
-            }
-            false
+        val future = CompletableFuture<Boolean>()
+        pollScreenReady(0, future)
+        return future
+    }
+
+    private fun pollScreenReady(attempt: Int, future: CompletableFuture<Boolean>) {
+        if (isScreenReady()) {
+            future.complete(true)
+        } else if (attempt >= SCREEN_CHECK_MAX_RETRIES) {
+            future.complete(false)
+        } else {
+            scheduler.schedule(
+                { pollScreenReady(attempt + 1, future) },
+                SCREEN_CHECK_INTERVAL_MS,
+                TimeUnit.MILLISECONDS,
+            )
         }
     }
 
@@ -71,6 +88,14 @@ class ErrorRecovery(private val context: Context) {
         }
 
         return injectFn(adjustedCoords)
+            .handle<Boolean> { result, error ->
+                if (error != null) {
+                    Log.w(TAG, "Injection attempt $attempt failed", error)
+                    false
+                } else {
+                    result
+                }
+            }
             .thenCompose { success ->
                 if (success) {
                     CompletableFuture.completedFuture(
@@ -87,9 +112,6 @@ class ErrorRecovery(private val context: Context) {
                         RetryResult(false, adjustedCoords, attempt + 1)
                     )
                 }
-            }
-            .exceptionally { _ ->
-                RetryResult(false, adjustedCoords, attempt + 1)
             }
     }
 
