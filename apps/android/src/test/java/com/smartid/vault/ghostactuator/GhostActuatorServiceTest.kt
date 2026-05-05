@@ -1,18 +1,19 @@
 package com.smartid.vault.ghostactuator
 
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.util.concurrent.CompletableFuture
 
 class GhostActuatorServiceTest {
 
     @Test
-    fun `gesture options loads defaults from preferences`() {
+    fun `gesture options loads defaults`() {
         val options = GestureOptions()
 
-        assert(options.tapDurationMs == 50L) { "Default tap duration should be 50ms" }
-        assert(options.interTapDelayMs == 100L) { "Default inter-tap delay should be 100ms" }
-        assert(options.retryDelayMs == 500L) { "Default retry delay should be 500ms" }
-        assert(options.maxRetries == 2) { "Default max retries should be 2" }
+        assertEquals("Default tap duration should be 50ms", 50L, options.tapDurationMs)
+        assertEquals("Default inter-tap delay should be 100ms", 100L, options.interTapDelayMs)
+        assertEquals("Default retry delay should be 500ms", 500L, options.retryDelayMs)
+        assertEquals("Default max retries should be 2", 2, options.maxRetries)
     }
 
     @Test
@@ -24,25 +25,16 @@ class GhostActuatorServiceTest {
 
         val adapted = options.withAdaptiveTiming()
 
-        assert(adapted.tapDurationMs >= options.tapDurationMs) {
-            "Adaptive timing should not decrease tap duration"
-        }
-        assert(adapted.interTapDelayMs >= options.interTapDelayMs) {
-            "Adaptive timing should not decrease inter-tap delay"
-        }
+        assertTrue("Adaptive timing should not decrease tap duration",
+            adapted.tapDurationMs >= options.tapDurationMs)
+        assertTrue("Adaptive timing should not decrease inter-tap delay",
+            adapted.interTapDelayMs >= options.interTapDelayMs)
     }
 
     @Test
     fun `error recovery adjusts coordinates on retry`() {
         val coords = floatArrayOf(100f, 200f, 300f, 400f)
-
-        val retry1 = floatArrayOf(
-            coords[0], coords[1], coords[2], coords[3],
-        )
-
-        assert(retry1.size == coords.size) {
-            "Coordinate count should remain the same"
-        }
+        assertEquals("Coordinate count should remain the same", 4, coords.size)
     }
 
     @Test
@@ -55,8 +47,8 @@ class GhostActuatorServiceTest {
         val bounds = android.graphics.Rect(100, 300, 500, 500)
         val info = GridInfo(positions, bounds, 12345)
 
-        assert(info.centerPositions.size == 3) { "Should hold 3 positions" }
-        assert(info.centerPositions[0] == Pair(150f, 350f)) { "First digit should be at (150, 350)" }
-        assert(info.appVersionCode == 12345) { "Should store app version code" }
+        assertEquals("Should hold 3 positions", 3, info.centerPositions.size)
+        assertEquals("First digit should be at (150, 350)", Pair(150f, 350f), info.centerPositions[0])
+        assertEquals("Should store app version code", 12345, info.appVersionCode)
     }
 }

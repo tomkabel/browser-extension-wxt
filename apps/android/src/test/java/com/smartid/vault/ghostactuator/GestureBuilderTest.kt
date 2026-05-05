@@ -1,5 +1,7 @@
 package com.smartid.vault.ghostactuator
 
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GestureBuilderTest {
@@ -13,12 +15,9 @@ class GestureBuilderTest {
 
         val built = builder.build(coords)
 
-        assert(built.gesture.strokeCount == 1) {
-            "Expected 1 stroke, got ${built.gesture.strokeCount}"
-        }
-        assert(built.totalDurationMs == defaultOptions.tapDurationMs) {
-            "Expected ${defaultOptions.tapDurationMs}ms, got ${built.totalDurationMs}ms"
-        }
+        assertEquals("Expected 1 stroke", 1, built.gesture.strokeCount)
+        assertEquals("Duration should match default tap duration",
+            defaultOptions.tapDurationMs, built.totalDurationMs)
     }
 
     @Test
@@ -33,15 +32,10 @@ class GestureBuilderTest {
 
         val built = builder.build(coords)
 
-        assert(built.gesture.strokeCount == 4) {
-            "Expected 4 strokes for 4-digit PIN, got ${built.gesture.strokeCount}"
-        }
+        assertEquals("Expected 4 strokes for 4-digit PIN", 4, built.gesture.strokeCount)
 
-        val expectedDuration =
-            4 * defaultOptions.tapDurationMs + 3 * defaultOptions.interTapDelayMs
-        assert(built.totalDurationMs == expectedDuration) {
-            "Expected ${expectedDuration}ms, got ${built.totalDurationMs}ms"
-        }
+        val expectedDuration = 4 * defaultOptions.tapDurationMs + 3 * defaultOptions.interTapDelayMs
+        assertEquals("Duration should match cumulative timing", expectedDuration, built.totalDurationMs)
     }
 
     @Test
@@ -56,9 +50,7 @@ class GestureBuilderTest {
         val built = builder.build(coords)
 
         val expectedDuration = 2 * 80L + 1 * 150L
-        assert(built.totalDurationMs == expectedDuration) {
-            "Expected ${expectedDuration}ms with custom timing, got ${built.totalDurationMs}ms"
-        }
+        assertEquals("Duration should use custom timing", expectedDuration, built.totalDurationMs)
     }
 
     @Test(expected = IllegalArgumentException::class)
