@@ -1,4 +1,5 @@
 import { browser } from 'wxt/browser';
+import { isRetryableError, withRetry } from '~/lib/retry';
 import { TRANSPORT_CONFIG } from './config';
 import type { Transport, TransportType } from './types';
 import { UsbTransport } from './UsbTransport';
@@ -47,24 +48,31 @@ export class TransportManager {
     });
   }
 
+  async selectTransport(): Promise<Transport> {
+    if (this.activeTransport) return this.activeTransport;
+
+    const transport = await this.discoverTransport('Transport selected');
+    if (!transport) {
+      throw new Error('No transport available');
+    }
+    return transport;
+  }
+
+  async monitorQuality(transport: Transport): Promise<{ latencyMs: number; healthy: boolean }> {
+    try {
+      const latencyMs = await transport.getLatency();
+      const healthy = latencyMs >= 0 && latencyMs < TRANSPORT_CONFIG.maxHealthyLatencyMs;
+      return { latencyMs, healthy };
+    } catch {
+      return { latencyMs: -1, healthy: false };
+    }
+  }
+
   async initialize(): Promise<void> {
     if (this.connecting) return;
     this.connecting = true;
     try {
-      this.usbAvailable = await this.checkUsbAvailability();
-
-      if (this.usbAvailable) {
-        try {
-          await this.usbTransport.connect();
-          this.activeTransport = this.usbTransport;
-          this.emitChange(null, 'usb', 'USB available on init');
-        } catch {
-          await this.connectWebRtc();
-        }
-      } else {
-        await this.connectWebRtc();
-      }
-
+      await this.discoverTransport('Available on init');
       this.startUsbPolling();
     } finally {
       this.connecting = false;
@@ -140,7 +148,7 @@ export class TransportManager {
       if (current && current.type !== 'webrtc') {
         await current.disconnect();
       }
-      await this.connectWebRtc();
+      await this.connectWebRtcWithRetry();
       if (this.activeTransport?.type === 'webrtc') {
         this.emitChange(previous, 'webrtc', reason);
         return true;
@@ -151,14 +159,42 @@ export class TransportManager {
     return false;
   }
 
-  private async connectWebRtc(): Promise<void> {
-    try {
-      await this.webrtcTransport.connect();
+  private async discoverTransport(reason: string): Promise<Transport | null> {
+    this.usbAvailable = await this.checkUsbAvailability();
+
+    if (this.usbAvailable) {
+      try {
+        await this.usbTransport.connect();
+        this.activeTransport = this.usbTransport;
+        this.emitChange(null, 'usb', reason);
+        return this.usbTransport;
+      } catch {
+        // USB available but connect failed — fall through to WebRTC
+      }
+    }
+
+    await this.connectWebRtcWithRetry();
+    if (this.activeTransport) {
+      this.emitChange(null, this.activeTransport.type, reason);
+      return this.activeTransport;
+    }
+
+    return null;
+  }
+
+  private async connectWebRtcWithRetry(): Promise<void> {
+    const result = await withRetry(() => this.webrtcTransport.connect(), {
+      maxAttempts: 3,
+      baseDelayMs: 1000,
+      maxDelayMs: 10000,
+      shouldRetry: isRetryableError,
+    });
+    if (result.success) {
       this.activeTransport = this.webrtcTransport;
       if (this.messageCallback) {
         this.webrtcTransport.onMessage(this.messageCallback);
       }
-    } catch {
+    } else {
       this.activeTransport = null;
     }
   }
