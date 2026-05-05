@@ -193,3 +193,20 @@ export interface AttestedCodePayload {
   sessionId?: string;
   timestamp?: number;
 }
+
+export const PHASE_ORDER = [
+  'phase1',
+  'phase1.5',
+  'phase2a',
+  'phase2b',
+  'phase2c',
+  'full-v6',
+] as const;
+
+export type MigrationPhase = (typeof PHASE_ORDER)[number];
+
+export interface PhaseGate {
+  feature: string;
+  minimumPhase: MigrationPhase;
+  description: string;
+}
