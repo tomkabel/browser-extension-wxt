@@ -14,6 +14,17 @@ let cachedDevices: DeviceRecord[] | null = null;
 let cachedActiveId: string | null = null;
 let initialized = false;
 
+let registryChain: Promise<unknown> = Promise.resolve();
+
+function withRegistryLock<T>(fn: () => Promise<T>): Promise<T> {
+  const task = registryChain.then(fn, fn);
+  registryChain = task.then(
+    () => {},
+    () => {},
+  );
+  return task;
+}
+
 function deviceToSerializable(d: DeviceRecord) {
   return {
     deviceId: d.deviceId,
@@ -101,42 +112,46 @@ async function persist(devices: DeviceRecord[], activeId: string | null): Promis
 }
 
 export async function addDevice(record: DeviceRecord): Promise<void> {
-  await ensureLoaded();
-  const devices = cachedDevices!;
+  return withRegistryLock(async () => {
+    await ensureLoaded();
+    const devices = cachedDevices!;
 
-  if (devices.length >= MAX_DEVICES && !devices.some((d) => d.deviceId === record.deviceId)) {
-    throw new Error(`Maximum of ${MAX_DEVICES} devices reached. Remove a device first.`);
-  }
+    if (devices.length >= MAX_DEVICES && !devices.some((d) => d.deviceId === record.deviceId)) {
+      throw new Error(`Maximum of ${MAX_DEVICES} devices reached. Remove a device first.`);
+    }
 
-  const existing = devices.findIndex((d) => d.deviceId === record.deviceId);
-  if (existing !== -1) {
-    devices[existing] = record;
-  } else {
-    devices.push(record);
-  }
+    const existing = devices.findIndex((d) => d.deviceId === record.deviceId);
+    const newDevices =
+      existing !== -1 ? devices.map((d, i) => (i === existing ? record : d)) : [...devices, record];
 
-  await persist(devices, cachedActiveId);
-  cachedDevices = devices;
-  log.info('[DeviceRegistry] Added device:', record.deviceId);
+    await persist(newDevices, cachedActiveId);
+    cachedDevices = newDevices;
+    log.info('[DeviceRegistry] Added device:', record.deviceId);
+  });
 }
 
 export async function removeDevice(deviceId: string): Promise<void> {
-  await ensureLoaded();
-  const devices = cachedDevices!;
-  const index = devices.findIndex((d) => d.deviceId === deviceId);
-  if (index === -1) {
-    throw new Error(`Device ${deviceId} not found`);
-  }
+  return withRegistryLock(async () => {
+    await ensureLoaded();
+    const devices = cachedDevices!;
+    const index = devices.findIndex((d) => d.deviceId === deviceId);
+    if (index === -1) {
+      throw new Error(`Device ${deviceId} not found`);
+    }
 
-  devices.splice(index, 1);
+    const newDevices = devices.filter((d) => d.deviceId !== deviceId);
+    const newActiveId =
+      cachedActiveId === deviceId
+        ? newDevices.length > 0
+          ? newDevices[0]!.deviceId
+          : null
+        : cachedActiveId;
 
-  if (cachedActiveId === deviceId) {
-    cachedActiveId = devices.length > 0 ? devices[0]!.deviceId : null;
-  }
-
-  await persist(devices, cachedActiveId);
-  cachedDevices = devices;
-  log.info('[DeviceRegistry] Removed device:', deviceId);
+    await persist(newDevices, newActiveId);
+    cachedDevices = newDevices;
+    cachedActiveId = newActiveId;
+    log.info('[DeviceRegistry] Removed device:', deviceId);
+  });
 }
 
 export async function getDevice(deviceId: string): Promise<DeviceRecord | undefined> {
@@ -150,17 +165,22 @@ export async function listDevices(): Promise<DeviceRecord[]> {
 }
 
 export async function setActiveDevice(deviceId: string): Promise<void> {
-  await ensureLoaded();
-  const devices = cachedDevices!;
-  const device = devices.find((d) => d.deviceId === deviceId);
-  if (!device) {
-    throw new Error(`Device ${deviceId} not found`);
-  }
+  return withRegistryLock(async () => {
+    await ensureLoaded();
+    const devices = cachedDevices!;
+    const device = devices.find((d) => d.deviceId === deviceId);
+    if (!device) {
+      throw new Error(`Device ${deviceId} not found`);
+    }
 
-  device.lastSeen = Date.now();
-  cachedActiveId = deviceId;
-  await persist(devices, cachedActiveId);
-  log.info('[DeviceRegistry] Active device set:', deviceId);
+    const newDevices = devices.map((d) =>
+      d.deviceId === deviceId ? { ...d, lastSeen: Date.now() } : d,
+    );
+    await persist(newDevices, deviceId);
+    cachedDevices = newDevices;
+    cachedActiveId = deviceId;
+    log.info('[DeviceRegistry] Active device set:', deviceId);
+  });
 }
 
 export async function getActiveDevice(): Promise<DeviceRecord | undefined> {
@@ -175,12 +195,17 @@ export async function getActiveDeviceId(): Promise<string | null> {
 }
 
 export async function updateDeviceLastSeen(deviceId: string): Promise<void> {
-  await ensureLoaded();
-  const devices = cachedDevices!;
-  const device = devices.find((d) => d.deviceId === deviceId);
-  if (!device) return;
-  device.lastSeen = Date.now();
-  await persist(devices, cachedActiveId);
+  return withRegistryLock(async () => {
+    await ensureLoaded();
+    const devices = cachedDevices!;
+    const device = devices.find((d) => d.deviceId === deviceId);
+    if (!device) return;
+    const newDevices = devices.map((d) =>
+      d.deviceId === deviceId ? { ...d, lastSeen: Date.now() } : d,
+    );
+    await persist(newDevices, cachedActiveId);
+    cachedDevices = newDevices;
+  });
 }
 
 export async function reconcileDeviceRegistry(): Promise<void> {
@@ -201,43 +226,46 @@ export async function canAddDevice(): Promise<boolean> {
 }
 
 export async function revokeDevice(deviceId: string): Promise<void> {
-  await ensureLoaded();
-  const devices = cachedDevices!;
-  const device = devices.find((d) => d.deviceId === deviceId);
-  if (!device) {
-    throw new Error(`Device ${deviceId} not found`);
-  }
+  return withRegistryLock(async () => {
+    await ensureLoaded();
+    const devices = cachedDevices!;
+    const device = devices.find((d) => d.deviceId === deviceId);
+    if (!device) {
+      throw new Error(`Device ${deviceId} not found`);
+    }
 
-  const newKeyPair = generateKeyPair();
-  const serialized = serializeKeyPair(newKeyPair);
+    const newKeyPair = generateKeyPair();
+    const serialized = serializeKeyPair(newKeyPair);
 
-  await browser.storage.session.set({
-    [PAIRING_KEY]: {
-      localStaticKey: serialized,
-      remoteStaticPublicKey: [],
-      handshakePattern: 'XX',
-      pairedAt: Date.now(),
-    },
+    await browser.storage.session.set({
+      [PAIRING_KEY]: {
+        localStaticKey: serialized,
+        remoteStaticPublicKey: [],
+        handshakePattern: 'XX',
+        pairedAt: Date.now(),
+      },
+    });
+
+    const newDevices = devices.filter((d) => d.deviceId !== deviceId);
+    const newActiveId =
+      cachedActiveId === deviceId
+        ? newDevices.length > 0
+          ? newDevices[0]!.deviceId
+          : null
+        : cachedActiveId;
+
+    await persist(newDevices, newActiveId);
+    await browser.storage.session.remove(CMD_CLIENT_KEY);
+    cachedDevices = newDevices;
+    cachedActiveId = newActiveId;
+
+    broadcastRevocation(deviceId).catch(async (err) => {
+      log.warn('[DeviceRegistry] Revocation broadcast failed, caching for retry:', err);
+      await cacheRevocationForLater(deviceId).catch(() => {});
+    });
+
+    log.info('[DeviceRegistry] Revoked device:', deviceId, '- keypair rotated');
   });
-
-  const index = devices.findIndex((d) => d.deviceId === deviceId);
-  if (index !== -1) {
-    devices.splice(index, 1);
-  }
-
-  if (cachedActiveId === deviceId) {
-    cachedActiveId = devices.length > 0 ? devices[0]!.deviceId : null;
-  }
-
-  await persist(devices, cachedActiveId);
-  await browser.storage.session.remove(CMD_CLIENT_KEY);
-
-  broadcastRevocation(deviceId).catch(async (err) => {
-    log.warn('[DeviceRegistry] Revocation broadcast failed, caching for retry:', err);
-    await cacheRevocationForLater(deviceId).catch(() => {});
-  });
-
-  log.info('[DeviceRegistry] Revoked device:', deviceId, '- keypair rotated');
 }
 
 function getSignalingUrl(): string | null {
