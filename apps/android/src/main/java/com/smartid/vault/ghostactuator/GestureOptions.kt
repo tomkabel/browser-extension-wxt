@@ -21,20 +21,20 @@ data class GestureOptions(
         fun fromPreferences(context: Context): GestureOptions {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             return GestureOptions(
-                tapDurationMs = prefs.getLong(KEY_TAP_DURATION, 50L).coerceIn(10L, 500L),
-                interTapDelayMs = prefs.getLong(KEY_INTER_TAP_DELAY, 100L).coerceIn(20L, 1000L),
-                retryDelayMs = prefs.getLong(KEY_RETRY_DELAY, 500L).coerceIn(100L, 3000L),
-                maxRetries = prefs.getInt(KEY_MAX_RETRIES, 2).coerceIn(0, 10),
+                tapDurationMs = prefs.getString(KEY_TAP_DURATION, "50")?.toLongOrNull()?.coerceIn(10L, 500L) ?: 50L,
+                interTapDelayMs = prefs.getString(KEY_INTER_TAP_DELAY, "100")?.toLongOrNull()?.coerceIn(20L, 1000L) ?: 100L,
+                retryDelayMs = prefs.getString(KEY_RETRY_DELAY, "500")?.toLongOrNull()?.coerceIn(100L, 3000L) ?: 500L,
+                maxRetries = prefs.getString(KEY_MAX_RETRIES, "2")?.toIntOrNull()?.coerceIn(0, 10) ?: 2,
             )
         }
 
         fun saveToPreferences(context: Context, options: GestureOptions) {
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 .edit()
-                .putLong(KEY_TAP_DURATION, options.tapDurationMs)
-                .putLong(KEY_INTER_TAP_DELAY, options.interTapDelayMs)
-                .putLong(KEY_RETRY_DELAY, options.retryDelayMs)
-                .putInt(KEY_MAX_RETRIES, options.maxRetries)
+                .putString(KEY_TAP_DURATION, options.tapDurationMs.toString())
+                .putString(KEY_INTER_TAP_DELAY, options.interTapDelayMs.toString())
+                .putString(KEY_RETRY_DELAY, options.retryDelayMs.toString())
+                .putString(KEY_MAX_RETRIES, options.maxRetries.toString())
                 .apply()
         }
     }

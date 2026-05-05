@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.PowerManager
 import android.os.SystemClock
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ThreadLocalRandom
 import java.util.concurrent.TimeUnit
 
 class ErrorRecovery(private val context: Context) {
@@ -96,13 +97,10 @@ class ErrorRecovery(private val context: Context) {
         coordinates: FloatArray,
         attempt: Int,
     ): FloatArray {
-        val seed = attempt * 7 + 13
-        val jitter = { i: Int ->
-            ((seed * (i + 1) * 3 + 5) % 11 - 5) * COORDINATE_JITTER_PX / 5f
-        }
-
+        val rng = ThreadLocalRandom.current()
         return FloatArray(coordinates.size) { i ->
-            coordinates[i] + jitter(i)
+            val jitter = rng.nextFloat() * 2 * COORDINATE_JITTER_PX - COORDINATE_JITTER_PX
+            coordinates[i] + jitter
         }
     }
 }

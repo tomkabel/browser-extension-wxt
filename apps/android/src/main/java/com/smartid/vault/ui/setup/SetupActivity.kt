@@ -30,6 +30,7 @@ class SetupActivity : AppCompatActivity() {
     }
 
     private fun onServiceEnabled() {
-        GestureOptions.fromPreferences(this)
+        val options = GestureOptions.fromPreferences(this)
+        GestureOptions.saveToPreferences(this, options)
     }
 }

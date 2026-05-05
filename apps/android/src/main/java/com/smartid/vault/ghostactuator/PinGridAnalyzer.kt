@@ -16,31 +16,33 @@ class PinGridAnalyzer(private val service: AccessibilityService) {
 
     fun analyze(): GridInfo? {
         val root = service.rootInActiveWindow ?: return null
-        if (root.packageName !in smartIdPackages) return null
+        try {
+            if (root.packageName !in smartIdPackages) return null
 
-        val gridContainer = findGridContainer(root) ?: return null
-        val digitButtons = extractDigitButtons(gridContainer)
-        if (digitButtons.size < 10) return null
+            val gridContainer = findGridContainer(root) ?: return null
+            val digitButtons = extractDigitButtons(gridContainer)
+            gridContainer.recycle()
 
-        val sorted = digitButtons.sortedBy {
-            it.boundsInScreen.top * 10000L + it.boundsInScreen.left
-        }
+            if (digitButtons.size < 10) {
+                digitButtons.forEach { it.recycle() }
+                return null
+            }
 
-        val centers = sorted.map {
-            Pair(
-                it.boundsInScreen.exactCenterX(),
-                it.boundsInScreen.exactCenterY()
+            val sorted = digitButtons.sortedBy {
+                it.boundsInScreen.top * 10000L + it.boundsInScreen.left
+            }
+
+            val centers = sorted.map { (it.boundsInScreen.exactCenterX() to it.boundsInScreen.exactCenterY()) }
+            sorted.forEach { it.recycle() }
+
+            return GridInfo(
+                centerPositions = centers,
+                gridBounds = gridContainer.boundsInScreen,
+                appVersionCode = getAppVersionCode(root),
             )
+        } finally {
+            root.recycle()
         }
-
-        val info = GridInfo(
-            centerPositions = centers,
-            gridBounds = gridContainer.boundsInScreen,
-            appVersionCode = getAppVersionCode(root),
-        )
-
-        root.recycle()
-        return info
     }
 
     fun analyzeWithFallback(): GridInfo? {
@@ -49,10 +51,10 @@ class PinGridAnalyzer(private val service: AccessibilityService) {
 
     fun findGridContainer(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
         val resourceIdPatterns = listOf(
-            "com.smartid:id/keypad",
-            "com.smartid:id/grid",
-            "com.smartid:id/pin_container",
-            "com.smartid:id/digit_grid",
+            "ee.sk.smartid:id/keypad",
+            "ee.sk.smartid:id/grid",
+            "ee.sk.smartid:id/pin_container",
+            "ee.sk.smartid:id/digit_grid",
         )
 
         for (pattern in resourceIdPatterns) {
@@ -94,14 +96,16 @@ class PinGridAnalyzer(private val service: AccessibilityService) {
     ): AccessibilityNodeInfo? {
         if (root.viewIdResourceName?.startsWith(prefix) == true) return root
 
+        val childrenToVisit = mutableListOf<AccessibilityNodeInfo>()
         for (i in 0 until root.childCount) {
             val child = root.getChild(i) ?: continue
+            childrenToVisit.add(child)
+        }
+
+        for (child in childrenToVisit) {
             val result = findNodeByResourceIdPrefix(child, prefix)
-            if (result != null) {
-                if (result != child) child.recycle()
-                return result
-            }
             child.recycle()
+            if (result != null) return result
         }
         return null
     }
@@ -109,18 +113,15 @@ class PinGridAnalyzer(private val service: AccessibilityService) {
     private fun findGridByHeuristic(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
         val candidates = mutableListOf<Pair<AccessibilityNodeInfo, Int>>()
         findCandidateGrids(root, candidates)
-
         if (candidates.isEmpty()) return null
 
         candidates.sortByDescending { (_, count) -> count }
-
         val (best, _) = candidates.first()
         for (i in 1 until candidates.size) {
             if (candidates[i].first != best) {
                 candidates[i].first.recycle()
             }
         }
-
         return best
     }
 

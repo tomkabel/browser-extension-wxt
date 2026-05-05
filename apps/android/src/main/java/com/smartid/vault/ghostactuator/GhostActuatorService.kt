@@ -6,9 +6,8 @@ import android.view.accessibility.GestureDescription
 import com.smartid.vault.audit.AuditLogger
 import com.smartid.vault.ghostactuator.orchestrator.OrchestratorInterface
 import com.smartid.vault.ghostactuator.orchestrator.PinError
-import com.smartid.vault.ui.setup.AccessibilitySetupGuide
-import com.smartid.vault.ui.setup.ServiceNotificationManager
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.atomic.AtomicReference
 
 class GhostActuatorService : AccessibilityService(), OrchestratorInterface {
 
@@ -21,8 +20,12 @@ class GhostActuatorService : AccessibilityService(), OrchestratorInterface {
     private lateinit var setupGuide: AccessibilitySetupGuide
     private lateinit var notificationManager: ServiceNotificationManager
 
-    private var pendingGestureFuture: CompletableFuture<Boolean>? = null
-    private var gestureCallback: ((Boolean) -> Unit)? = null
+    private val pendingGestureState = AtomicReference<GestureState>()
+
+    private data class GestureState(
+        val future: CompletableFuture<Boolean>,
+        val callback: (Boolean) -> Unit,
+    )
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -52,17 +55,49 @@ class GhostActuatorService : AccessibilityService(), OrchestratorInterface {
         val opts = options ?: gestureOptions
         val future = CompletableFuture<Boolean>()
 
-        val targetPkg = rootInActiveWindow?.packageName?.toString()
-        if (targetPkg != "ee.sk.smartid") {
+        val callback: (Boolean) -> Unit = { success ->
+            future.complete(success)
+            pendingGestureState.set(null)
+        }
+
+        val newState = GestureState(future, callback)
+
+        val prev = pendingGestureState.getAndSet(newState)
+        if (prev != null && !prev.future.isDone) {
+            pendingGestureState.set(prev)
             future.complete(false)
             return future
         }
 
-        pendingGestureFuture = future
-        gestureCallback = { success -> future.complete(success) }
+        val targetPkg = rootInActiveWindow?.packageName?.toString()
+        if (targetPkg != "ee.sk.smartid") {
+            pendingGestureState.set(null)
+            future.complete(false)
+            return future
+        }
 
         val gestureBuilder = GestureBuilder(opts)
         val built = gestureBuilder.build(coordinates)
+
+        val dispatched = dispatchGesture(
+            built.gesture,
+            object : GestureResultCallback() {
+                override fun onCompleted(gestureDescription: GestureDescription?) {
+                    callback(true)
+                }
+
+                override fun onCancelled(gestureDescription: GestureDescription?) {
+                    callback(false)
+                }
+            },
+            null,
+        )
+
+        if (!dispatched) {
+            pendingGestureState.set(null)
+            callback(false)
+            return future
+        }
 
         executionConfirmation.expectConfirmation()
         auditLogger.log(
@@ -72,20 +107,6 @@ class GhostActuatorService : AccessibilityService(), OrchestratorInterface {
                 "strokes" to "${coordinates.size / 2}",
                 "duration_ms" to "${built.totalDurationMs}",
             ),
-        )
-
-        dispatchGesture(
-            built.gesture,
-            object : GestureResultCallback() {
-                override fun onCompleted(gestureDescription: GestureDescription?) {
-                    gestureCallback?.invoke(true)
-                }
-
-                override fun onCancelled(gestureDescription: GestureDescription?) {
-                    gestureCallback?.invoke(false)
-                }
-            },
-            null,
         )
 
         return future
@@ -120,9 +141,8 @@ class GhostActuatorService : AccessibilityService(), OrchestratorInterface {
     }
 
     override fun onInterrupt() {
-        pendingGestureFuture?.complete(false)
-        pendingGestureFuture = null
-        gestureCallback = null
+        val state = pendingGestureState.getAndSet(null)
+        state?.future?.complete(false)
     }
 
     override fun onPinEntrySuccess() {
@@ -143,9 +163,8 @@ class GhostActuatorService : AccessibilityService(), OrchestratorInterface {
     }
 
     private fun requestManualPhoneInteraction() {
-        pendingGestureFuture?.complete(false)
-        pendingGestureFuture = null
-        gestureCallback = null
+        val state = pendingGestureState.getAndSet(null)
+        state?.future?.complete(false)
     }
 
     private fun checkServiceStatus() {
@@ -156,6 +175,6 @@ class GhostActuatorService : AccessibilityService(), OrchestratorInterface {
 
     fun updateGestureOptions(options: GestureOptions) {
         gestureOptions = options.withAdaptiveTiming()
-        GestureOptions.saveToPreferences(this, options)
+        GestureOptions.saveToPreferences(this, gestureOptions)
     }
 }

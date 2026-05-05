@@ -6,4 +6,5 @@ enum class PinError {
     GESTURE_FAILED,
     SCREEN_NOT_READY,
     TIMEOUT,
+    MANUAL_ABORT,
 }

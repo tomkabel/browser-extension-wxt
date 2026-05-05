@@ -73,13 +73,14 @@ class ExecutionConfirmation(
     }
 
     fun abort() {
+        if (!pendingConfirmation) return
         pendingConfirmation = false
         auditLogger.log(
             "pin_entry",
             success = false,
             details = mapOf("reason" to "manual_abort"),
         )
-        orchestrator.onPinEntryFailure(PinError.TIMEOUT)
+        orchestrator.onPinEntryFailure(PinError.MANUAL_ABORT)
         orchestrator.requestFallbackToManualInteraction()
     }
 
