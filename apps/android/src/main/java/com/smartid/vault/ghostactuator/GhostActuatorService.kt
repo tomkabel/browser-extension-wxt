@@ -177,4 +177,9 @@ class GhostActuatorService : AccessibilityService(), OrchestratorInterface {
         gestureOptions = options.withAdaptiveTiming()
         GestureOptions.saveToPreferences(this, gestureOptions)
     }
+
+    override fun onDestroy() {
+        errorRecovery.close()
+        super.onDestroy()
+    }
 }

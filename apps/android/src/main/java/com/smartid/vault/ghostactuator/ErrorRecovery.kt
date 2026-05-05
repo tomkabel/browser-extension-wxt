@@ -3,7 +3,6 @@ package com.smartid.vault.ghostactuator
 import android.app.KeyguardManager
 import android.content.Context
 import android.os.PowerManager
-import android.os.SystemClock
 import android.util.Log
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executors
@@ -102,9 +101,13 @@ class ErrorRecovery(private val context: Context) {
                         RetryResult(true, adjustedCoords, attempt + 1)
                     )
                 } else if (attempt < options.maxRetries) {
-                    CompletableFuture.runAsync {
-                        SystemClock.sleep(options.retryDelayMs)
-                    }.thenCompose {
+                    val delayed = CompletableFuture<Unit>()
+                    scheduler.schedule(
+                        { delayed.complete(Unit) },
+                        options.retryDelayMs,
+                        TimeUnit.MILLISECONDS,
+                    )
+                    delayed.thenCompose {
                         attemptInjection(coordinates, options, injectFn, attempt + 1)
                     }
                 } else {
@@ -113,6 +116,18 @@ class ErrorRecovery(private val context: Context) {
                     )
                 }
             }
+    }
+
+    fun close() {
+        scheduler.shutdown()
+        try {
+            if (!scheduler.awaitTermination(1, TimeUnit.SECONDS)) {
+                scheduler.shutdownNow()
+            }
+        } catch (_: InterruptedException) {
+            scheduler.shutdownNow()
+            Thread.currentThread().interrupt()
+        }
     }
 
     fun adjustCoordinates(
