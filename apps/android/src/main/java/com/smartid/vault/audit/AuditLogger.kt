@@ -8,7 +8,21 @@ data class AuditEvent(
     val eventType: String,
     val success: Boolean,
     val details: Map<String, String> = emptyMap(),
-)
+) {
+    fun safeDetails(): Map<String, String> {
+        val redacted = mutableMapOf<String, String>()
+        for ((key, value) in details) {
+            redacted[key] = when {
+                key.contains("pin", ignoreCase = true) -> "***"
+                key.contains("token", ignoreCase = true) -> value.take(8) + "..."
+                key.contains("password", ignoreCase = true) -> "***"
+                value.length > 128 -> value.take(128) + "..."
+                else -> value
+            }
+        }
+        return redacted
+    }
+}
 
 class AuditLogger {
 
@@ -23,7 +37,8 @@ class AuditLogger {
         synchronized(events) {
             events.add(event)
         }
-        Log.i(TAG, "[${event.eventType}] success=$success details=$details")
+        val safe = event.safeDetails()
+        Log.i(TAG, "[${event.eventType}] success=$success details=$safe")
     }
 
     fun getRecent(limit: Int = 50): List<AuditEvent> {
