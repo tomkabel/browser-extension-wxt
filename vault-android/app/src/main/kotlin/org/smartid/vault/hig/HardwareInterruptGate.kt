@@ -8,6 +8,7 @@ import android.view.KeyEvent
 import org.smartid.vault.audit.AuditLogger
 import org.smartid.vault.audit.QesAuditEntry
 import org.smartid.vault.ghost.GhostActuatorBridge
+import org.smartid.vault.ghost.GhostActuatorService
 import org.smartid.vault.haptic.HapticNotifier
 import org.smartid.vault.overlay.QesOverlayService
 
@@ -16,10 +17,13 @@ class HardwareInterruptGate(
     private val hapticNotifier: HapticNotifier = HapticNotifier(context),
     private val auditLogger: AuditLogger = AuditLogger(context),
 ) {
+    companion object {
+        const val TIMEOUT_MS = 30_000L
+        private const val TAG = "HardwareInterruptGate"
+    }
 
     enum class State {
         IDLE,
-        ARMED,
         WAITING,
         RELEASED,
         CANCELLED,
@@ -36,13 +40,7 @@ class HardwareInterruptGate(
     private var zkTlsProofHash: String = ""
     private var webauthnAssertionHash: String = ""
     private var timeoutRunnable: Runnable? = null
-    private var bridgeCallbacksRegistered = false
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val timeoutMs = 30_000L
-
-    init {
-        registerBridgeCallbacks()
-    }
 
     fun arm(
         sessionId: String,
@@ -60,24 +58,22 @@ class HardwareInterruptGate(
         this.zkTlsProofHash = zkTlsProofHash
         this.webauthnAssertionHash = webauthnAssertionHash
 
-        state = State.ARMED
         armTimestamp = System.currentTimeMillis()
-        Log.i(TAG, "Transitioned to ARMED (session=$sessionId)")
+        Log.i(TAG, "Arming (session=$sessionId)")
 
         hapticNotifier.startSosHaptic()
-
         QesOverlayService.show(context)
 
         state = State.WAITING
         Log.i(TAG, "Transitioned to WAITING (session=$sessionId)")
 
+        registerBridgeCallbacks()
         startTimeout()
     }
 
     fun onKeyEvent(event: KeyEvent): Boolean {
         if (state != State.WAITING) {
-            val currentState = state
-            Log.d(TAG, "onKeyEvent ignored in state $currentState")
+            Log.d(TAG, "onKeyEvent ignored in state $state")
             return false
         }
 
@@ -90,15 +86,21 @@ class HardwareInterruptGate(
                 interruptTimestamp = System.currentTimeMillis()
                 state = State.RELEASED
                 Log.i(TAG, "Transitioned to RELEASED via Volume Down")
-                cancelTimeout()
                 hapticNotifier.stopSosHaptic()
                 QesOverlayService.dismiss(context)
-                releaseGhostActuator()
+
+                val bridgeOk = GhostActuatorBridge.executeSequence()
+                if (!bridgeOk) {
+                    GhostActuatorService.executeSequence(context)
+                }
+
+                cancelTimeout()
                 return true
             }
 
             KeyEvent.KEYCODE_VOLUME_UP -> {
                 interruptTimestamp = System.currentTimeMillis()
+                cancelTimeout()
                 transitionToCancelled("VOLUME_UP")
                 return true
             }
@@ -109,7 +111,7 @@ class HardwareInterruptGate(
 
     fun onGhostActuatorCompleted() {
         if (state != State.RELEASED) {
-            Log.w(TAG, "onGhostActuatorCompleted called in state $state (expected RELEASED)")
+            Log.d(TAG, "onGhostActuatorCompleted ignored in state $state")
             return
         }
 
@@ -117,19 +119,20 @@ class HardwareInterruptGate(
         state = State.EXECUTED
         Log.i(TAG, "Transitioned to EXECUTED")
 
-        val entry = QesAuditEntry(
-            sessionId = sessionId,
-            timestamp = System.currentTimeMillis(),
-            transactionHash = transactionHash,
-            zkTlsProofHash = zkTlsProofHash,
-            webauthnAssertionHash = webauthnAssertionHash,
-            armTimestamp = armTimestamp,
-            interruptType = "VOLUME_DOWN",
-            interruptTimestamp = interruptTimestamp,
-            actuationTimestamp = actuationTimestamp,
-            result = "COMPLETED",
+        auditLogger.logEntry(
+            QesAuditEntry(
+                sessionId = sessionId,
+                timestamp = System.currentTimeMillis(),
+                transactionHash = transactionHash,
+                zkTlsProofHash = zkTlsProofHash,
+                webauthnAssertionHash = webauthnAssertionHash,
+                armTimestamp = armTimestamp,
+                interruptType = "VOLUME_DOWN",
+                interruptTimestamp = interruptTimestamp,
+                actuationTimestamp = actuationTimestamp,
+                result = "COMPLETED",
+            )
         )
-        auditLogger.logEntry(entry)
 
         state = State.COMPLETED
         Log.i(TAG, "Transitioned to COMPLETED")
@@ -138,7 +141,8 @@ class HardwareInterruptGate(
     fun onGhostActuatorFailed(failedIndex: Int) {
         Log.w(TAG, "GhostActuator execution failed at tap $failedIndex")
         if (state == State.RELEASED) {
-            transitionToCancelled("EXECUTION_FAILED")
+            Log.w(TAG, "Actuator failure in RELEASED state — restarting safety timeout")
+            startTimeout()
         }
     }
 
@@ -178,14 +182,15 @@ class HardwareInterruptGate(
     }
 
     private fun startTimeout() {
+        timeoutRunnable?.let { mainHandler.removeCallbacks(it) }
         val runnable = Runnable {
-            if (state == State.WAITING) {
-                interruptTimestamp = 0L
+            if (state == State.WAITING || state == State.RELEASED) {
+                interruptTimestamp = if (state == State.RELEASED) interruptTimestamp else 0L
                 transitionToCancelled("TIMEOUT")
             }
         }
         timeoutRunnable = runnable
-        mainHandler.postDelayed(runnable, timeoutMs)
+        mainHandler.postDelayed(runnable, TIMEOUT_MS)
     }
 
     private fun cancelTimeout() {
@@ -193,16 +198,10 @@ class HardwareInterruptGate(
         timeoutRunnable = null
     }
 
-    private fun releaseGhostActuator() {
-        GhostActuatorBridge.executeSequence()
-        Log.i(TAG, "GhostActuator release signal sent via bridge")
-    }
-
     private fun registerBridgeCallbacks() {
-        if (bridgeCallbacksRegistered) return
         GhostActuatorBridge.setOnCompleted { onGhostActuatorCompleted() }
         GhostActuatorBridge.setOnFailed { failedIndex -> onGhostActuatorFailed(failedIndex) }
-        bridgeCallbacksRegistered = true
+        Log.d(TAG, "Bridge callbacks (re)registered")
     }
 
     private fun clearSessionFields() {
@@ -213,9 +212,5 @@ class HardwareInterruptGate(
         armTimestamp = 0L
         interruptTimestamp = 0L
         actuationTimestamp = 0L
-    }
-
-    companion object {
-        private const val TAG = "HardwareInterruptGate"
     }
 }

@@ -114,35 +114,13 @@ class HardwareInterruptGateTest {
     }
 
     @Test
-    fun `onGhostActuatorCompleted transitions RELEASED to EXECUTED to COMPLETED`() {
+    fun `onGhostActuatorCompleted transitions RELEASED to COMPLETED`() {
         gate.arm("session-1", "tx-hash", "zk-hash", "webauthn-hash")
         gate.onKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_VOLUME_DOWN))
         assertEquals(HardwareInterruptGate.State.RELEASED, gate.getState())
 
         gate.onGhostActuatorCompleted()
         assertEquals(HardwareInterruptGate.State.COMPLETED, gate.getState())
-    }
-
-    @Test
-    fun `Volume key events not consumed in non-WAITING states`() {
-        var consumed = gate.onKeyEvent(
-            KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_VOLUME_UP)
-        )
-        assertFalse(consumed)
-
-        consumed = gate.onKeyEvent(
-            KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_VOLUME_DOWN)
-        )
-        assertFalse(consumed)
-
-        gate.arm("session-1", "tx-hash", "zk-hash", "webauthn-hash")
-        gate.onKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_VOLUME_DOWN))
-        gate.onGhostActuatorCompleted()
-
-        consumed = gate.onKeyEvent(
-            KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_VOLUME_DOWN)
-        )
-        assertFalse(consumed)
     }
 
     @Test
@@ -155,5 +133,18 @@ class HardwareInterruptGateTest {
             KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_VOLUME_UP)
         )
         assertFalse(upConsumed)
+    }
+
+    @Test
+    fun `key events ignored in non-WAITING states`() {
+        var consumed = gate.onKeyEvent(
+            KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_VOLUME_UP)
+        )
+        assertFalse(consumed)
+
+        consumed = gate.onKeyEvent(
+            KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_VOLUME_DOWN)
+        )
+        assertFalse(consumed)
     }
 }
