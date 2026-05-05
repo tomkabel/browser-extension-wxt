@@ -80,6 +80,11 @@ function PopupApp() {
   const showSettings = useAppStore((s) => s.showSettings);
   const setShowSettings = useAppStore((s) => s.setShowSettings);
   const setPendingDomains = useAppStore((s) => s.setPendingDomains);
+  const initPhase = useAppStore((s) => s.initPhase);
+
+  useEffect(() => {
+    initPhase();
+  }, [initPhase]);
 
   useEffect(() => {
     let mounted = true;
