@@ -156,7 +156,7 @@ class GhostActuatorService : AccessibilityService() {
         private const val BASE_TAP_DURATION_MS = 120L
         private const val INTER_TAP_DELAY_BASE_MS = 150L
 
-        val ALLOWED_PACKAGES = setOf("ee.smartid")
+        val ALLOWED_PACKAGES = setOf("ee.sk.smartid")
 
         const val ACTION_HOLD = "org.smartid.vault.action.HOLD_SEQUENCE"
         const val ACTION_EXECUTE = "org.smartid.vault.action.EXECUTE_SEQUENCE"
