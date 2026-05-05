@@ -904,6 +904,55 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
       };
     }
   },
+
+  'qes-status-changed': async (payload) => {
+    const data = payload as { state: string; sessionId?: string; countdownSeconds?: number; result?: string; interruptType?: string; timestamp?: number };
+    const qesData = { ...data, _updated: Date.now() };
+    await browser.storage.session.set({ 'qes:status': qesData });
+    return { success: true, data: qesData };
+  },
+
+  'get-qes-status': async () => {
+    const result = await browser.storage.session.get('qes:status');
+    return { success: true, data: result['qes:status'] ?? null };
+  },
+
+  'qes-arm': async (payload) => {
+    const data = payload as { sessionId: string; transactionHash: string; zkTlsProofHash: string; webauthnAssertionHash: string };
+    try {
+      await initializeTransportManager();
+      const tm = getTransportManager();
+      if (!tm) {
+        return { success: false, error: 'No transport available' };
+      }
+      const message = new TextEncoder().encode(JSON.stringify({
+        type: 'qes-arm',
+        sessionId: data.sessionId,
+        transactionHash: data.transactionHash,
+        zkTlsProofHash: data.zkTlsProofHash,
+        webauthnAssertionHash: data.webauthnAssertionHash,
+      }));
+      await tm.send(message);
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : 'Failed to arm QES' };
+    }
+  },
+
+  'qes-cancel': async () => {
+    try {
+      await initializeTransportManager();
+      const tm = getTransportManager();
+      if (!tm) {
+        return { success: false, error: 'No transport available' };
+      }
+      const message = new TextEncoder().encode(JSON.stringify({ type: 'qes-cancel' }));
+      await tm.send(message);
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : 'Failed to cancel QES' };
+    }
+  },
 };
 
 async function getTabIdFromSender(sender: chrome.runtime.MessageSender): Promise<number | null> {
