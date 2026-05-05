@@ -10,7 +10,6 @@ import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-
 class GhostActuatorService : AccessibilityService() {
 
     private var preparedSequence: List<Coordinate>? = null
