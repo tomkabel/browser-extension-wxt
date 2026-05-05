@@ -92,10 +92,12 @@ export interface AppStore {
   pendingDomains: Array<{ domain: string; url: string }>;
   approvedDomains: ApprovedDomain[];
   showSettings: boolean;
+  showDevices: boolean;
 
   setPendingDomains: (domains: Array<{ domain: string; url: string }>) => void;
   setApprovedDomains: (domains: ApprovedDomain[]) => void;
   setShowSettings: (show: boolean) => void;
+  setShowDevices: (show: boolean) => void;
 }
 
 export const useAppStore = create<AppStore>((set) => ({
@@ -169,8 +171,10 @@ export const useAppStore = create<AppStore>((set) => ({
   pendingDomains: [],
   approvedDomains: [],
   showSettings: false,
+  showDevices: false,
 
   setPendingDomains: (domains) => set({ pendingDomains: domains }),
   setApprovedDomains: (domains) => set({ approvedDomains: domains }),
   setShowSettings: (show) => set({ showSettings: show }),
+  setShowDevices: (show) => set({ showDevices: show }),
 }));

@@ -20,6 +20,15 @@ import { completePairing, clearPairing } from './pairingService';
 import { createCommandClient, type CommandClient } from '~/lib/channel/commandClient';
 import { deriveEmojiSas } from '~/lib/channel/emojiSas';
 import { checkPrfSupport, generatePrfSalt } from '~/lib/crypto/fallbackAuth';
+import {
+  addDevice,
+  setActiveDevice,
+  canAddDevice,
+  getDeviceCount,
+  resolveDeviceName,
+  getDevice,
+} from './deviceRegistry';
+import type { DeviceRecord } from '~/types';
 
 const PROTOCOL_VERSION = new Uint8Array([0x01]);
 const MESSAGE_HANDSHAKE = new Uint8Array([0x00]);
@@ -27,6 +36,15 @@ const MESSAGE_DATA = new Uint8Array([0x01]);
 const MESSAGE_CAPABILITIES = new Uint8Array([0x02]);
 
 const EMOJI_SAS_STORAGE_KEY = 'pairing:emojiSas';
+
+async function deriveDeviceId(phoneStaticKey: Uint8Array): Promise<string> {
+  const data = new Uint8Array(phoneStaticKey);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = new Uint8Array(hashBuffer);
+  return Array.from(hashArray.slice(0, 8))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
 
 let currentSession: NoiseSession | null = null;
 let pendingMessages: Uint8Array[] = [];
@@ -296,7 +314,39 @@ export async function confirmSasMatch(): Promise<boolean> {
   }
 
   try {
+    const deviceId = await deriveDeviceId(pendingRemoteStaticPk);
+    const existingDevice = await getDevice(deviceId);
+
+    if (!existingDevice) {
+      const canAdd = await canAddDevice();
+      if (!canAdd) {
+        log.error('[Coordinator] Maximum device limit reached');
+        return false;
+      }
+    }
+
     await completePairing(pendingRemoteStaticPk);
+    const count = await getDeviceCount();
+    const isFirstDevice = count === 0;
+    const deviceName = await resolveDeviceName();
+    const deviceRecord: DeviceRecord = {
+      deviceId,
+      name: deviceName,
+      phoneStaticKey: new Uint8Array(pendingRemoteStaticPk),
+      lastSeen: Date.now(),
+      pairedAt: Date.now(),
+      isPrimary: isFirstDevice,
+    };
+
+    try {
+      await addDevice(deviceRecord);
+    } catch (addErr) {
+      log.error('[Coordinator] addDevice failed, rolling back pairing:', addErr);
+      await clearPairing();
+      return false;
+    }
+    await setActiveDevice(deviceId);
+    log.info('[Coordinator] Device registered:', deviceId);
 
     if (currentSession) {
       await browser.storage.session.remove(EMOJI_SAS_STORAGE_KEY);
@@ -371,6 +421,10 @@ export function clearPendingRemoteKey(): void {
 
 export function getPendingRemoteKey(): Uint8Array | null {
   return pendingRemoteStaticPk;
+}
+
+export function _setPendingRemoteKeyForTest(pk: Uint8Array | null): void {
+  pendingRemoteStaticPk = pk;
 }
 
 export { fallbackToPrfOnly };
