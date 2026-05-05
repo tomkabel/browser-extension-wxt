@@ -130,6 +130,16 @@ const httpServer = createServer((req, res) => {
   }
 
   if (req.method === 'POST' && req.url === '/revoke') {
+    const REVOKE_SECRET = process.env.REVOKE_SECRET;
+    if (REVOKE_SECRET) {
+      const authHeader = req.headers['authorization'];
+      if (!authHeader) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Missing authorization header' }));
+        return;
+      }
+    }
+
     let body = '';
     req.on('data', (chunk) => {
       body += chunk;
@@ -142,8 +152,34 @@ const httpServer = createServer((req, res) => {
           res.end(JSON.stringify({ error: 'Missing or invalid deviceId' }));
           return;
         }
+
+        if (REVOKE_SECRET) {
+          const authHeader = req.headers['authorization'];
+          const expectedHmac = createHmac('sha256', REVOKE_SECRET).update(deviceId).digest('hex');
+          const expected = `Bearer ${expectedHmac}`;
+          if (
+            !authHeader ||
+            authHeader.length !== expected.length ||
+            !timingSafeEqual(Buffer.from(authHeader), Buffer.from(expected))
+          ) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid authorization' }));
+            return;
+          }
+        }
+
         revokedDevices.set(deviceId, Date.now() + REVOCATION_TTL_MS);
         console.log(`Device revoked via HTTP: ${deviceId}`);
+
+        for (const [, socket] of io.sockets.sockets) {
+          const socketDeviceId = socket.handshake.query?.deviceId;
+          if (socketDeviceId === deviceId) {
+            socket.emit('error', { message: 'Device revoked' });
+            socket.disconnect(true);
+            console.log(`Disconnected revoked device socket: ${deviceId}`);
+          }
+        }
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, deviceId }));
       } catch {
