@@ -91,7 +91,17 @@ export type MessageType =
   | 'passkey-credential-error'
   | 'begin-challenge-assertion'
   | 'assertion-complete'
-  | 'get-cached-credential-id';
+  | 'get-cached-credential-id'
+  | 'login-form-detected-unapproved'
+  | 'domain-approved'
+  | 'domain-denied'
+  | 'get-approved-domains'
+  | 'get-pending-domains'
+  | 'check-domain-approved'
+  | 'webrtc-sdp-for-qr'
+  | 'webrtc-connect-usb'
+  | 'webrtc-start-pairing-offerless'
+  | 'webrtc-ping';
 
 export interface ExtensionMessage<T = unknown> {
   type: MessageType;
@@ -136,7 +146,6 @@ export interface LoginFormDetection {
   url: string;
   usernameSelector: string;
   passwordSelector: string;
-  formAction: string;
 }
 
 export interface CredentialRequestPayload {
@@ -153,7 +162,28 @@ export interface CredentialResponse {
   approval_mode?: 'auto' | 'biometric';
 }
 
-export type CredentialState = 'idle' | 'detecting' | 'requesting' | 'waiting_phone' | 'filling' | 'filled' | 'not_found' | 'error';
+export type CredentialState =
+  | 'idle'
+  | 'detecting'
+  | 'requesting'
+  | 'waiting_phone'
+  | 'filling'
+  | 'filled'
+  | 'not_found'
+  | 'error';
+
+export interface ApprovedDomain {
+  domain: string;
+  registeredAt: number;
+  scriptId: string;
+}
+
+export interface UnapprovedLoginForm {
+  domain: string;
+  url: string;
+  usernameSelector: string;
+  passwordSelector: string;
+}
 
 export interface AttestedCodePayload {
   controlCode: string;

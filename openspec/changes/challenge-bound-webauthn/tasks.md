@@ -82,10 +82,9 @@
 
 ## 7. Integration & Testing
 
-- [ ] 7.1 Integration test: full Tier 1 flow from Sec-Fetch capture → challenge derivation → WebAuthn assertion → transport → Android verification (stub)
-- [ ] 7.2 Integration test: full Tier 2 flow with Token Binding endpoint stub
-- [ ] 7.3 Integration test: tier auto-negotiation (Tier 3 unavailable → Tier 2 unavailable → Tier 1 succeeds)
-- [ ] 7.4 Integration test: end-to-end with usb-aoa-transport-proxy for Android-side assertion delivery (stub)
-- [ ] 7.5 Integration test: end-to-end with WebRTC fallback (no USB tether) (stub)
-- [ ] 7.6 E2E test: browser popup shows transaction context, user taps biometric, assertion is generated and verified (stub)
-- [ ] 7.7 Run `bun run lint && bun run typecheck` and fix all issues
+- [x] 7.1 Integration test: full flow from zkTLS proof → challenge derivation → WebAuthn assertion → transport → Android verification (stub)
+- [x] 7.2 Integration test: end-to-end with usb-aoa-transport-proxy for Android-side assertion delivery (stub)
+- [x] 7.3 Integration test: end-to-end with WebRTC fallback (no USB tether) (stub)
+- [x] 7.4 E2E test: browser popup shows transaction context, user taps biometric, assertion is generated and verified (stub)
+- [x] 7.5 Run `bun run lint && bun run typecheck` and fix all issues
+- [x] 7.6 E2E test: full challenge-bound WebAuthn assertion cycle (commit: a7c6157d)

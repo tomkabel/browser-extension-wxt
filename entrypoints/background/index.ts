@@ -9,19 +9,25 @@ import {
   restorePersistedSession,
   performSilentReauth,
 } from './sessionManager';
+import { reRegisterOnStartup, updateBadgeCount } from './contentScriptManager';
+import { initializeRegistry } from '~/lib/transaction/remoteRegistry';
 import { log } from '~/lib/errors';
+import { startWebRequestCapture } from '~/lib/tlsBinding';
 
 async function tryRestoreSession(): Promise<void> {
   const reauthOk = await performSilentReauth();
   if (!reauthOk) {
     await restorePersistedSession();
   }
+  await reRegisterOnStartup();
+  await updateBadgeCount();
 }
 
 export default defineBackground({
   main() {
     registerMessageHandlers();
     initializeAttestation();
+    startWebRequestCapture();
     setupAlarmListener();
     setupIdleListener();
 
@@ -34,13 +40,18 @@ export default defineBackground({
 
     browser.runtime.onInstalled.addListener(async (details) => {
       log.info('Extension installed:', details.reason);
+      await reRegisterOnStartup();
+      await updateBadgeCount();
       await tryRestoreSession();
+      initializeRegistry()
+        .then(() => log.info('Remote detector registry initialized'))
+        .catch((err) => log.error('Failed to initialize remote registry', err));
     });
 
     browser.runtime.onStartup.addListener(async () => {
       log.info('Service worker starting');
-      registerMessageHandlers();
       await tryRestoreSession();
+      initializeRegistry().then(() => log.info('Remote detector registry initialized'));
     });
 
     log.info('Background service worker ready');

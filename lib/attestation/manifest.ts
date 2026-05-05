@@ -107,5 +107,3 @@ async function persistLastSeenVersions(manifest: SignedKeyManifest): Promise<voi
   }
   await browser.storage.local.set(entries);
 }
-
-

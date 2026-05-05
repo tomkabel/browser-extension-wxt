@@ -84,7 +84,10 @@ describe('key store', () => {
   it('rejects unknown key-id in verifyHeader', async () => {
     const store = new KeyStore();
     const verifier = createVerifier(store);
-    const result = await verifier.verifyHeader('v1;eyJjb2RlIjoiNDg5MiIsInRzIjoxNzAwMDAwMDAwfQ;c2lnbmF0dXJl;unknown-key', 'lhv.ee');
+    const result = await verifier.verifyHeader(
+      'v1;eyJjb2RlIjoiNDg5MiIsInRzIjoxNzAwMDAwMDAwfQ;c2lnbmF0dXJl;unknown-key',
+      'lhv.ee',
+    );
     expect(result).toBeNull();
   });
 });

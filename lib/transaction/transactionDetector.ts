@@ -1,5 +1,8 @@
 import type { Detector, TransactionResult } from './detector';
 import { createLhvDetector } from './detectors/lhvDetector';
+import { findDeclarativeDetector, detectWithDeclarativeSelectors } from './remoteRegistry';
+
+const AMOUNT_PATTERN = /[\u20ac\d\s,]*\d+[.,]\d{2}\s*(?:EUR|€)?/;
 
 let detectors: Detector[] | null = null;
 
@@ -57,10 +60,113 @@ export function detectTransaction(): DetectResult {
     }
   }
 
+  const declarativeDetector = findDeclarativeDetector(currentUrl);
+  if (declarativeDetector) {
+    try {
+      const result = detectWithDeclarativeSelectors(declarativeDetector);
+      if (result) {
+        return {
+          success: true,
+          transaction: result,
+          detectorName: `registry:${declarativeDetector.domain}`,
+        };
+      }
+    } catch (err) {
+      return {
+        success: false,
+        detectorName: `registry:${declarativeDetector.domain}`,
+        error: err instanceof Error ? err.message : 'Declarative detection failed',
+      };
+    }
+  }
+
+  const semanticResult = trySemanticDetection();
+  if (semanticResult) {
+    return {
+      success: true,
+      transaction: semanticResult,
+      detectorName: 'semantic',
+    };
+  }
+
   return {
     success: false,
     error: 'No detector available for this page',
   };
+}
+
+function trySemanticDetection(): TransactionResult | null {
+  const scope = findTransactionScope();
+  if (!scope) return null;
+
+  const text = scope instanceof HTMLElement ? (scope.innerText ?? scope.textContent ?? '') : (scope.textContent ?? '');
+  const ibanPattern = /\bEE\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{2}\b/;
+
+  const amountMatch = text.match(AMOUNT_PATTERN);
+  const ibanMatch = text.match(ibanPattern);
+
+  if (amountMatch || ibanMatch) {
+    const result: Partial<TransactionResult> = {};
+    if (amountMatch) result.amount = amountMatch[0]!.trim();
+    if (ibanMatch) result.iban = ibanMatch[0]!.trim();
+
+    const recipientLabel = text.match(
+      /(?:saaja|recipient|beneficiary|to\s*account)[:\s]*([^\n]{1,120})(?=\s*(?:viitenumber|selgitus|amount|sum|iban|\||$))/i,
+    );
+    if (recipientLabel) {
+      const cleaned = recipientLabel[1]!.trim();
+      if (cleaned.length > 0) {
+        result.recipient = cleaned;
+      }
+    }
+
+    if (result.amount || result.recipient) {
+      return {
+        amount: result.amount ?? '',
+        recipient: result.recipient ?? '',
+        iban: result.iban,
+      };
+    }
+  }
+
+  return null;
+}
+
+function findTransactionScope(): Element | null {
+  const walker = document.createTreeWalker(
+    document.body,
+    NodeFilter.SHOW_TEXT,
+    {
+      acceptNode: (node) => {
+        const el = node.parentElement;
+        if (!el) return NodeFilter.FILTER_REJECT;
+        const tag = el.tagName;
+        if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT' || tag === 'TEMPLATE') return NodeFilter.FILTER_REJECT;
+        if (el.closest('[aria-hidden="true"]')) return NodeFilter.FILTER_REJECT;
+        const style = tag !== 'BODY' && tag !== 'HTML' ? window.getComputedStyle(el) : null;
+        if (style && style.display === 'none') return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    },
+  );
+
+  while (walker.nextNode()) {
+    const node = walker.currentNode as Text;
+    if (!node.textContent || node.textContent.length < 5) continue;
+    if (AMOUNT_PATTERN.test(node.textContent)) {
+      let el: Element | null = node.parentElement;
+      const CONTAINER_TAGS = new Set(['TD', 'DIV', 'SECTION', 'ARTICLE', 'LI', 'MAIN', 'TABLE', 'FORM']);
+      while (el && el !== document.body) {
+        if (CONTAINER_TAGS.has(el.tagName)) {
+          return el;
+        }
+        el = el.parentElement;
+      }
+      return null;
+    }
+  }
+
+  return null;
 }
 
 export function getDetectionStatus(): {

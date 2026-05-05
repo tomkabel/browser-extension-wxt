@@ -1,16 +1,18 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, forwardRef } from 'react';
 import { browser } from 'wxt/browser';
 import { useAppStore } from '~/lib/store';
 import type { AppStore } from '~/lib/store';
 import {
   generateSasCode,
+  generateNonce,
+  computeCommitment,
   buildPairingUrl,
   drawQrCode,
   SAS_TTL_MS,
   detectAccessibilityPrefs,
 } from '~/lib/channel/qrCode';
 
-export function PairingPanel() {
+export const PairingPanel = forwardRef<HTMLHeadingElement>(function PairingPanel(_props, headingRef) {
   const pairingState = useAppStore((s) => s.pairingState);
   const pairingError = useAppStore((s) => s.pairingError);
   const sasCode = useAppStore((s) => s.sasCode);
@@ -28,6 +30,9 @@ export function PairingPanel() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [generatedAt, setGeneratedAt] = useState<number>(0);
 
+  const nonceRef = useRef<Uint8Array | null>(null);
+  const [pairingUrl, setPairingUrl] = useState<string | null>(null);
+
   const startPairing = useCallback(async () => {
     setPairingState('displaying_qr');
     setPairingError(null);
@@ -40,31 +45,45 @@ export function PairingPanel() {
     }
 
     const code = generateSasCode();
+    const localNonce = generateNonce();
+    nonceRef.current = localNonce;
     setSasCode(code);
     setGeneratedAt(Date.now());
 
     try {
       const response = await browser.runtime.sendMessage({
         type: 'start-pairing',
-        payload: { sasCode: code, pairingUrl: buildPairingUrl(code) },
+        payload: {
+          sasCode: code,
+          pairingUrl: buildPairingUrl(code),
+          nonce: Array.from(localNonce),
+        },
       });
 
       if (!response.success) {
         setPairingState('error');
         setPairingError(response.error ?? 'Pairing initiation failed');
+        return;
+      }
+
+      const publicKeyBytes = response.publicKey as number[] | undefined;
+      if (publicKeyBytes && nonceRef.current) {
+        const extStaticKey = new Uint8Array(publicKeyBytes);
+        const commitment = await computeCommitment(extStaticKey, nonceRef.current, code);
+        setPairingUrl(buildPairingUrl(code, nonceRef.current, commitment));
       }
     } catch (err) {
       setPairingState('error');
       setPairingError(err instanceof Error ? err.message : 'Connection failed');
     }
-  }, [setPairingState, setPairingError, setSasCode, setSasMode]);
+  }, [setPairingState, setPairingError, setSasCode, setSasMode, setPairingUrl]);
 
   useEffect(() => {
     let mounted = true;
 
     if (pairingState === 'displaying_qr' && canvasRef.current && sasCode) {
-      const pairingUrl = buildPairingUrl(sasCode);
-      drawQrCode(pairingUrl, canvasRef.current).catch(() => {});
+      const url = pairingUrl ?? buildPairingUrl(sasCode);
+      drawQrCode(url, canvasRef.current).catch(() => {});
     }
 
     if (pairingState === 'displaying_qr') {
@@ -116,7 +135,7 @@ export function PairingPanel() {
     return () => {
       mounted = false;
     };
-  }, [pairingState, sasCode, setPairingState, setPairingError, setDeviceName, setEmojiSas, setConnectionState]);
+  }, [pairingState, sasCode, pairingUrl, setPairingState, setPairingError, setDeviceName, setEmojiSas, setConnectionState]);
 
   const handleConfirmMatch = useCallback(async () => {
     try {
@@ -152,9 +171,10 @@ export function PairingPanel() {
     setPairingError(null);
     setSasCode(null);
     setDeviceName(null);
+    setPairingUrl(null);
     setEmojiSas(null);
     setGeneratedAt(0);
-  }, [setPairingState, setPairingError, setSasCode, setDeviceName, setEmojiSas]);
+  }, [setPairingState, setPairingError, setSasCode, setDeviceName, setEmojiSas, setPairingUrl]);
 
   const handleReset = useCallback(() => {
     setPairingState('unpaired');
@@ -162,8 +182,9 @@ export function PairingPanel() {
     setSasCode(null);
     setDeviceName(null);
     setEmojiSas(null);
+    setPairingUrl(null);
     setGeneratedAt(0);
-  }, [setPairingState, setPairingError, setSasCode, setDeviceName, setEmojiSas]);
+  }, [setPairingState, setPairingError, setSasCode, setDeviceName, setEmojiSas, setPairingUrl]);
 
   const handleToggleSasMode = useCallback(() => {
     const newMode = sasMode === 'emoji' ? 'numeric' : 'emoji';
@@ -173,14 +194,15 @@ export function PairingPanel() {
   if (pairingState === 'unpaired') {
     return (
       <div className="p-4 bg-white rounded-lg border">
+        <h1 ref={headingRef} className="sr-only">Pairing</h1>
         <h2 className="text-lg font-bold text-gray-800 mb-3">Pair with Phone</h2>
-        <p className="text-sm text-gray-500 mb-4">
+        <p className="text-sm text-gray-600 mb-4">
           Connect your Android phone to enable transaction verification via the SmartID2 companion
           app.
         </p>
         <button
           type="button"
-          className="w-full py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+          className="w-full py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
           onClick={startPairing}
         >
           Pair Phone
@@ -198,19 +220,21 @@ export function PairingPanel() {
     if (connectionState === 'disconnected' && generatedAt > 0 && Date.now() - generatedAt > 15_000) {
       return (
         <div className="p-4 bg-white rounded-lg border text-center">
+          <h1 ref={headingRef} className="sr-only">Pairing</h1>
           <h2 className="text-lg font-bold text-gray-800 mb-3">Unable to Connect</h2>
-          <p className="text-sm text-gray-500 mb-4">
+          <p className="text-sm text-gray-600 mb-4">
             Check your network and try again.
           </p>
           <div className="flex flex-col gap-2">
             <button
               type="button"
-              className="w-full py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+              className="w-full py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
               onClick={() => {
                 setPairingState('unpaired');
                 setPairingError(null);
                 setSasCode(null);
                 setDeviceName(null);
+                setPairingUrl(null);
                 setEmojiSas(null);
                 setGeneratedAt(0);
               }}
@@ -224,29 +248,32 @@ export function PairingPanel() {
 
     return (
       <div className="p-4 bg-white rounded-lg border">
+        <h1 ref={headingRef} className="sr-only">Pairing</h1>
         <h2 className="text-lg font-bold text-gray-800 mb-3">Scan with SmartID2 App</h2>
-        <p className="text-sm text-gray-500 mb-3">
+        <p className="text-sm text-gray-600 mb-3">
           Open the SmartID2 app on your phone and scan the QR code below.
         </p>
         <div className="flex flex-col items-center mb-3">
           <canvas
             ref={canvasRef}
+            role="img"
+            aria-label="Pairing QR code. Use the numeric code displayed below as an alternative."
             className="bg-white border border-gray-200 rounded-lg"
             style={{ width: 232, height: 232 }}
           />
           {sasCode && showNumeric && (
-            <p className="text-center mt-3">
+            <p className="text-center mt-3" role="status" aria-live="polite">
               <span className="text-xs text-gray-500">Verification code</span>
               <br />
               <span className="text-2xl font-mono font-bold tracking-[0.3em] text-gray-800">
                 {sasCode}
               </span>
               <br />
-              <span className="text-xs text-gray-400 mt-1">Expires in {remainingSeconds}s</span>
+              <span className="text-xs text-gray-500 mt-1">Expires in {remainingSeconds}s</span>
             </p>
           )}
           {showEmoji && (
-            <p className="text-xs text-gray-400 mt-3">
+            <p className="text-xs text-gray-500 mt-3">
               Devices will display matching symbols after scanning
             </p>
           )}
@@ -264,14 +291,14 @@ export function PairingPanel() {
           )}
           <button
             type="button"
-            className="w-full py-2 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200 transition-colors"
+            className="w-full py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
             onClick={handleReset}
           >
             Cancel
           </button>
           <button
             type="button"
-            className="w-full py-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+            className="w-full py-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
             onClick={handleToggleSasMode}
           >
             {sasMode === 'emoji' ? 'Use digits instead' : 'Use emoji instead'}
@@ -285,13 +312,14 @@ export function PairingPanel() {
     if (sasMode === 'numeric') {
       return (
         <div className="p-4 bg-white rounded-lg border">
+          <h1 ref={headingRef} className="sr-only">Pairing</h1>
           <h2 className="text-lg font-bold text-gray-800 mb-3">Verify Connection</h2>
-          <p className="text-sm text-gray-500 mb-4">
+          <p className="text-sm text-gray-600 mb-4">
             Confirm the code on your phone matches the code below.
           </p>
           <div className="flex flex-col items-center mb-4">
             {sasCode && (
-              <p className="text-center">
+              <p className="text-center" role="status" aria-live="polite">
                 <span className="text-3xl font-mono font-bold tracking-[0.4em] text-gray-800">
                   {sasCode}
                 </span>
@@ -301,21 +329,21 @@ export function PairingPanel() {
           <div className="flex flex-col gap-2">
             <button
               type="button"
-              className="w-full py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors"
+              className="w-full py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
               onClick={handleConfirmMatch}
             >
               Confirm
             </button>
             <button
               type="button"
-              className="w-full py-2 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200 transition-colors"
+              className="w-full py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
               onClick={handleRejectMatch}
             >
               Cancel
             </button>
             <button
               type="button"
-              className="w-full py-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+              className="w-full py-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
               onClick={handleToggleSasMode}
             >
               Use emoji instead
@@ -327,39 +355,40 @@ export function PairingPanel() {
 
     return (
       <div className="p-4 bg-white rounded-lg border">
+        <h1 ref={headingRef} className="sr-only">Pairing</h1>
         <h2 className="text-lg font-bold text-gray-800 mb-3">Verify Symbols</h2>
-        <p className="text-sm text-gray-500 mb-4">
+        <p className="text-sm text-gray-600 mb-4">
           Do these symbols match your phone screen?
         </p>
         <div className="flex justify-center gap-4 mb-4">
           {emojiSas ? (
-            <>
+            <div role="status" aria-live="polite" className="flex gap-4">
               <span className="text-[48px] leading-none">{emojiSas[0]}</span>
               <span className="text-[48px] leading-none">{emojiSas[1]}</span>
               <span className="text-[48px] leading-none">{emojiSas[2]}</span>
-            </>
+            </div>
           ) : (
-            <div className="text-sm text-gray-400">Waiting for symbols...</div>
+            <div className="text-sm text-gray-500">Waiting for symbols...</div>
           )}
         </div>
         <div className="flex flex-col gap-2">
           <button
             type="button"
-            className="w-full py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors"
+            className="w-full py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
             onClick={handleConfirmMatch}
           >
             Match
           </button>
           <button
             type="button"
-            className="w-full py-2.5 bg-red-100 text-red-700 rounded-lg font-medium hover:bg-red-200 transition-colors"
+            className="w-full py-2.5 bg-red-100 text-red-700 rounded-lg font-medium hover:bg-red-200 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
             onClick={handleRejectMatch}
           >
             No Match
           </button>
           <button
             type="button"
-            className="w-full py-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+            className="w-full py-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
             onClick={handleToggleSasMode}
           >
             Use digits instead
@@ -372,20 +401,21 @@ export function PairingPanel() {
   if (pairingState === 'waiting_for_handshake') {
     return (
       <div className="p-4 bg-white rounded-lg border text-center">
+        <h1 ref={headingRef} className="sr-only">Pairing</h1>
         <h2 className="text-lg font-bold text-gray-800 mb-3">Connecting...</h2>
         <div className="mb-3">
           <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto" />
         </div>
-        <p className="text-sm text-gray-500 mb-1">Waiting for your phone to connect</p>
+        <p className="text-sm text-gray-600 mb-1">Waiting for your phone to connect</p>
         {sasCode && (
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-gray-500">
             Verification code: <span className="font-mono font-bold">{sasCode}</span>
           </p>
         )}
         <div className="mt-4">
           <button
             type="button"
-            className="px-4 py-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+            className="px-4 py-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
             onClick={handleReset}
           >
             Cancel
@@ -398,6 +428,7 @@ export function PairingPanel() {
   if (pairingState === 'paired') {
     return (
       <div className="p-4 bg-green-50 rounded-lg border border-green-200 text-center">
+        <h1 ref={headingRef} className="sr-only">Pairing</h1>
         <h2 className="text-lg font-bold text-green-800 mb-2">Paired!</h2>
         <p className="text-sm text-green-700 mb-1">Successfully connected to your phone</p>
         {deviceName && <p className="text-xs text-green-600 font-mono">{deviceName}</p>}
@@ -415,11 +446,12 @@ export function PairingPanel() {
   if (pairingState === 'error') {
     return (
       <div className="p-4 bg-red-50 rounded-lg border border-red-200 text-center">
+        <h1 ref={headingRef} className="sr-only">Pairing</h1>
         <h2 className="text-lg font-bold text-red-800 mb-2">Pairing Failed</h2>
         <p className="text-sm text-red-600 mb-3">{pairingError ?? 'An unknown error occurred'}</p>
         <button
           type="button"
-          className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 transition-colors"
+          className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
           onClick={handleReset}
         >
           Try Again
@@ -429,4 +461,4 @@ export function PairingPanel() {
   }
 
   return null;
-}
+});

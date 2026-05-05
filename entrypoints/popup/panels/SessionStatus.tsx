@@ -53,7 +53,7 @@ export function SessionStatus({ expiry }: SessionStatusProps) {
         </p>
         <button
           type="button"
-          className="px-3 py-1.5 bg-red-600 text-white text-xs rounded-lg hover:bg-red-700 transition-colors"
+          className="px-3 py-1.5 bg-red-600 text-white text-xs rounded-lg hover:bg-red-700 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
           onClick={() => {
             setSessionState('none');
             setSessionRemaining(null);
@@ -70,7 +70,13 @@ export function SessionStatus({ expiry }: SessionStatusProps) {
       <div className="p-2 bg-amber-50 rounded-lg border border-amber-200 text-center">
         <p className="text-amber-700 text-xs font-medium">
           Session expiring in{' '}
-          <span className="tabular-nums font-mono font-bold">{timeDisplay}</span>
+          <span
+            className="tabular-nums font-mono font-bold"
+            role="timer"
+            aria-label={`Session expires in ${remaining} seconds`}
+          >
+            {timeDisplay}
+          </span>
         </p>
       </div>
     );
@@ -78,9 +84,15 @@ export function SessionStatus({ expiry }: SessionStatusProps) {
 
   return (
     <div className="p-2 bg-gray-50 rounded-lg border text-center">
-      <p className="text-gray-500 text-xs">
+      <p className="text-gray-600 text-xs">
         Session:{' '}
-        <span className="tabular-nums font-mono text-gray-700 font-medium">{timeDisplay}</span>
+        <span
+          className="tabular-nums font-mono text-gray-700 font-medium"
+          role="timer"
+          aria-label={`Session expires in ${remaining} seconds`}
+        >
+          {timeDisplay}
+        </span>
       </p>
     </div>
   );

@@ -19,7 +19,7 @@ describe('challengeDerivation', () => {
   const mockNonce = new Uint8Array(32).fill(0xcd);
 
   const defaultInput = {
-    zkTlsProof: mockProof,
+    tlsBinding: mockProof,
     origin: mockOrigin,
     controlCode: mockControlCode,
     sessionNonce: mockNonce,
@@ -29,7 +29,7 @@ describe('challengeDerivation', () => {
     it('produces valid TLV output with correct structure', () => {
       const serialized = serializeChallengeComponents(defaultInput);
 
-      expect(serialized[0]).toBe(0x01);
+      expect(serialized[0]).toBe(0x02);
 
       const proofLength = (serialized[1]! << 8) | serialized[2]!;
       expect(proofLength).toBe(64);
@@ -46,14 +46,14 @@ describe('challengeDerivation', () => {
     it('throws on oversize proof', () => {
       const oversized = new Uint8Array(5000).fill(0x01);
       expect(() =>
-        serializeChallengeComponents({ ...defaultInput, zkTlsProof: oversized }),
+        serializeChallengeComponents({ ...defaultInput, tlsBinding: oversized }),
       ).toThrow('maximum length');
     });
 
     it('throws on non-4-byte control code', () => {
-      expect(() =>
-        serializeChallengeComponents({ ...defaultInput, controlCode: '12' }),
-      ).toThrow('exactly 4 ASCII digits');
+      expect(() => serializeChallengeComponents({ ...defaultInput, controlCode: '12' })).toThrow(
+        'exactly 4 ASCII digits',
+      );
     });
 
     it('throws on wrong nonce length', () => {
@@ -68,11 +68,11 @@ describe('challengeDerivation', () => {
       const serialized = serializeChallengeComponents(defaultInput);
       const parsed = parseChallengeComponents(serialized);
 
-      expect(parsed.version).toBe(0x01);
+      expect(parsed.version).toBe(0x02);
       expect(parsed.origin).toBe(mockOrigin);
       expect(parsed.controlCode).toBe(mockControlCode);
       expect(hex(parsed.sessionNonce)).toBe(hex(mockNonce));
-      expect(hex(parsed.zkTlsProof)).toBe(hex(mockProof));
+      expect(hex(parsed.tlsBinding)).toBe(hex(mockProof));
     });
 
     it('throws on truncated data', () => {
@@ -141,7 +141,7 @@ describe('challengeDerivation', () => {
       const proof = new Uint8Array(64).fill(0xab);
       const nonce = new Uint8Array(32).fill(0xcd);
       const input = {
-        zkTlsProof: proof,
+        tlsBinding: proof,
         origin: 'https://example.com',
         controlCode: '1234',
         sessionNonce: nonce,
@@ -155,11 +155,11 @@ describe('challengeDerivation', () => {
       expect(serialized.length).toBe(totalExpected);
 
       const parsed = parseChallengeComponents(serialized);
-      expect(parsed.version).toBe(0x01);
+      expect(parsed.version).toBe(0x02);
       expect(parsed.origin).toBe('https://example.com');
       expect(parsed.controlCode).toBe('1234');
       expect(hex(parsed.sessionNonce)).toBe(hex(nonce));
-      expect(hex(parsed.zkTlsProof)).toBe(hex(proof));
+      expect(hex(parsed.tlsBinding)).toBe(hex(proof));
 
       const challenge = await deriveChallenge(input);
       expect(challenge.length).toBe(32);

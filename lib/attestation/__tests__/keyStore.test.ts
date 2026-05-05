@@ -1,9 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { KeyStore } from '../keyStore';
 
-function makeKey(domain: string, keyId: string, active = true): {
-  domain: string; keyId: string; publicKeyHex: string;
-  notBefore: string; notAfter: string;
+function makeKey(
+  domain: string,
+  keyId: string,
+  active = true,
+): {
+  domain: string;
+  keyId: string;
+  publicKeyHex: string;
+  notBefore: string;
+  notAfter: string;
 } {
   const now = new Date();
   const notBefore = active
@@ -15,7 +22,8 @@ function makeKey(domain: string, keyId: string, active = true): {
   return {
     domain,
     keyId,
-    publicKeyHex: '04ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+    publicKeyHex:
+      '04ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
     notBefore,
     notAfter,
   };
@@ -40,10 +48,7 @@ describe('KeyStore', () => {
   });
 
   it('lists all keys for a domain', () => {
-    const store = new KeyStore([
-      makeKey('lhv.ee', 'lhv-2026q1'),
-      makeKey('lhv.ee', 'lhv-2026q2'),
-    ]);
+    const store = new KeyStore([makeKey('lhv.ee', 'lhv-2026q1'), makeKey('lhv.ee', 'lhv-2026q2')]);
     const keys = store.getAllKeysForDomain('lhv.ee');
     expect(keys.length).toBe(2);
   });

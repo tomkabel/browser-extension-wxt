@@ -13,10 +13,7 @@ function redactControlCode(code: string): string {
 }
 
 export function createVerifier(keyStore: KeyStore) {
-  async function verifyHeader(
-    rawHeader: string,
-    rpDomain: string,
-  ): Promise<AttestedCode | null> {
+  async function verifyHeader(rawHeader: string, rpDomain: string): Promise<AttestedCode | null> {
     const parsed = parseAttestationHeader(rawHeader);
     if (!parsed) return null;
 
@@ -79,7 +76,9 @@ export function createVerifier(keyStore: KeyStore) {
       return { type: 'verified', attestedCode };
     }
 
-    log.warn(`Control code mismatch! Attested: ${redactControlCode(attestedCode.controlCode)}, DOM: ${redactControlCode(domCode)}`);
+    log.warn(
+      `Control code mismatch! Attested: ${redactControlCode(attestedCode.controlCode)}, DOM: ${redactControlCode(domCode)}`,
+    );
     return {
       type: 'rat_detected',
       attestedCode,

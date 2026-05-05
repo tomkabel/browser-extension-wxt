@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, forwardRef } from 'react';
 import { browser } from 'wxt/browser';
 import { useAppStore } from '~/lib/store';
 import { SessionStatus } from './SessionStatus';
 
-export function AuthPanel() {
+export const AuthPanel = forwardRef<HTMLHeadingElement>(function AuthPanel(_props, headingRef) {
   const sessionState = useAppStore((s) => s.sessionState);
   const sessionExpiry = useAppStore((s) => s.sessionExpiry);
   const setSessionState = useAppStore((s) => s.setSessionState);
@@ -57,11 +57,12 @@ export function AuthPanel() {
 
   useEffect(() => {
     if (assertionStatus !== 'pending') return;
+    let mounted = true;
 
     const interval = setInterval(async () => {
       const stored = await chrome.storage.session.get('assertion:result');
-      const result = stored['assertion:result'] as
-        { status: string; error?: string } | undefined;
+      if (!mounted) return;
+      const result = stored['assertion:result'] as { status: string; error?: string } | undefined;
       if (result) {
         if (result.status === 'verified') {
           setAssertionStatus('verified');
@@ -75,6 +76,7 @@ export function AuthPanel() {
     }, 500);
 
     return () => {
+      mounted = false;
       clearInterval(interval);
     };
   }, [assertionStatus, setAssertionStatus, setAssertionError]);
@@ -130,7 +132,13 @@ export function AuthPanel() {
     setError(null);
     setAssertionStatus('idle');
     setAssertionError(null);
-  }, [setSessionState, setSessionExpiry, setSessionRemaining, setAssertionStatus, setAssertionError]);
+  }, [
+    setSessionState,
+    setSessionExpiry,
+    setSessionRemaining,
+    setAssertionStatus,
+    setAssertionError,
+  ]);
 
   const renderAssertionStatus = () => {
     switch (assertionStatus) {
@@ -138,14 +146,20 @@ export function AuthPanel() {
         return (
           <div className="text-center py-3">
             <div className="animate-spin h-6 w-6 border-3 border-blue-500 border-t-transparent rounded-full mx-auto mb-2" />
-            <p className="text-sm text-gray-600 font-medium">Waiting for biometric verification...</p>
-            <p className="text-xs text-gray-400 mt-1">Touch your fingerprint sensor or use Face ID</p>
+            <p className="text-sm text-gray-600 font-medium">
+              Waiting for biometric verification...
+            </p>
+            <p className="text-xs text-gray-400 mt-1">
+              Touch your fingerprint sensor or use Face ID
+            </p>
           </div>
         );
       case 'verified':
         return (
           <div className="p-3 bg-green-50 rounded-lg border border-green-200 text-center">
-            <p className="text-green-700 text-sm font-medium">Transaction verified via Challenge-Bound WebAuthn</p>
+            <p className="text-green-700 text-sm font-medium">
+              Transaction verified via Challenge-Bound WebAuthn
+            </p>
           </div>
         );
       case 'timeout':
@@ -172,6 +186,9 @@ export function AuthPanel() {
   if (checking) {
     return (
       <div className="p-4 bg-white rounded-lg border">
+        <h1 ref={headingRef} className="sr-only">
+          Authentication
+        </h1>
         <div className="animate-pulse">
           <div className="h-4 bg-gray-200 rounded w-3/4 mb-2" />
           <div className="h-3 bg-gray-200 rounded w-1/2" />
@@ -183,12 +200,15 @@ export function AuthPanel() {
   if (sessionState === 'expired' && sessionExpiry) {
     return (
       <div className="p-4 bg-white rounded-lg border">
+        <h1 ref={headingRef} className="sr-only">
+          Authentication
+        </h1>
         <h2 className="text-lg font-bold text-gray-800 mb-3">Authentication</h2>
         <SessionStatus expiry={sessionExpiry} />
         <div className="mt-3 text-center">
           <button
             type="button"
-            className="w-full py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+            className="w-full py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
             onClick={handleReauth}
           >
             Re-authenticate
@@ -201,6 +221,9 @@ export function AuthPanel() {
   if (sessionState === 'active' || sessionState === 'expiring') {
     return (
       <div className="p-4 bg-white rounded-lg border">
+        <h1 ref={headingRef} className="sr-only">
+          Authentication
+        </h1>
         <h2 className="text-lg font-bold text-gray-800 mb-3">Authentication</h2>
         {sessionExpiry && <SessionStatus expiry={sessionExpiry} />}
         <p className="text-sm text-green-600 text-center mt-2 font-medium">Session active</p>
@@ -211,11 +234,14 @@ export function AuthPanel() {
   if (assertionStatus === 'verified') {
     return (
       <div className="p-4 bg-white rounded-lg border">
+        <h1 ref={headingRef} className="sr-only">
+          Authentication
+        </h1>
         <h2 className="text-lg font-bold text-gray-800 mb-3">Transaction Verified</h2>
         {renderAssertionStatus()}
         <button
           type="button"
-          className="mt-3 w-full py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+          className="mt-3 w-full py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
           onClick={() => {
             setAssertionStatus('idle');
           }}
@@ -228,6 +254,9 @@ export function AuthPanel() {
 
   return (
     <div className="p-4 bg-white rounded-lg border">
+      <h1 ref={headingRef} className="sr-only">
+        Authentication
+      </h1>
       <h2 className="text-lg font-bold text-gray-800 mb-3">
         {hasTransactionContext ? 'Verify Transaction' : 'Authenticate'}
       </h2>
@@ -239,7 +268,9 @@ export function AuthPanel() {
 
       {hasTransactionContext && (
         <div className="mb-4 p-3 bg-gray-50 rounded-lg border space-y-2">
-          <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Transaction Context</p>
+          <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">
+            Transaction Context
+          </p>
           {transactionData.recipient != null && (
             <div className="flex justify-between items-center">
               <span className="text-xs text-gray-500">Recipient</span>
@@ -278,12 +309,14 @@ export function AuthPanel() {
         </div>
       )}
 
-      {renderAssertionStatus()}
+      <div aria-live="assertive">{renderAssertionStatus()}</div>
 
-      {(assertionStatus === 'idle' || assertionStatus === 'timeout' || assertionStatus === 'error') && (
+      {(assertionStatus === 'idle' ||
+        assertionStatus === 'timeout' ||
+        assertionStatus === 'error') && (
         <button
           type="button"
-          className="w-full py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
           onClick={handleAuthenticate}
         >
           {assertionStatus === 'timeout'
@@ -294,7 +327,7 @@ export function AuthPanel() {
         </button>
       )}
 
-      {error && <p className="mt-2 text-xs text-red-500 text-center">{error}</p>}
+      {error && <p className="mt-2 text-xs text-red-600 text-center">{error}</p>}
     </div>
   );
-}
+});

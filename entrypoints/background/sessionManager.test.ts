@@ -232,7 +232,9 @@ describe('sessionManager - performSilentReauth', () => {
       }),
       toJSON: () => ({}),
     };
-    vi.spyOn(navigator.credentials, 'get').mockResolvedValue(mockAssertion as unknown as PublicKeyCredential);
+    vi.spyOn(navigator.credentials, 'get').mockResolvedValue(
+      mockAssertion as unknown as PublicKeyCredential,
+    );
 
     const result = await sessionManager.performSilentReauth();
     expect(result).toBe(false);
