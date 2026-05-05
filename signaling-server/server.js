@@ -16,6 +16,28 @@ const SAS_EMOJI_RE = /^[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]{3
 const rooms = new Map();
 const pendingCredentials = new Map();
 const roomMetadata = new Map();
+const revokedDevices = new Map();
+const REVOCATION_TTL_MS = 24 * 60 * 60 * 1000;
+const REVOCATION_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [deviceId, expiry] of revokedDevices) {
+    if (now > expiry) {
+      revokedDevices.delete(deviceId);
+    }
+  }
+}, REVOCATION_CLEANUP_INTERVAL_MS);
+
+function isDeviceRevoked(deviceId) {
+  const expiry = revokedDevices.get(deviceId);
+  if (!expiry) return false;
+  if (Date.now() > expiry) {
+    revokedDevices.delete(deviceId);
+    return false;
+  }
+  return true;
+}
 
 function getRoom(roomId) {
   let room = rooms.get(roomId);
@@ -107,6 +129,31 @@ const httpServer = createServer((req, res) => {
     return;
   }
 
+  if (req.method === 'POST' && req.url === '/revoke') {
+    let body = '';
+    req.on('data', (chunk) => {
+      body += chunk;
+    });
+    req.on('end', () => {
+      try {
+        const { deviceId } = JSON.parse(body);
+        if (!deviceId || typeof deviceId !== 'string') {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Missing or invalid deviceId' }));
+          return;
+        }
+        revokedDevices.set(deviceId, Date.now() + REVOCATION_TTL_MS);
+        console.log(`Device revoked via HTTP: ${deviceId}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, deviceId }));
+      } catch {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      }
+    });
+    return;
+  }
+
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ status: 'ok', rooms: rooms.size }));
 });
@@ -118,6 +165,13 @@ const io = new Server(httpServer, {
 });
 
 io.on('connection', (socket) => {
+  const deviceId = socket.handshake.query?.deviceId;
+  if (deviceId && isDeviceRevoked(deviceId)) {
+    socket.emit('error', { message: 'Device revoked' });
+    socket.disconnect(true);
+    return;
+  }
+
   socket.on('register-room', (data) => {
     const { sasCode, nonce, extensionStaticKey, roomId } = data;
     if (!sasCode || !isValidSasCode(sasCode) || !roomId) {
