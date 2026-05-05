@@ -29,24 +29,19 @@ class AuditLogger {
     private val events = mutableListOf<AuditEvent>()
 
     fun log(eventType: String, success: Boolean, details: Map<String, String> = emptyMap()) {
-        val redacted = details.mapValues { (key, value) ->
-            when {
-                key.contains("pin", ignoreCase = true) -> "***"
-                key.contains("token", ignoreCase = true) -> value.take(8) + "..."
-                key.contains("password", ignoreCase = true) -> "***"
-                value.length > 128 -> value.take(128) + "..."
-                else -> value
-            }
-        }
-        val event = AuditEvent(
+        val raw = AuditEvent(
             eventType = eventType,
             success = success,
-            details = redacted,
+            details = details,
         )
+        val event = raw.copy(details = raw.safeDetails())
         synchronized(events) {
+            while (events.size >= MAX_EVENTS) {
+                events.removeAt(0)
+            }
             events.add(event)
         }
-        Log.i(TAG, "[${event.eventType}] success=$success details=$redacted")
+        Log.i(TAG, "[${event.eventType}] success=$success details=${event.details}")
     }
 
     fun getRecent(limit: Int = 50): List<AuditEvent> {
@@ -63,5 +58,6 @@ class AuditLogger {
 
     companion object {
         private const val TAG = "SmartID.Vault"
+        private const val MAX_EVENTS = 200
     }
 }
