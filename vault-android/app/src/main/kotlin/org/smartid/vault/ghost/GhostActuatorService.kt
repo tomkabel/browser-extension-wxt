@@ -38,7 +38,6 @@ class GhostActuatorService : AccessibilityService() {
 
     override fun onInterrupt() {
         Log.w(TAG, "AccessibilityService interrupted")
-        sequenceToken++
         clearSequence()
     }
 
@@ -98,7 +97,7 @@ class GhostActuatorService : AccessibilityService() {
     }
 
     fun clearSequence() {
-        sequenceToken++
+        currentToken = ++sequenceToken
         mainHandler.removeCallbacksAndMessages(null)
         preparedSequence = null
         isHeld = false
@@ -165,8 +164,6 @@ class GhostActuatorService : AccessibilityService() {
     }
 
     override fun onDestroy() {
-        sequenceToken++
-        mainHandler.removeCallbacksAndMessages(null)
         GhostActuatorBridge.unbind()
         clearSequence()
         super.onDestroy()
