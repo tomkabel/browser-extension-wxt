@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type {
   CredentialState,
+  MigrationPhase,
   PairingState,
   SessionState,
   TransactionData,
@@ -9,6 +10,7 @@ import type {
 } from '~/types';
 import type { TransportType } from '~/lib/transport/types';
 import type { AttestationStatus } from '~/lib/attestation';
+import { getMigrationPhase, setMigrationPhase } from '~/lib/storage';
 
 export type TransportStatusType = TransportType | null;
 
@@ -98,6 +100,10 @@ export interface AppStore {
   setApprovedDomains: (domains: ApprovedDomain[]) => void;
   setShowSettings: (show: boolean) => void;
   setShowDevices: (show: boolean) => void;
+
+  phase: MigrationPhase;
+  initPhase: () => Promise<void>;
+  setPhase: (phase: MigrationPhase) => Promise<void>;
 }
 
 export const useAppStore = create<AppStore>((set) => ({
@@ -177,4 +183,14 @@ export const useAppStore = create<AppStore>((set) => ({
   setApprovedDomains: (domains) => set({ approvedDomains: domains }),
   setShowSettings: (show) => set({ showSettings: show }),
   setShowDevices: (show) => set({ showDevices: show }),
+
+  phase: 'phase1',
+  initPhase: async () => {
+    const phase = await getMigrationPhase();
+    set({ phase });
+  },
+  setPhase: async (phase) => {
+    await setMigrationPhase(phase);
+    set({ phase });
+  },
 }));

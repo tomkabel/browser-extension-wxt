@@ -85,7 +85,12 @@ function PopupApp() {
   const showDevices = useAppStore((s) => s.showDevices);
   const setShowDevices = useAppStore((s) => s.setShowDevices);
   const setPendingDomains = useAppStore((s) => s.setPendingDomains);
+  const initPhase = useAppStore((s) => s.initPhase);
   const devicesHeadingRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    initPhase();
+  }, [initPhase]);
 
   useEffect(() => {
     if (showDevices) {

@@ -5,10 +5,27 @@
 
 ---
 
-## **1. Executive Summary & Zero-Trust Paradigm**
-This specification outlines the definitive architecture for seamlessly retrofitting hardware-bound, phishing-resistant, and RAT-impervious automation onto legacy Smart-ID PKI infrastructure. 
+## **0. Architecture Phases**
 
-Version 6.0 completely discards reliance on trusted PC operating systems, vulnerable browser DOMs, and standard Android Java Virtual Machine (JVM) memory models. Instead, it operates on three unbreakable cryptographic pillars:
+This project follows a phased evolution from the current WebRTC-based architecture to the full V6 USB-AOA architecture. V6 is the ultimate target — not a competing architecture. Each phase builds on the previous one without breaking the working transport.
+
+| Phase | Name | Transport | Duration | Key Deliverables |
+|-------|------|-----------|----------|------------------|
+| **Phase 1** | WebRTC + WebUSB | WebRTC (primary), WebUSB (emerging) | 4–6 weeks | QR-embedded SDP, static TURN, event-driven USB detection, transport abstraction |
+| **Phase 1.5** | USB Bridge | WebUSB AOA (primary), WebRTC (fallback) | 4–6 weeks | Go Native Host reduced to ~30-line AOA shim, ECDH key exchange over USB, WebRTC fallback retained |
+| **Phase 2A** | Core V6 Enclave | WebUSB AOA | 8–10 weeks | Android Vault PWA, NDK memory-locked PIN enclave, Ghost Actuator, Shamir recovery |
+| **Phase 2B** | TLS Binding + WebAuthn | WebUSB AOA | 8–10 weeks | zkTLS three-tier binding, challenge-bound WebAuthn, dynamic content scripts |
+| **Phase 2C** | eIDAS QES | WebUSB AOA | 4–6 weeks | Volume Down QES gate, audit trail, overlay UI |
+| **Full V6** | Complete | USB AOA (primary), WebRTC (fallback) | — | All components integrated; WebRTC becomes fallback-only |
+
+For the complete migration sequence, dependency graph, and deprecation policy, see `docs/migration-guide.md` and the `vault6-migration-strategy` OpenSpec change.
+
+---
+
+## **1. Executive Summary & Zero-Trust Paradigm**
+This specification outlines the definitive target architecture (V6) for Smart-ID. The current working system (Phase 1 — WebRTC phone-as-vault) is the foundation; V6 is its evolution, not a replacement. Phase 1 delivers value today; V6 progressively hardens the security model over successive releases.
+
+At full maturity, V6 discards reliance on trusted PC operating systems, vulnerable browser DOMs, and standard Android Java Virtual Machine (JVM) memory models. Instead, it operates on three unbreakable cryptographic pillars:
 1.  **Zero-Knowledge Context Attestation (zkTLS):** Proves the origin and transaction data directly from the network's TLS socket layer, defeating sophisticated Remote Access Trojans (RATs) and DOM manipulation.
 2.  **Challenge-Bound WebAuthn Entanglement:** Cryptographically fuses local PC biometric verification (Windows Hello/TouchID) to the specific transaction, defeating Origin Spoofing.
 3.  **JNI/NDK Memory-Locked Enclave:** Bypasses the Android JVM/Binder IPC by decrypting PINs directly into page-locked C++ memory, transforming cryptographic secrets into anonymous raw UI coordinates.
@@ -26,6 +43,8 @@ Before standard execution, a one-time provisioning phase establishes the cryptog
 ---
 
 ## **3. System Component Architecture**
+
+> **Phase labels:** The layers below describe the V6 target architecture. For the current Phase 1 implementation status and the migration path from Phase 1 to each V6 layer, see `docs/migration-guide.md` (Component Retention vs Replacement table).
 
 ### **Layer 1: The Context Engine (Zero-Knowledge Browser Extension)**
 *   **Runtime:** Manifest V3 Background Service Worker + Offscreen Document API (for WASM/zkTLS execution).

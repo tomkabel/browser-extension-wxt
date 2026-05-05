@@ -7,4 +7,7 @@ export const TRANSPORT_CONFIG = {
   sendTimeoutMs: 5000,
   hostAvailabilityCheckIntervalMs: 30000,
   usbPollIntervalMs: 2000,
+  maxHealthyLatencyMs: 10000,
+  aoaReenumeratePollMs: 500,
+  aoaReenumerateTimeoutMs: 10000,
 } as const;

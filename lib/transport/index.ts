@@ -1,8 +1,10 @@
 export type {
   Transport,
   TransportType,
+  TransportConfig,
   TransportEventType,
   TransportStatus,
+  MessageChannel,
   NativeHostMessage,
   NativeHostStatusResponse,
 } from './types';
