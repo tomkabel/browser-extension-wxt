@@ -41,6 +41,7 @@
   - Replace `noiseKeyPair` in storage
   - Remove device from registry
   - Zero old private key
+  - Enqueue signed revocation to offline retry queue (`cacheRevocationForLater`) for automatic retry via `flushPendingRevocations` until delivery succeeds
 - [x] 4.2 Add "Forget Device" action to `DeviceListPanel` with confirmation dialog
 - [x] 4.3 After revocation: set extension state to "unpaired" (key rotated, all connections invalid)
 - [x] 4.4 Add `revoke` event handler to signaling server: blacklist deviceId (in-memory, 24h TTL)
