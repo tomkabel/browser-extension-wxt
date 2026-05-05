@@ -11,38 +11,54 @@ individual change proposals.
 ```
 vault6-migration-strategy (this change — strategic planning)
   │
-  ├── usb-aoa-transport-proxy (COMPLETED — 74 tasks)
-  │    (Go Host + AOA 2.0)
-  │
-  ├── ndk-enclave-pin-vault (COMPLETED — 42 tasks)
-  │    (C++ mlock + coordinate mapper)
-  │    │
-  │    └── ghost-actuator-gesture-injection
-  │         (dispatchGesture execution)
-  │         │
-  │         └── eidas-qes-hardware-gate
-  │              (Volume Down QES gate)
-  │
-  ├── zktls-context-engine
-  │    (Signed-Header Attestation Engine)
-  │    │
-  │    └── challenge-bound-webauthn
-  │         (SHA-256 binding)
-  │
-  └── All leaf paths converge → FULL V6 INTEGRATION
+  ├── react-native-companion-app (PHASE 1) ──────┐
+  │    (RN app: WebRTC, Noise responder,          │
+  │     credential vault, Ghost bridge)            │
+  │                                                │
+  ├── native-host-quality-gate (PHASE 1.5) ───────┤
+  │    (replaces archived usb-aoa-transport-proxy; │
+  │     Go AOA shim + WebUSB transport)            │
+  │                                                │
+  ├── ndk-enclave-pin-vault (PHASE 2A) ──────┐    │
+  │    (C++ mlock + coordinate mapper)        │    │
+  │                                           │    │
+  │    └── ghost-actuator-gesture-injection   │    │
+  │         (dispatchGesture execution)       │    │
+  │         [Phase 1: coordinates from RN JS] │    │
+  │         [Phase 2A: coordinates from NDK]  │    │
+  │                                           │    │
+  │         └── eidas-qes-hardware-gate       │    │
+  │              (Volume Down QES gate)       │    │
+  │                                           │    │
+  ├── zktls-context-engine (PHASE 2B) ───────┤    │
+  │    (Signed-Header Attestation Engine)     │    │
+  │                                           │    │
+  │    └── challenge-bound-webauthn (PHASE 2B)│    │
+  │         (SHA-256 binding)                 │    │
+  │                                           │    │
+  └─────────────────────────────────────────────┘
+                         │
+                         ▼
+                  FULL V6 INTEGRATION
+                  ┌──────────────────────────┐
+                  │ zkTLS → WebAuthn → AOA → │
+                  │ Verify → Enclave →       │
+                  │ Actuator → QES Gate      │
+                  └──────────────────────────┘
 ```
 
 ## Change Dependency Table
 
-| Change | Status | Phase | Blocked-On (must complete first) | Builds-On (foundation) | Blocking (depends on this) |
-|---|---|---|---|---|---|
-| `vault6-migration-strategy` | **IN-PROGRESS** | 1.5 | None | None (strategic planning) | All V6 changes (sequences them) |
-| `usb-aoa-transport-proxy` | **COMPLETED** (74 tasks) | 1.5 | None | None (foundational) | ndk-enclave-pin-vault, zktls-context-engine |
-| `ndk-enclave-pin-vault` | **COMPLETED** (42 tasks) | 2A | challenge-bound-webauthn (authorization gate) | usb-aoa-transport-proxy (command delivery) | ghost-actuator-gesture-injection (coordinate input), eidas-qes-hardware-gate (PIN2 handling) |
-| `ghost-actuator-gesture-injection` | ACTIVE (1/28 tasks) | 2A | ndk-enclave-pin-vault (coordinate inputs) | usb-aoa-transport-proxy (payload delivery) | eidas-qes-hardware-gate (actuator suspension target) |
-| `zktls-context-engine` | ACTIVE (29/62 tasks) | 2B | usb-aoa-transport-proxy (proof delivery to Android) | None (standalone TypeScript) | challenge-bound-webauthn (challenge input) |
-| `challenge-bound-webauthn` | ACTIVE (41/61 tasks) | 2B | zktls-context-engine (zkTLS proof as challenge input) | usb-aoa-transport-proxy (Android-side verification transport) | ndk-enclave-pin-vault, ghost-actuator-gesture-injection, eidas-qes-hardware-gate (verified intent) |
-| `eidas-qes-hardware-gate` | ACTIVE (0/39 tasks) | 2C | ghost-actuator-gesture-injection (actuator suspension), ndk-enclave-pin-vault (PIN2 decryption), challenge-bound-webauthn (PC biometric must precede arming) | usb-aoa-transport-proxy (underlying transport) | None (final V6 layer) |
+| Change | Status | Phase | Blocked-On | Builds-On | Blocking |
+|---|---|---|---|---|---|---|
+| `vault6-migration-strategy` | ACTIVE (living document) | Cross-phase | None | None | All changes (sequences them) |
+| `react-native-companion-app` | ACTIVE (46/69 tasks) | **Phase 1** | None | jit-credential-delivery (protocol def), webrtc-datachannel-reliability, vault6-migration-strategy | None yet |
+| `native-host-quality-gate` | ACTIVE (24/28 tasks) | **Phase 1.5** | None | None (replaces archived usb-aoa-transport-proxy) | ndk-enclave-pin-vault (transport for verified payload) |
+| `ndk-enclave-pin-vault` | COMPLETE (42 tasks) | **Phase 2A** | challenge-bound-webauthn (authorisation gate) | native-host-quality-gate (command delivery) | ghost-actuator-gesture-injection (Phase 2A coordinate source) |
+| `ghost-actuator-gesture-injection` | ACTIVE (27/28 tasks) | **Phase 1/2A** | None for Phase 1 (RN JS provides coordinates); Blocked on ndk-enclave-pin-vault for Phase 2A | react-native-companion-app (Phase 1 RN bridge), native-host-quality-gate (command transport) | eidas-qes-hardware-gate (actuator suspension target) |
+| `zktls-context-engine` | ACTIVE (29/62 tasks) | Phase 2B | native-host-quality-gate (proof delivery to Android) | None | challenge-bound-webauthn (challenge input) |
+| `challenge-bound-webauthn` | ACTIVE (41/61 tasks) | Phase 2B | zktls-context-engine (zkTLS proof as challenge input) | native-host-quality-gate (Android-side verification transport) | ndk-enclave-pin-vault, eidas-qes-hardware-gate (verified intent) |
+| `eidas-qes-hardware-gate` | ACTIVE (0/39 tasks) | Phase 2C | ghost-actuator-gesture-injection (actuator suspension), ndk-enclave-pin-vault (PIN2 decryption), challenge-bound-webauthn | native-host-quality-gate (underlying transport) | None (final V6 layer) |
 
 ## GitHub Issue Tracking
 

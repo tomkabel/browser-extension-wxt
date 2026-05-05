@@ -13,24 +13,26 @@ This change does NOT modify any source code. It produces a sequenced migration p
 
 ### Migration Phases
 
-#### Phase 1 (Current — WebRTC + WebUSB) — 4-6 weeks
-Replace the Go Native Messaging Host with WebUSB in the offscreen document. Implement QR-embedded SDP for server-less pairing. Add static TURN fallback. Transition from polling to event-driven USB detection.
-- `native-host-quality-gate` — WebUSB transport, Go host → ~30-line AOA shim
+#### Phase 1 (Current — WebRTC + React Native) — 6-10 weeks
+Deliver an end-to-end phone-as-vault experience. The browser extension is already built; this phase completes the system with the React Native companion app.
+- `react-native-companion-app` — React Native vault app with WebRTC client, Noise XX responder, credential vault, and Ghost Actuator bridge
+- `native-host-quality-gate` — WebUSB transport, Go host AOA shim (ongoing)
 - `resilient-transport` — QR-embedded SDP, static TURN, event-driven USB
-- Transport abstraction in extension (`Transport` interface with WebRTC and WebUSB implementations)
-- AOA handshake + ECDH key exchange
-- WebRTC → WebUSB fallback logic
-- `vault6-migration-strategy` tasks (this change)
+- `jit-credential-delivery` — Credential request protocol (extension side complete; phone-side via RN app)
+
+#### Phase 1.5 (USB Bridge) — 4-6 weeks
+USB AOA becomes primary transport; WebRTC retained as fallback.
+- `native-host-quality-gate` completes — Go AOA shim production-ready
+- `native-host-quality-gate` — WebUSB transport in offscreen document
+- AOA handshake + ECDH key exchange in extension and RN app (new native module)
+- WebRTC → USB fallback logic in TransportManager
 
 #### Phase 2A (Core V6 Enclave) — 8-10 weeks
-Build the Android vault (PWA) and V6 enclave components.
-- `android-companion-app` — PWA vault, Ghost Actuator minimal APK (~200KB)
-- `ndk-enclave-pin-vault` — C++ memory-locked PIN processing
-- `ghost-actuator-gesture-injection` — dispatchGesture automation
+Hardens the vault with NDK memory-locked enclave, replacing JS-level PIN processing.
+- `ndk-enclave-pin-vault` — C++ memory-locked PIN processing, coordinate output via JSI TurboModule
+- `ghost-actuator-gesture-injection` — dispatchGesture automation (Kotlin complete; coordinate source switches from JS to enclave)
 - `vault-encryption-recovery` — Shamir 2-of-3 recovery, Merkle tree revocation
 - `multi-device-revocation` — Device registry, device switching, signed revocation
-
-Phase 2A uses WebRTC or WebUSB transport for challenge/response with PINs in Web Crypto API or Android Keystore.
 
 #### Phase 2B (TLS Binding + WebAuthn) — 8-10 weeks
 Build the progressive TLS binding and challenge-bound WebAuthn layer.
@@ -38,7 +40,7 @@ Build the progressive TLS binding and challenge-bound WebAuthn layer.
 - `challenge-bound-webauthn` — TLS-binding-derived WebAuthn challenge (version 0x02)
 - `signaling-server-auth` — Protocol version negotiation, Prometheus metrics, capability flags
 - `dynamic-content-scripts` — Universal `*://*/*` matching with self-destruct
-- Proof verification on Android (PWA vault)
+- Proof verification on Android (React Native vault app)
 
 Phase 2B can proceed in parallel with 2A since they affect different layers (extension TLS binding vs Android enclave). Tier 1 requires zero infrastructure and works today.
 
@@ -55,7 +57,7 @@ Build the QES compliance layer on top of the completed V6 stack.
 | `resilient-transport` (ICE/TURN/WebRTC) | Becomes fallback transport tier | Keep as Phase 1 work; mark V6 target as USB |
 | `emoji-sas-verification` | Replaced by AOA ECDH handshake + WebAuthn passkey | Keep for Phase 1; deprecate in Phase 2 |
 | `jit-credential-delivery` | Phase 1 generic website password manager — orthogonal to V6 | Mark as Phase 1-only; V6 Smart-ID PINs use NDK enclave (local decrypt, coordinate output) not credential request protocol |
-| `android-companion-app` | Evolves into Android Vault app; two co-existing vaults: Phase 1 (website passwords, AES-256-GCM DB) and V6 (Smart-ID PINs, `KeyGenParameterSpec` with biometric + unlock gating) | Add NDK enclave integration path; split into `VaultManager.kt` (Phase 1) and `SmartIdPinVault.kt` (V6) |
+| `react-native-companion-app` | React Native app with native modules; existing Kotlin services wrapped as RN Native Modules. Phase 1 vault (website passwords + Smart-ID PINs) via `react-native-keychain`. V6 enclave integration via JSI TurboModule. | Add NDK enclave integration path; split into `VaultManager.ts` (Phase 1) and `SmartIdPinVault.kt` (V6, via native module) |
 | `session-persistence` | WebAuthn PRF for silent re-auth still valid | Keep; WebAuthn PRF used for session resumption on browser restart |
 | `signaling-e2ee` | Only relevant for WebRTC fallback path | De-prioritize; AOA transport is inherently encrypted via ECDH+AES |
 
@@ -70,7 +72,7 @@ Build the QES compliance layer on top of the completed V6 stack.
 ### Modified Capabilities
 
 - All current Phase 1 specs gain a "V6 Replacement" section documenting the superseding V6 component
-- `android-companion-app` spec gains V6 evolution path: WebRTC client → WebRTC + AOA → AOA + enclave → full V6
+- `react-native-companion-app` spec gains V6 evolution path: WebRTC RN app → RN + AOA native module → AOA + enclave TurboModule → full V6
 
 ## Impact
 
@@ -81,7 +83,7 @@ Build the QES compliance layer on top of the completed V6 stack.
 
 ## V6 Alignment
 
-PHASE 1.5 — This change ensures the project's trajectory is aligned with the V6 end goal. It does not implement any V6 capability directly but enables coherent delivery of all V6 components.
+PHASE 1/1.5/2 (CROSS-PHASE) — This change ensures the project's trajectory is aligned with the V6 end goal across all phases. It does not implement any V6 capability directly but enables coherent sequencing of Phases 1 (RN app), 1.5 (USB bridge), 2A (enclave), 2B (zkTLS), and 2C (QES). Its dependency graph was updated to replace the archived `usb-aoa-transport-proxy` with `native-host-quality-gate` and to add `react-native-companion-app` as a Phase 1 leaf.
 
 ## Dependencies
 

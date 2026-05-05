@@ -40,12 +40,12 @@ The JVM never possesses the plaintext PIN string. It only receives anonymous `fl
 ### Modified Capabilities
 
 - Existing `a11y-bridge` accessibility service: gains a new "enclave mode" that uses coordinate-based dispatchGesture instead of semantic Accessibility actions
-- `android-companion-app`: The vault module evolves from a credential storage to the NDK enclave container
+- `react-native-companion-app`: The vault module evolves from JS-based `react-native-keychain` storage to the NDK enclave container. The enclave's coordinate output is delivered to the GhostActuator bridge via a JSI TurboModule (bypassing the JS thread for the coordinate array transfer)
 
 ## Impact
 
-- **New project**: `apps/android-vault/` — Android native library project with `libvault_enclave/` (C++ NDK) and `enclave-bridge/` (Java/Kotlin JNI wrapper)
-- **Smart-ID Companion app**: Integrates `libvault_enclave.so` via JNI. The `GhostActuator` module calls the enclave for PIN processing.
+- **New project**: `vault-android-rn/android/enclave/` — Android native library directory with `libvault_enclave/` (C++ NDK) and `enclave-bridge/` (Java/Kotlin JNI wrapper, exposed as RN TurboModule)
+- **Smart-ID Companion app (React Native)**: Integrates `libvault_enclave.so` via JNI. The enclave-bridge is exposed as an RN TurboModule so the GhostActuator bridge can consume coordinate outputs directly from native memory
 - **Security**: Memory dumps (fmem, LiME) will not reveal PINs. JVM heap dumps show no plaintext secrets. The only observable data is anonymous touch coordinates.
 - **Build**: CMakeLists.txt for NDK build. Requires Android NDK r26+, API level 33+.
 - **Testing**: Unit tests for coordinate mapping; integration tests with mock Keystore; memory leak detection via AddressSanitizer.

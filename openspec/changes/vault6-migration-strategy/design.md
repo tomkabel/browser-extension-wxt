@@ -52,15 +52,15 @@ PHASE 1 (Current)            PHASE 1.5 (Bridge)           PHASE 2 (V6 Ultimate)
               │      └──────────┘                               │
               │           │                               USB AOA 2.0
               │           ▼                                      │
-              │    ┌──────────────┐                              ▼
-              │    │Android Vault │                       ┌──────────────────────┐
-              │    │(Phase 1.5)  │                       │  Android Vault (V6)  │
-              │    │├─ WebRTC    │                       │  ├─ zkTLS Verifier   │
-              │    │├─ AOA       │                       │  ├─ WebAuthn Verifier │
-              │    │├─ CredStore │                       │  ├─ Challenge Recomp  │
-              │    │└─ Emoji SAS │                       │  ├─ NDK Enclave      │
-              │    └──────────────┘                      │  │  (PIN→Coordinate)  │
-              │                                          │  ├─ Ghost Actuator   │
+               │    ┌────────────────┐                        ▼
+               │    │Android Vault   │                 ┌──────────────────────┐
+               │    │(React Native) │                 │  Android Vault (V6)  │
+               │    │├─ WebRTC RN   │                 │  ├─ zkTLS Verifier   │
+               │    │├─ AOA Native  │                 │  ├─ WebAuthn Verifier │
+               │    │├─ CredStore   │                 │  ├─ Challenge Recomp  │
+               │    │├─ Emoji SAS   │                 │  ├─ NDK Enclave      │
+               │    │└─ GhostBridge │                 │  │  (PIN→Coordinate)  │
+               │    └────────────────┘                │  ├─ Ghost Actuator   │
               ▼                                          │  ├─ EIDAS QES Gate  │
      (kept for fallback /                                │  └─ Audit Logger    │
       emulator flows)                                    └──────────────────────┘
@@ -78,7 +78,8 @@ PHASE 1 (Current)            PHASE 1.5 (Bridge)           PHASE 2 (V6 Ultimate)
 | `state-controller/emulator` | **KEPT** | Retained for v2 Smart-ID emulator fallback |
 | `state-controller/webrtc` | **KEPT** | Retained for WebRTC fallback signaling |
 | `companion-app/webrtc` | **FALLBACK** | New AOA transport is primary; WebRTC is fallback |
-| `companion-app/cred-vault` | **REFOCUSED** | Stores Smart-ID PINs instead of website passwords |
+| `react-native-companion-app` | **CURRENT (Phase 1)** | React Native app with native modules; replaces concept of pure-PWA vault |
+| `companion-app/cred-vault` | **REFOCUSED** | Stores Smart-ID PINs instead of website passwords; now RN Native Module backed |
 | `companion-app/emoji-sas` | **DEPRECATED** (V6) | Replaced by AOA ECDH + WebAuthn passkey pairing |
 | `companion-app/a11y-bridge` | **REPLACED** | Ghost Actuator replaces generic a11y bridge for Smart-ID |
 | `a11y-bridge (standalone)` | **KEPT** | Still useful for general Android automation scenarios |
@@ -88,34 +89,40 @@ PHASE 1 (Current)            PHASE 1.5 (Bridge)           PHASE 2 (V6 Ultimate)
 ```
 vault6-migration-strategy (this change)
   │
-  ├── usb-aoa-transport-proxy ──────────────────┐
-  │    (Go Host + AOA 2.0)                      │
-  │                                              │
-  ├── ndk-enclave-pin-vault ───────────────┐    │
-  │    (C++ mlock + coordinate mapper)      │    │
-  │                                         │    │
-  │    └── ghost-actuator-gesture-injection │    │
-  │         (dispatchGesture execution)     │    │
-  │                                         │    │
-  │         └── eidas-qes-hardware-gate     │    │
-  │              (Volume Down QES gate)     │    │
-  │                                         │    │
-  ├── zktls-context-engine ─────────────────┤    │
-  │    (Signed-Header Attestation Engine)   │    │
-  │                                         │    │
-  │    └── challenge-bound-webauthn ────────┘    │
-  │         (SHA-256 binding)                    │
-  │                                              │
-  └──────────────────────────────────────────────┘
+  ├── react-native-companion-app (PHASE 1) ──────┐
+  │    (RN app: WebRTC, Noise responder,          │
+  │     credential vault, Ghost bridge)            │
+  │                                                │
+  ├── native-host-quality-gate (PHASE 1.5) ───────┤
+  │    (replaces archived usb-aoa-transport-proxy; │
+  │     Go AOA shim + WebUSB transport)            │
+  │                                                │
+  ├── ndk-enclave-pin-vault (PHASE 2A) ──────┐    │
+  │    (C++ mlock + coordinate mapper)        │    │
+  │                                           │    │
+  │    └── ghost-actuator-gesture-injection   │    │
+  │         (dispatchGesture execution)       │    │
+  │         [Phase 1: coordinates from RN JS] │    │
+  │         [Phase 2A: coordinates from NDK]  │    │
+  │                                           │    │
+  │         └── eidas-qes-hardware-gate       │    │
+  │              (Volume Down QES gate)       │    │
+  │                                           │    │
+  ├── zktls-context-engine (PHASE 2B) ───────┤    │
+  │    (Signed-Header Attestation Engine)     │    │
+  │                                           │    │
+  │    └── challenge-bound-webauthn (PHASE 2B)│    │
+  │         (SHA-256 binding)                 │    │
+  │                                           │    │
+  └────────────────────────────────────────────┘
                          │
                          ▼
                   FULL V6 INTEGRATION
-                  ┌─────────────────────┐
-                  │ zkTLS → WebAuthn    │
-                  │ → AOA → Verify →    │
-                  │ Enclave → Actuator  │
-                  │ → QES Gate          │
-                  └─────────────────────┘
+                  ┌──────────────────────────┐
+                  │ zkTLS → WebAuthn → AOA → │
+                  │ Verify → Enclave →       │
+                  │ Actuator → QES Gate      │
+                  └──────────────────────────┘
 ```
 
 ### 4. Transport Abstraction
@@ -148,10 +155,10 @@ class TransportManager {
 }
 ```
 
-The Android companion app similarly has a dual-transport implementation:
-- `AoaTransport.kt` — USB AOA transport (primary in Phase 2)
-- `WebRtcTransport.kt` — WebRTC transport (fallback)
-- `DualTransportManager.kt` — selects and monitors
+The Android React Native companion app similarly has a dual-transport implementation:
+- `AoaTransport` — USB AOA transport via native module (primary in Phase 2)
+- `WebRtcTransport` — WebRTC transport via `react-native-webrtc` (fallback)
+- `TransportManager.ts` — JS-side selector and monitor
 
 ### 5. Phase Transition Triggers
 
@@ -178,8 +185,15 @@ When V6 capabilities reach parity with Phase 1:
 
 Before any V6 change is merged, the following regression testing gates MUST pass:
 
-### Archived Change Test Suite
-All 10 archived OpenSpec changes MUST have their test suites executed and passing. This ensures no V6 modification regresses previously delivered Phase 1 capabilities.
+### Baseline Regression (CI Gate)
+The `bun run ci:check` command MUST pass before merge. This runs `typecheck → test → build` and validates that no TypeScript, unit/integration, or build errors are introduced.
+
+### Archived Change Coverage Verification
+The 15 archived OpenSpec changes represent completed capabilities. Their regression coverage MUST be verified as follows:
+- Each archived change's key capabilities map to one or more test files in the extension test suite
+- The CI gate (`bun run ci:check`) exercises these tests, but the mapping is not automatic — it depends on test authors covering the archived capabilities
+- **Before merging any V6-bound change**, verify that the critical regression paths below are covered by existing tests. If a path has no test coverage, add a test before merging
+- The "implicitly covered" claim holds ONLY if the test-to-capability mapping is verified annually or when archived changes are modified
 
 ### Critical Regression Paths
 The following end-to-end flows MUST be verified on every V6-bound pull request:

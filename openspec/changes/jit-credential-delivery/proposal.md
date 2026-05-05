@@ -41,7 +41,7 @@ Currently the extension can detect transactions (banking) but has no login field
 - `entrypoints/popup/panels/` — New `CredentialPanel.tsx` showing credential request status
 - `entrypoints/popup/App.tsx` — Add CredentialPanel to lazy-loaded panels
 - `lib/store.ts` — Add credential request state to Zustand store
-- Android: `CredentialRequestHandler.kt`, `AutoApproveManager.kt`, `VaultLookup.kt`
+- Android (React Native): `src/services/CommandServer.ts` (handles credential-request dispatch directly), `src/modules/KeyVault.ts` (wraps `react-native-keychain` for vault access)
 
 ## Boundary with Archived Changes
 
@@ -65,5 +65,5 @@ This change's `context-aware-approval` protocol (phone unlock state detection �
 
 ## Dependencies
 
-- Related: `android-companion-app` (shared credential vault on phone side)
+- Related: `react-native-companion-app` (shared credential vault on phone side, implemented as React Native app with native module Keystore bridge)
 - Superseded by (V6): `ndk-enclave-pin-vault`, `ghost-actuator-gesture-injection` (Smart-ID credential handling path)

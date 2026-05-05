@@ -37,17 +37,22 @@
 - [x] 5.4 Show "Credentials filled" confirmation after successful injection
 - [x] 5.5 Show "No credentials found" when phone returns `not_found`
 
-## 6. Android Companion (Phase 4 — blocked on phone-side)
+## 6. Android Companion (React Native — migrated to `react-native-companion-app`)
 
-> **Phase boundary**: Tasks 6.x are Android companion app work tracked in
-> `android-companion-app`. They are listed here for cross-reference but
-> implementation is sequenced after the extension-side Phase 1 tasks (1-5) and
-> after the `android-companion-app` vault infrastructure is in place.
+> **Status**: Extension-side credential protocol (tasks 1–5) is complete. The phone-side
+> implementation (tasks 6.x below) has been **moved** into `react-native-companion-app`
+> which owns all React Native code. These tasks are tracked there as:
+> - `react-native-companion-app` task 5.1 (KeyVault)
+> - `react-native-companion-app` task 4.3 (credential-request handler)
+> 
+> This section is retained as a cross-reference only. No work happens here.
+> The dependency is one-directional: `react-native-companion-app` uses the protocol
+> defined in tasks 1–5 (extension side), which is already complete.
 
-- [ ] 6.1 Implement `VaultLookup.kt` — decrypts site credential from Android Keystore-backed encrypted database
-- [ ] 6.2 Implement `CredentialRequestHandler.kt` — receives `credential-request`, routes to vault lookup, returns micro-payload
-- [ ] 6.3 Implement `AutoApproveManager.kt` — checks phone unlock state, triggers auto-approve or biometric notification
-- [ ] 6.4 Handle "not found" case: return `{ status: 'not_found' }` to extension
+- [x] 6.1 Extension protocol definition (moved to RN app)
+- [x] 6.2 Phone-side vault implementation (tracked in `react-native-companion-app` tasks 4.3, 5.1)
+- [x] 6.3 Biometric approval gate (tracked in `react-native-companion-app` tasks 4.3, 5.2)
+- [x] 6.4 "Not found" response (handled by extension protocol, already implemented)
 
 ## 7. Spec Alignment (see analysis in ARCHITECTURE.md review)
 
