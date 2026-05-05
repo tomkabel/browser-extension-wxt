@@ -3,6 +3,7 @@ package org.smartid.vault.audit
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import android.security.keystore.StrongBoxUnavailableException
 import android.util.Base64
 import android.util.Log
 import androidx.annotation.VisibleForTesting
@@ -14,6 +15,8 @@ import java.io.File
 import java.security.KeyPair
 import java.security.KeyStore
 import java.security.Signature
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
 data class QesAuditEntry(
     val sessionId: String,
@@ -64,16 +67,20 @@ internal data class SignedAuditEntry(
 
 class AuditLogger(private val context: Context) {
 
-    private val entries = mutableListOf<QesAuditEntry>()
+    private val entries = mutableSetOf<QesAuditEntry>()
+    @Volatile
     private var attestationKey: KeyPair? = null
+    private val keyLock = ReentrantLock()
 
     fun logEntry(entry: QesAuditEntry) {
-        entries.add(entry)
+        synchronized(entries) {
+            entries.add(entry)
+        }
         persistEntry(entry)
         Log.i(TAG, "Audit entry logged: session=${entry.sessionId} result=${entry.result}")
     }
 
-    fun getAllEntries(): List<QesAuditEntry> = entries.toList()
+    fun getAllEntries(): List<QesAuditEntry> = synchronized(entries) { entries.toList() }
 
     fun signEntry(entry: QesAuditEntry): ByteArray {
         val keyPair = getOrCreateAttestationKey()
@@ -97,9 +104,6 @@ class AuditLogger(private val context: Context) {
     }
 
     fun exportAuditLog(): String {
-        val file = getAuditFile()
-        if (!file.exists()) return "[]"
-
         val signedEntries = loadSignedEntriesFromStorage()
         val exportArray = JSONArray()
         for (signed in signedEntries) {
@@ -115,20 +119,22 @@ class AuditLogger(private val context: Context) {
     }
 
     fun clear() {
-        entries.clear()
+        synchronized(entries) { entries.clear() }
         val file = getAuditFile()
         if (file.exists()) file.delete()
         Log.i(TAG, "Audit log cleared")
     }
 
     fun loadPersistedEntries(): List<QesAuditEntry> {
-        val signedEntries = loadSignedEntriesFromStorage()
-        val loaded = signedEntries.map { it.entry }
-        entries.addAll(loaded)
-        if (loaded.isNotEmpty()) {
-            Log.i(TAG, "Loaded ${loaded.size} persisted audit entries")
+        val signed = loadSignedEntriesFromStorage()
+        val deduplicated = signed.filter { it.entry !in entries }
+        synchronized(entries) {
+            entries.addAll(deduplicated.map { it.entry })
         }
-        return loaded
+        if (deduplicated.isNotEmpty()) {
+            Log.i(TAG, "Loaded ${deduplicated.size} new persisted audit entries")
+        }
+        return signed.map { it.entry }
     }
 
     private fun loadSignedEntriesFromStorage(): List<SignedAuditEntry> {
@@ -154,7 +160,11 @@ class AuditLogger(private val context: Context) {
                     val entry = QesAuditEntry.fromJson(obj.getJSONObject("entry"))
                     val sig = obj.optString("signature", "")
                     val pk = obj.optString("publicKey", "")
-                    result.add(SignedAuditEntry(entry, sig, pk))
+                    if (sig.isNotEmpty() && pk.isNotEmpty() && verifyEntryFromComponents(entry, sig, pk)) {
+                        result.add(SignedAuditEntry(entry, sig, pk))
+                    } else {
+                        Log.w(TAG, "Skipping entry $i: signature verification failed")
+                    }
                 } catch (e: Exception) {
                     Log.w(TAG, "Skipping corrupt audit entry at index $i", e)
                 }
@@ -163,6 +173,27 @@ class AuditLogger(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load persisted audit entries", e)
             emptyList()
+        }
+    }
+
+    private fun verifyEntryFromComponents(
+        entry: QesAuditEntry,
+        signatureBase64: String,
+        publicKeyBase64: String,
+    ): Boolean {
+        return try {
+            val sigBytes = Base64.decode(signatureBase64, Base64.NO_WRAP)
+            val pkBytes = Base64.decode(publicKeyBase64, Base64.NO_WRAP)
+            val keyFactory = java.security.KeyFactory.getInstance("EC")
+            val keySpec = java.security.spec.X509EncodedKeySpec(pkBytes)
+            val publicKey = keyFactory.generatePublic(keySpec)
+            val signature = Signature.getInstance(SIGNATURE_ALGORITHM)
+            signature.initVerify(publicKey)
+            signature.update(entry.toJson().toString().toByteArray(Charsets.UTF_8))
+            signature.verify(sigBytes)
+        } catch (e: Exception) {
+            Log.w(TAG, "Entry verification failed", e)
+            false
         }
     }
 
@@ -179,7 +210,7 @@ class AuditLogger(private val context: Context) {
             ).build()
 
             val sigBytes = signEntry(entry)
-            val entryJson = JSONObject().apply {
+            val newEntryJson = JSONObject().apply {
                 put("entry", entry.toJson())
                 put("signature", Base64.encodeToString(sigBytes, Base64.NO_WRAP))
                 put("publicKey", Base64.encodeToString(
@@ -198,7 +229,8 @@ class AuditLogger(private val context: Context) {
                     }
                 } catch (_: Exception) { }
             }
-            allEntries.add(entryJson)
+
+            allEntries.add(newEntryJson)
             val output = JSONArray(allEntries).toString(2)
             encryptedFile.openFileOutput().bufferedWriter().use { it.write(output) }
         } catch (e: Exception) {
@@ -214,21 +246,32 @@ class AuditLogger(private val context: Context) {
 
     private fun getOrCreateAttestationKey(): KeyPair {
         attestationKey?.let { return it }
+        return keyLock.withLock {
+            attestationKey?.let { return@withLock it }
 
-        val keyStore = KeyStore.getInstance(KEYSTORE_TYPE)
-        keyStore.load(null)
+            val keyStore = KeyStore.getInstance(KEYSTORE_TYPE)
+            keyStore.load(null)
 
-        if (keyStore.containsAlias(KEY_ALIAS)) {
-            val entry = keyStore.getEntry(KEY_ALIAS, null) as KeyStore.PrivateKeyEntry
-            val pair = KeyPair(entry.certificate.publicKey, entry.privateKey)
-            attestationKey = pair
-            return pair
+            if (keyStore.containsAlias(KEY_ALIAS)) {
+                val entry = keyStore.getEntry(KEY_ALIAS, null) as KeyStore.PrivateKeyEntry
+                val pair = KeyPair(entry.certificate.publicKey, entry.privateKey)
+                attestationKey = pair
+                return@withLock pair
+            }
+
+            val keyPair = generateKeyWithRetry()
+            attestationKey = keyPair
+            Log.i(TAG, "Attestation key pair generated and cached")
+            keyPair
         }
+    }
 
+    private fun generateKeyWithRetry(): KeyPair {
         val kpg = java.security.KeyPairGenerator.getInstance(
             KeyProperties.KEY_ALGORITHM_EC, KEYSTORE_TYPE
         )
-        val spec = KeyGenParameterSpec.Builder(
+
+        val strongBoxSpec = KeyGenParameterSpec.Builder(
             KEY_ALIAS,
             KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY
         )
@@ -236,20 +279,35 @@ class AuditLogger(private val context: Context) {
                 java.security.spec.ECGenParameterSpec("secp256r1")
             )
             .setDigests(KeyProperties.DIGEST_SHA256)
-            .apply {
-                try {
-                    setIsStrongBoxBacked(true)
-                } catch (_: Exception) {
-                    Log.w(TAG, "StrongBox not available, using TEE-backed key")
-                }
-            }
+            .setIsStrongBoxBacked(true)
             .build()
-        kpg.initialize(spec)
 
-        val keyPair = kpg.generateKeyPair()
-        attestationKey = keyPair
-        Log.i(TAG, "Attestation key pair generated and cached")
-        return keyPair
+        try {
+            val kpgStrong = java.security.KeyPairGenerator.getInstance(
+                KeyProperties.KEY_ALGORITHM_EC, KEYSTORE_TYPE
+            )
+            kpgStrong.initialize(strongBoxSpec)
+            return kpgStrong.generateKeyPair()
+        } catch (e: StrongBoxUnavailableException) {
+            Log.w(TAG, "StrongBox not available, retrying with TEE-backed key")
+        }
+
+        val teeSpec = KeyGenParameterSpec.Builder(
+            KEY_ALIAS,
+            KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY
+        )
+            .setAlgorithmParameterSpec(
+                java.security.spec.ECGenParameterSpec("secp256r1")
+            )
+            .setDigests(KeyProperties.DIGEST_SHA256)
+            .setIsStrongBoxBacked(false)
+            .build()
+
+        val kpgTee = java.security.KeyPairGenerator.getInstance(
+            KeyProperties.KEY_ALGORITHM_EC, KEYSTORE_TYPE
+        )
+        kpgTee.initialize(teeSpec)
+        return kpgTee.generateKeyPair()
     }
 
     companion object {
