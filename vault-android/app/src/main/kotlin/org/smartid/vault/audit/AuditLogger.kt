@@ -75,8 +75,8 @@ class AuditLogger(private val context: Context) {
     fun logEntry(entry: QesAuditEntry) {
         synchronized(entries) {
             entries.add(entry)
+            persistEntry(entry)
         }
-        persistEntry(entry)
         Log.i(TAG, "Audit entry logged: session=${entry.sessionId} result=${entry.result}")
     }
 
@@ -119,20 +119,22 @@ class AuditLogger(private val context: Context) {
     }
 
     fun clear() {
-        synchronized(entries) { entries.clear() }
-        val file = getAuditFile()
-        if (file.exists()) file.delete()
+        synchronized(entries) {
+            entries.clear()
+            val file = getAuditFile()
+            if (file.exists()) file.delete()
+        }
         Log.i(TAG, "Audit log cleared")
     }
 
     fun loadPersistedEntries(): List<QesAuditEntry> {
         val signed = loadSignedEntriesFromStorage()
-        val deduplicated = signed.filter { it.entry !in entries }
         synchronized(entries) {
+            val deduplicated = signed.filter { it.entry !in entries }
             entries.addAll(deduplicated.map { it.entry })
-        }
-        if (deduplicated.isNotEmpty()) {
-            Log.i(TAG, "Loaded ${deduplicated.size} new persisted audit entries")
+            if (deduplicated.isNotEmpty()) {
+                Log.i(TAG, "Loaded ${deduplicated.size} new persisted audit entries")
+            }
         }
         return signed.map { it.entry }
     }
@@ -198,44 +200,40 @@ class AuditLogger(private val context: Context) {
     }
 
     private fun persistEntry(entry: QesAuditEntry) {
-        try {
-            val masterKey = MasterKey.Builder(context)
-                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                .build()
+        val masterKey = MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
 
-            val file = getAuditFile()
-            val encryptedFile = EncryptedFile.Builder(
-                context, file, masterKey,
-                EncryptedFile.FileEncryptionScheme.AES256_GCM_HKDF_4KB
-            ).build()
+        val file = getAuditFile()
+        val encryptedFile = EncryptedFile.Builder(
+            context, file, masterKey,
+            EncryptedFile.FileEncryptionScheme.AES256_GCM_HKDF_4KB
+        ).build()
 
-            val sigBytes = signEntry(entry)
-            val newEntryJson = JSONObject().apply {
-                put("entry", entry.toJson())
-                put("signature", Base64.encodeToString(sigBytes, Base64.NO_WRAP))
-                put("publicKey", Base64.encodeToString(
-                    getAttestationPublicKeyBytes(), Base64.NO_WRAP
-                ))
-            }
-
-            val allEntries = mutableListOf<JSONObject>()
-            if (file.exists()) {
-                try {
-                    val existing = encryptedFile.openFileInput().bufferedReader().use {
-                        JSONArray(it.readText())
-                    }
-                    for (i in 0 until existing.length()) {
-                        allEntries.add(existing.getJSONObject(i))
-                    }
-                } catch (_: Exception) { }
-            }
-
-            allEntries.add(newEntryJson)
-            val output = JSONArray(allEntries).toString(2)
-            encryptedFile.openFileOutput().bufferedWriter().use { it.write(output) }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to persist audit entry", e)
+        val sigBytes = signEntry(entry)
+        val newEntryJson = JSONObject().apply {
+            put("entry", entry.toJson())
+            put("signature", Base64.encodeToString(sigBytes, Base64.NO_WRAP))
+            put("publicKey", Base64.encodeToString(
+                getAttestationPublicKeyBytes(), Base64.NO_WRAP
+            ))
         }
+
+        val allEntries = mutableListOf<JSONObject>()
+        if (file.exists()) {
+            try {
+                val existing = encryptedFile.openFileInput().bufferedReader().use {
+                    JSONArray(it.readText())
+                }
+                for (i in 0 until existing.length()) {
+                    allEntries.add(existing.getJSONObject(i))
+                }
+            } catch (_: Exception) { }
+        }
+
+        allEntries.add(newEntryJson)
+        val output = JSONArray(allEntries).toString(2)
+        encryptedFile.openFileOutput().bufferedWriter().use { it.write(output) }
     }
 
     private fun getAuditFile(): File {

@@ -119,20 +119,24 @@ class HardwareInterruptGate(
         state = State.EXECUTED
         Log.i(TAG, "Transitioned to EXECUTED")
 
-        auditLogger.logEntry(
-            QesAuditEntry(
-                sessionId = sessionId,
-                timestamp = System.currentTimeMillis(),
-                transactionHash = transactionHash,
-                zkTlsProofHash = zkTlsProofHash,
-                webauthnAssertionHash = webauthnAssertionHash,
-                armTimestamp = armTimestamp,
-                interruptType = "VOLUME_DOWN",
-                interruptTimestamp = interruptTimestamp,
-                actuationTimestamp = actuationTimestamp,
-                result = "COMPLETED",
+        try {
+            auditLogger.logEntry(
+                QesAuditEntry(
+                    sessionId = sessionId,
+                    timestamp = System.currentTimeMillis(),
+                    transactionHash = transactionHash,
+                    zkTlsProofHash = zkTlsProofHash,
+                    webauthnAssertionHash = webauthnAssertionHash,
+                    armTimestamp = armTimestamp,
+                    interruptType = "VOLUME_DOWN",
+                    interruptTimestamp = interruptTimestamp,
+                    actuationTimestamp = actuationTimestamp,
+                    result = "COMPLETED",
+                )
             )
-        )
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to persist audit entry for COMPLETED", e)
+        }
 
         state = State.COMPLETED
         Log.i(TAG, "Transitioned to COMPLETED")
@@ -164,20 +168,24 @@ class HardwareInterruptGate(
         QesOverlayService.dismiss(context)
         GhostActuatorBridge.clearSequence()
         state = State.CANCELLED
-        auditLogger.logEntry(
-            QesAuditEntry(
-                sessionId = sessionId,
-                timestamp = System.currentTimeMillis(),
-                transactionHash = transactionHash,
-                zkTlsProofHash = zkTlsProofHash,
-                webauthnAssertionHash = webauthnAssertionHash,
-                armTimestamp = armTimestamp,
-                interruptType = interruptType,
-                interruptTimestamp = interruptTimestamp,
-                actuationTimestamp = 0L,
-                result = "CANCELLED",
+        try {
+            auditLogger.logEntry(
+                QesAuditEntry(
+                    sessionId = sessionId,
+                    timestamp = System.currentTimeMillis(),
+                    transactionHash = transactionHash,
+                    zkTlsProofHash = zkTlsProofHash,
+                    webauthnAssertionHash = webauthnAssertionHash,
+                    armTimestamp = armTimestamp,
+                    interruptType = interruptType,
+                    interruptTimestamp = interruptTimestamp,
+                    actuationTimestamp = 0L,
+                    result = "CANCELLED",
+                )
             )
-        )
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to persist audit entry for CANCELLED", e)
+        }
         Log.i(TAG, "Transitioned to CANCELLED via $interruptType")
     }
 
