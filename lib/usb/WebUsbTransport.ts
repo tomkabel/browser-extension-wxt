@@ -107,12 +107,15 @@ export class WebUsbTransport implements Transport {
   }
 
   async getLatency(): Promise<number> {
-    if (!this.connected) return -1;
-    // Direct USB transfer latency is not measurable without pausing the
-    // read loop (both compete for the same IN endpoint). Return a nominal
-    // value so TransportManager considers this transport healthy; actual
-    // quality monitoring uses the message-layer ping in the extension.
-    return 1;
+    if (!this.connected || !this.device || !this.endpoints) return -1;
+
+    try {
+      const start = performance.now();
+      await this.device.transferOut(this.endpoints.out.endpointNumber, new Uint8Array(0));
+      return performance.now() - start;
+    } catch {
+      return -1;
+    }
   }
 
   isAvailable(): boolean {
