@@ -26,6 +26,7 @@ import {
   canAddDevice,
   getDeviceCount,
   resolveDeviceName,
+  getDevice,
 } from './deviceRegistry';
 import type { DeviceRecord } from '~/types';
 
@@ -313,15 +314,18 @@ export async function confirmSasMatch(): Promise<boolean> {
   }
 
   try {
-    const canAdd = await canAddDevice();
-    if (!canAdd) {
-      log.error('[Coordinator] Maximum device limit reached');
-      return false;
+    const deviceId = await deriveDeviceId(pendingRemoteStaticPk);
+    const existingDevice = await getDevice(deviceId);
+
+    if (!existingDevice) {
+      const canAdd = await canAddDevice();
+      if (!canAdd) {
+        log.error('[Coordinator] Maximum device limit reached');
+        return false;
+      }
     }
 
     await completePairing(pendingRemoteStaticPk);
-
-    const deviceId = await deriveDeviceId(pendingRemoteStaticPk);
     const count = await getDeviceCount();
     const isFirstDevice = count === 0;
     const deviceName = await resolveDeviceName();
@@ -417,6 +421,10 @@ export function clearPendingRemoteKey(): void {
 
 export function getPendingRemoteKey(): Uint8Array | null {
   return pendingRemoteStaticPk;
+}
+
+export function _setPendingRemoteKeyForTest(pk: Uint8Array | null): void {
+  pendingRemoteStaticPk = pk;
 }
 
 export { fallbackToPrfOnly };

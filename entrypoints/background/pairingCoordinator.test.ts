@@ -20,6 +20,7 @@ const mockSetActiveDevice = vi.fn().mockResolvedValue(undefined);
 const mockCanAddDevice = vi.fn().mockResolvedValue(true);
 const mockGetDeviceCount = vi.fn().mockResolvedValue(0);
 const mockResolveDeviceName = vi.fn().mockResolvedValue('Phone 1');
+const mockGetDevice = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('./deviceRegistry', () => ({
   addDevice: (...args: unknown[]) => mockAddDevice(...args),
@@ -27,6 +28,7 @@ vi.mock('./deviceRegistry', () => ({
   canAddDevice: () => mockCanAddDevice(),
   getDeviceCount: () => mockGetDeviceCount(),
   resolveDeviceName: () => mockResolveDeviceName(),
+  getDevice: (...args: unknown[]) => mockGetDevice(...args),
 }));
 
 const mockCompletePairing = vi.fn().mockResolvedValue(undefined);
@@ -99,10 +101,18 @@ describe('confirmSasMatch - device registration', () => {
 
   it('returns false when device limit is reached', async () => {
     mockCanAddDevice.mockResolvedValue(false);
+    mockGetDevice.mockResolvedValue(undefined);
 
-    const { confirmSasMatch } = await import('./pairingCoordinator');
+    const { confirmSasMatch, _setPendingRemoteKeyForTest } = await import('./pairingCoordinator');
+
+    const fakeKey = new Uint8Array(32);
+    crypto.getRandomValues(fakeKey);
+    _setPendingRemoteKeyForTest(fakeKey);
 
     const result = await confirmSasMatch();
     expect(result).toBe(false);
+    expect(mockCanAddDevice).toHaveBeenCalled();
+
+    _setPendingRemoteKeyForTest(null);
   });
 });
