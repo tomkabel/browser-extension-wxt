@@ -71,10 +71,13 @@ class AuditLogger(private val context: Context) {
     @Volatile
     private var attestationKey: KeyPair? = null
     private val keyLock = ReentrantLock()
+    private val fileLock = ReentrantLock()
 
     fun logEntry(entry: QesAuditEntry) {
         synchronized(entries) {
             entries.add(entry)
+        }
+        fileLock.withLock {
             persistEntry(entry)
         }
         Log.i(TAG, "Audit entry logged: session=${entry.sessionId} result=${entry.result}")
@@ -104,7 +107,7 @@ class AuditLogger(private val context: Context) {
     }
 
     fun exportAuditLog(): String {
-        val signedEntries = loadSignedEntriesFromStorage()
+        val signedEntries = fileLock.withLock { loadSignedEntriesFromStorage() }
         val exportArray = JSONArray()
         for (signed in signedEntries) {
             exportArray.put(JSONObject().apply {
@@ -121,6 +124,8 @@ class AuditLogger(private val context: Context) {
     fun clear() {
         synchronized(entries) {
             entries.clear()
+        }
+        fileLock.withLock {
             val file = getAuditFile()
             if (file.exists()) file.delete()
         }
@@ -128,7 +133,7 @@ class AuditLogger(private val context: Context) {
     }
 
     fun loadPersistedEntries(): List<QesAuditEntry> {
-        val signed = loadSignedEntriesFromStorage()
+        val signed = fileLock.withLock { loadSignedEntriesFromStorage() }
         synchronized(entries) {
             val deduplicated = signed.filter { it.entry !in entries }
             entries.addAll(deduplicated.map { it.entry })
@@ -228,7 +233,11 @@ class AuditLogger(private val context: Context) {
                 for (i in 0 until existing.length()) {
                     allEntries.add(existing.getJSONObject(i))
                 }
-            } catch (_: Exception) { }
+            } catch (e: Exception) {
+                Log.e(TAG, "Corrupt audit file detected, backing up", e)
+                val backup = File(file.parentFile, "${file.name}.corrupt.${System.currentTimeMillis()}")
+                if (file.exists()) file.renameTo(backup)
+            }
         }
 
         allEntries.add(newEntryJson)
