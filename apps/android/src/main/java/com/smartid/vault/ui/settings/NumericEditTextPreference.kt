@@ -6,13 +6,15 @@ import androidx.preference.EditTextPreference
 
 class NumericEditTextPreference : EditTextPreference {
 
-    constructor(context: Context, attrs: AttributeSet?) : super(context, attrs) {
+    constructor(context: Context, attrs: AttributeSet?) : super(context, attrs)
+
+    constructor(context: Context) : super(context)
+
+    init {
         setOnBindEditTextListener { editText ->
             editText.inputType = android.text.InputType.TYPE_CLASS_NUMBER
         }
     }
-
-    constructor(context: Context) : super(context)
 
     override fun getPersistedString(defaultReturnValue: String?): String {
         return getPersistedStringInternal(defaultReturnValue)
