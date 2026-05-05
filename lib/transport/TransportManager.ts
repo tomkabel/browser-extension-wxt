@@ -19,6 +19,8 @@ export class TransportManager {
   private activeTransport: Transport | null = null;
   private usbAvailable = false;
   private connecting = false;
+  private selectPromise: Promise<Transport | null> | null = null;
+  private switchPromise: Promise<boolean> | null = null;
   private usbPollTimer: ReturnType<typeof setInterval> | null = null;
   private listeners: Map<string, Array<(data: unknown) => void>> = new Map();
   private messageCallback: ((data: Uint8Array) => void) | null = null;
@@ -51,11 +53,19 @@ export class TransportManager {
   async selectTransport(): Promise<Transport> {
     if (this.activeTransport) return this.activeTransport;
 
-    const transport = await this.discoverTransport('Transport selected');
-    if (!transport) {
-      throw new Error('No transport available');
+    if (!this.selectPromise) {
+      this.selectPromise = this.discoverTransport('Transport selected');
     }
-    return transport;
+
+    try {
+      const transport = await this.selectPromise;
+      if (!transport) {
+        throw new Error('No transport available');
+      }
+      return transport;
+    } finally {
+      this.selectPromise = null;
+    }
   }
 
   async monitorQuality(transport: Transport): Promise<{ latencyMs: number; healthy: boolean }> {
@@ -124,6 +134,19 @@ export class TransportManager {
   }
 
   async switchTransport(target: TransportType, reason: string): Promise<boolean> {
+    if (this.switchPromise) {
+      return this.switchPromise;
+    }
+
+    this.switchPromise = this.doSwitch(target, reason);
+    try {
+      return await this.switchPromise;
+    } finally {
+      this.switchPromise = null;
+    }
+  }
+
+  private async doSwitch(target: TransportType, reason: string): Promise<boolean> {
     const previous = this.activeTransport?.type ?? null;
     const current = this.activeTransport;
 
