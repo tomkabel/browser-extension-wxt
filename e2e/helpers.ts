@@ -28,29 +28,50 @@ export async function startMockHost(): Promise<MockHostHandle> {
       );
 
       let stderrBuf = '';
+      let settled = false;
 
-      child.stderr?.on('data', (data: Buffer) => {
+      const onData = (data: Buffer): void => {
         stderrBuf += data.toString();
         const nameMatch = stderrBuf.match(/Mock host started: (.+)/);
         const pathMatch = stderrBuf.match(/Manifest: (.+)/);
-        if (nameMatch && pathMatch) {
+        if (nameMatch && pathMatch && !settled) {
+          settled = true;
           clearTimeout(timeout);
+          cleanupListeners();
           resolve({
             hostName: nameMatch[1]!.trim(),
             manifestPath: pathMatch[1]!.trim(),
           });
         }
-      });
+      };
 
-      child.on('error', (err) => {
-        clearTimeout(timeout);
-        reject(err);
-      });
+      const onError = (err: Error): void => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timeout);
+          cleanupListeners();
+          reject(err);
+        }
+      };
 
-      child.on('exit', (code) => {
-        clearTimeout(timeout);
-        reject(new Error(`Mock host exited with code ${code}: ${stderrBuf}`));
-      });
+      const onExit = (code: number | null): void => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timeout);
+          cleanupListeners();
+          reject(new Error(`Mock host exited with code ${code}: ${stderrBuf}`));
+        }
+      };
+
+      const cleanupListeners = (): void => {
+        child.stderr?.off('data', onData);
+        child.off('error', onError);
+        child.off('exit', onExit);
+      };
+
+      child.stderr?.on('data', onData);
+      child.on('error', onError);
+      child.on('exit', onExit);
     },
   );
 
