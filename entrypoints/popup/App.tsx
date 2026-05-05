@@ -85,6 +85,13 @@ function PopupApp() {
   const showDevices = useAppStore((s) => s.showDevices);
   const setShowDevices = useAppStore((s) => s.setShowDevices);
   const setPendingDomains = useAppStore((s) => s.setPendingDomains);
+  const devicesHeadingRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    if (showDevices) {
+      devicesHeadingRef.current?.focus({ preventScroll: true });
+    }
+  }, [showDevices]);
 
   useEffect(() => {
     let mounted = true;
@@ -121,9 +128,14 @@ function PopupApp() {
         <button
           type="button"
           className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-          onClick={() => setShowDevices(!showDevices)}
+          onClick={() => {
+            const next = !showDevices;
+            setShowDevices(next);
+            if (next) setShowSettings(false);
+          }}
           title="Devices"
           aria-label="Devices"
+          aria-pressed={showDevices}
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
@@ -137,7 +149,11 @@ function PopupApp() {
         <button
           type="button"
           className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-          onClick={() => setShowSettings(!showSettings)}
+          onClick={() => {
+            const next = !showSettings;
+            setShowSettings(next);
+            if (next) setShowDevices(false);
+          }}
           title="Settings"
           aria-label="Settings"
         >
@@ -166,7 +182,7 @@ function PopupApp() {
         ) : showDevices ? (
           <ErrorBoundary>
             <Suspense fallback={<LoadingFallback />}>
-              <DeviceListPanel />
+              <DeviceListPanel ref={devicesHeadingRef} />
             </Suspense>
           </ErrorBoundary>
         ) : (
