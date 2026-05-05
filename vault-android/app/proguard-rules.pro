@@ -1,5 +1,5 @@
 -keep class org.smartid.vault.audit.QesAuditEntry { *; }
--keepclassmembers class org.smartid.vault.ghost.GhostActuatorService$Coordinate {
+-keepclassmembers class org.smartid.vault.ghost.Coordinate {
     float x;
     float y;
 }

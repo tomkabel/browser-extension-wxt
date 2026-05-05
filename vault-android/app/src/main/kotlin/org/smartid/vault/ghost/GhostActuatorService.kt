@@ -5,13 +5,15 @@ import android.accessibilityservice.GestureDescription
 import android.content.Context
 import android.content.Intent
 import android.graphics.Path
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
-import android.view.accessibility.AccessibilityNodeInfo
 class GhostActuatorService : AccessibilityService() {
 
+    private var sequenceToken = 0
+    private var currentToken = 0
     private var preparedSequence: List<Coordinate>? = null
     private var isHeld = false
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -26,14 +28,17 @@ class GhostActuatorService : AccessibilityService() {
         if (event == null) return
 
         if (!validateForegroundPackage(event)) {
-            clearSequence()
-            Log.w(TAG, "Foreground app not in whitelist, sequence cleared")
+            if (preparedSequence != null || isHeld) {
+                clearSequence()
+                Log.w(TAG, "Foreground app not in whitelist, sequence cleared")
+            }
             return
         }
     }
 
     override fun onInterrupt() {
         Log.w(TAG, "AccessibilityService interrupted")
+        sequenceToken++
         clearSequence()
     }
 
@@ -85,42 +90,57 @@ class GhostActuatorService : AccessibilityService() {
 
         isHeld = false
         preparedSequence = null
-        Log.i(TAG, "Executing held gesture sequence (${sequence.size} taps)")
+        currentToken = ++sequenceToken
+        val executionToken = currentToken
+        Log.i(TAG, "Executing held gesture sequence (${sequence.size} taps) [token=$executionToken]")
 
-        executeTapsWithDelay(sequence, 0)
+        executeTapsWithDelay(sequence, 0, executionToken)
     }
 
     fun clearSequence() {
+        sequenceToken++
+        mainHandler.removeCallbacksAndMessages(null)
         preparedSequence = null
         isHeld = false
-        Log.i(TAG, "Gesture sequence cleared")
+        Log.i(TAG, "Gesture sequence cleared and pending callbacks removed")
     }
 
-    private fun executeTapsWithDelay(coordinates: List<Coordinate>, index: Int) {
+    private fun executeTapsWithDelay(coordinates: List<Coordinate>, index: Int, token: Int) {
         if (index >= coordinates.size) {
-            Log.i(TAG, "Gesture sequence complete")
-            GhostActuatorBridge.notifyCompleted()
+            if (token == currentToken) {
+                Log.i(TAG, "Gesture sequence complete")
+                GhostActuatorBridge.notifyCompleted()
+            }
             return
         }
+
+        if (token != currentToken) return
 
         val coord = coordinates[index]
         val tapDuration = GhostActuatorBridge.humanDelayMs(BASE_TAP_DURATION_MS)
         val gesture = buildTapGesture(coord.x, coord.y, tapDuration)
 
-        dispatchGesture(gesture, object : GestureResultCallback() {
+        val dispatched = dispatchGesture(gesture, object : GestureResultCallback() {
             override fun onCompleted(gestureDescription: GestureDescription?) {
+                if (token != currentToken) return
                 Log.d(TAG, "Tap $index completed at (${coord.x}, ${coord.y})")
                 val interTapDelay = GhostActuatorBridge.humanDelayMs(INTER_TAP_DELAY_BASE_MS)
                 mainHandler.postDelayed({
-                    executeTapsWithDelay(coordinates, index + 1)
+                    executeTapsWithDelay(coordinates, index + 1, token)
                 }, interTapDelay)
             }
 
             override fun onCancelled(gestureDescription: GestureDescription?) {
+                if (token != currentToken) return
                 Log.w(TAG, "Tap $index cancelled")
                 GhostActuatorBridge.notifyFailed(index)
             }
         }, null)
+
+        if (!dispatched) {
+            Log.w(TAG, "Tap $index rejected by dispatchGesture")
+            GhostActuatorBridge.notifyFailed(index)
+        }
     }
 
     private fun buildTapGesture(x: Float, y: Float, durationMs: Long): GestureDescription {
@@ -132,7 +152,7 @@ class GhostActuatorService : AccessibilityService() {
     private fun validateForegroundPackage(event: AccessibilityEvent): Boolean {
         val packageName = event.packageName?.toString() ?: return true
         if (packageName in ALLOWED_PACKAGES) return true
-        Log.w(TAG, "Event from non-whitelisted package: $packageName")
+        Log.d(TAG, "Event from non-whitelisted package: $packageName")
         return false
     }
 
@@ -145,6 +165,8 @@ class GhostActuatorService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        sequenceToken++
+        mainHandler.removeCallbacksAndMessages(null)
         GhostActuatorBridge.unbind()
         clearSequence()
         super.onDestroy()
