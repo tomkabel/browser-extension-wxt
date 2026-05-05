@@ -64,14 +64,13 @@ class AuditLoggerTest {
     @Test
     fun `export produces valid JSON array`() {
         val logger = AuditLogger(RuntimeEnvironment.getApplication())
-        try {
-            logger.logEntry(sampleEntry)
-        } catch (_: Exception) {
-            // Persistence may not be available in the test environment
-        }
+        logger.logEntry(sampleEntry)
         val export = logger.exportAuditLog()
-        assertTrue("Export should be a JSON array", export.startsWith("["))
-        assertTrue("Export should end with ]", export.endsWith("]"))
+        val jsonArray = org.json.JSONArray(export)
+        assertTrue("Export should contain at least 1 entry", jsonArray.length() >= 1)
+        val firstObj = jsonArray.getJSONObject(0)
+        val entryObj = firstObj.getJSONObject("entry")
+        assertEquals("Exported entry must match sessionId", sampleEntry.sessionId, entryObj.getString("sessionId"))
     }
 
     @Test
