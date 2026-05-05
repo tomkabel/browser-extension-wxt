@@ -34,9 +34,32 @@ const REGISTRY_URL = 'https://raw.githubusercontent.com/smartid2/registry/main/d
 const CACHE_KEY = 'registry:detectors';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_PATTERN_LENGTH = 500;
+const MAX_URL_TEST_LENGTH = 2048;
+const MAX_ALTERNATIONS = 5;
 
-function hasNestedQuantifier(pattern: string): boolean {
-  return /\([^)]*[+*][^)]*\)\s*[+*]/.test(pattern);
+const NESTED_QUANTIFIER_RE = /\([^)]*[+*][^)]*\)\s*[+*]/;
+const GROUP_WITH_QUANTIFIER_RE = /\(([^)]+)\)[+*]/g;
+
+function isSafeUrlPattern(pattern: string): boolean {
+  if (pattern.length > MAX_PATTERN_LENGTH) return false;
+
+  const stripped = pattern.replace(/\\(.)/g, ' ');
+
+  if (NESTED_QUANTIFIER_RE.test(stripped)) return false;
+
+  let match: RegExpExecArray | null;
+  const altRe = new RegExp(GROUP_WITH_QUANTIFIER_RE.source, GROUP_WITH_QUANTIFIER_RE.flags);
+  while ((match = altRe.exec(stripped)) !== null) {
+    const alternatives = match[1]!.split('|');
+    if (alternatives.length > MAX_ALTERNATIONS) return false;
+  }
+
+  try {
+    new RegExp(pattern);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 let cachedDetectors: DeclarativeDetector[] | null = null;
@@ -55,17 +78,6 @@ function isValidDetector(d: Record<string, unknown>): boolean {
   if (!Array.isArray(sels.amount) || sels.amount.length === 0) return false;
   if (!Array.isArray(sels.recipient) || sels.recipient.length === 0) return false;
   return true;
-}
-
-function isSafeUrlPattern(pattern: string): boolean {
-  if (pattern.length > MAX_PATTERN_LENGTH) return false;
-  if (hasNestedQuantifier(pattern)) return false;
-  try {
-    new RegExp(pattern);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function compileDetectors(detectors: DeclarativeDetector[]): DeclarativeDetector[] {
@@ -151,8 +163,10 @@ export async function initializeRegistry(): Promise<void> {
 export function findDeclarativeDetector(url: string): DeclarativeDetector | null {
   if (!cachedDetectors) return null;
 
+  const testUrl = url.length > MAX_URL_TEST_LENGTH ? url.slice(0, MAX_URL_TEST_LENGTH) : url;
+
   for (const detector of cachedDetectors) {
-    if (detector.compiledPattern?.test(url)) {
+    if (detector.compiledPattern?.test(testUrl)) {
       return detector;
     }
   }
