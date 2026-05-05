@@ -13,8 +13,10 @@ import { reRegisterOnStartup, updateBadgeCount } from './contentScriptManager';
 import { initializeRegistry } from '~/lib/transaction/remoteRegistry';
 import { log } from '~/lib/errors';
 import { startWebRequestCapture } from '~/lib/tlsBinding';
+import { reconcileDeviceRegistry } from './deviceRegistry';
 
 async function tryRestoreSession(): Promise<void> {
+  await reconcileDeviceRegistry();
   const reauthOk = await performSilentReauth();
   if (!reauthOk) {
     await restorePersistedSession();

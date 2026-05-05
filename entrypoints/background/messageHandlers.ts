@@ -62,6 +62,14 @@ import {
   registerForDomain,
 } from './contentScriptManager';
 import { transmitCredentialToAndroid } from './pairingCoordinator';
+import {
+  listDevices,
+  getActiveDeviceId,
+  setActiveDevice,
+  revokeDevice,
+  getDevice,
+} from './deviceRegistry';
+import type { DeviceMeta } from '~/types';
 
 type MessageHandler = (
   payload: unknown,
@@ -675,6 +683,99 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
   'get-pending-domains': async () => {
     const pending = await getPendingDomains();
     return { success: true, data: { pending } };
+  },
+
+  'get-devices': async () => {
+    const devices = await listDevices();
+    const activeId = await getActiveDeviceId();
+    const deviceMetas: (DeviceMeta & { isActive: boolean })[] = devices.map((d) => ({
+      deviceId: d.deviceId,
+      name: d.name,
+      lastSeen: d.lastSeen,
+      pairedAt: d.pairedAt,
+      isPrimary: d.isPrimary,
+      isActive: d.deviceId === activeId,
+    }));
+    return { success: true, data: { devices: deviceMetas } };
+  },
+
+  'switch-device': async (payload) => {
+    const { deviceId } = payload as { deviceId: string };
+    try {
+      const device = await getDevice(deviceId);
+      if (!device) {
+        return { success: false, error: 'Device not found' };
+      }
+
+      const previousDeviceId = await getActiveDeviceId();
+
+      if (transportManager) {
+        try {
+          await transportManager.destroy();
+        } catch {
+          log.warn('[switch-device] Error destroying current transport');
+        }
+        transportManager = null;
+        transportManagerInitPromise = null;
+      }
+
+      await setActiveDevice(deviceId);
+
+      if (device.phoneStaticKey.length > 0) {
+        try {
+          await initializeTransportManager();
+          log.info('[switch-device] Transport reinitialized for device:', deviceId);
+        } catch (err) {
+          log.error('[switch-device] Failed to reinitialize transport:', err);
+          if (previousDeviceId && previousDeviceId !== deviceId) {
+            try {
+              await setActiveDevice(previousDeviceId);
+            } catch (restoreErr) {
+              log.error('[switch-device] Failed to restore previous active device:', restoreErr);
+            }
+          }
+          return { success: false, error: 'Device switched but transport reconnection failed' };
+        }
+      }
+
+      return { success: true, data: { deviceId } };
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Failed to switch device',
+      };
+    }
+  },
+
+  'revoke-device': async (payload) => {
+    const { deviceId } = payload as { deviceId: string };
+    try {
+      const activeId = await getActiveDeviceId();
+      await revokeDevice(deviceId);
+
+      if (deviceId === activeId && transportManager) {
+        log.info('[revoke-device] Revoked device was active, tearing down transport');
+        try {
+          await transportManager.destroy();
+        } catch {
+          log.warn('[revoke-device] Error destroying transport for revoked device');
+        }
+        transportManager = null;
+        transportManagerInitPromise = null;
+      }
+
+      return { success: true, data: { deviceId } };
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Failed to revoke device',
+      };
+    }
+  },
+
+  'get-active-device-id': async () => {
+    const activeId = await getActiveDeviceId();
+    return { success: true, data: { activeDeviceId: activeId } };
   },
 
   'assertion-complete': async (payload) => {

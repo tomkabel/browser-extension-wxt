@@ -101,7 +101,11 @@ export type MessageType =
   | 'webrtc-sdp-for-qr'
   | 'webrtc-connect-usb'
   | 'webrtc-start-pairing-offerless'
-  | 'webrtc-ping';
+  | 'webrtc-ping'
+  | 'get-devices'
+  | 'switch-device'
+  | 'revoke-device'
+  | 'get-active-device-id';
 
 export interface ExtensionMessage<T = unknown> {
   type: MessageType;
@@ -192,6 +196,23 @@ export interface AttestedCodePayload {
   signature: string;
   sessionId?: string;
   timestamp?: number;
+}
+
+export interface DeviceRecord {
+  deviceId: string;
+  name: string;
+  phoneStaticKey: Uint8Array;
+  lastSeen: number;
+  pairedAt: number;
+  isPrimary: boolean;
+}
+
+export interface DeviceMeta {
+  deviceId: string;
+  name: string;
+  lastSeen: number;
+  pairedAt: number;
+  isPrimary: boolean;
 }
 
 export const PHASE_ORDER = [
