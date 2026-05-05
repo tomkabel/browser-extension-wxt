@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SmartID Vault</string>
+    <string name="setup_title">SmartID Vault Setup</string>
+    <string name="accessibility_service_description">Ghost actuator for automated Smart-ID PIN entry via blind coordinate injection</string>
+    <string name="notification_channel_name">SmartID Vault</string>
+    <string name="notification_service_disabled">AccessibilityService is disabled — tap to enable</string>
+    <string name="settings_title">Gesture Settings</string>
+    <string name="tap_duration_title">Tap Duration (ms)</string>
+    <string name="inter_tap_delay_title">Inter-Tap Delay (ms)</string>
+    <string name="retry_delay_title">Retry Delay (ms)</string>
+    <string name="max_retries_title">Max Retries</string>
+    <string name="developer_mode_title">Developer Mode</string>
+</resources>

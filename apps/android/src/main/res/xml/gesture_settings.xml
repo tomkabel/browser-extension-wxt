@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+    <EditTextPreference
+        android:key="tap_duration_ms"
+        android:title="@string/tap_duration_title"
+        android:defaultValue="50"
+        android:inputType="number" />
+    <EditTextPreference
+        android:key="inter_tap_delay_ms"
+        android:title="@string/inter_tap_delay_title"
+        android:defaultValue="100"
+        android:inputType="number" />
+    <EditTextPreference
+        android:key="retry_delay_ms"
+        android:title="@string/retry_delay_title"
+        android:defaultValue="500"
+        android:inputType="number" />
+    <EditTextPreference
+        android:key="max_retries"
+        android:title="@string/max_retries_title"
+        android:defaultValue="2"
+        android:inputType="number" />
+</PreferenceScreen>
