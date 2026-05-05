@@ -142,8 +142,9 @@ function findTransactionScope(): Element | null {
         if (!el) return NodeFilter.FILTER_REJECT;
         const tag = el.tagName;
         if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT' || tag === 'TEMPLATE') return NodeFilter.FILTER_REJECT;
-        if (el.offsetParent === null && tag !== 'BODY' && tag !== 'HTML') return NodeFilter.FILTER_REJECT;
         if (el.closest('[aria-hidden="true"]')) return NodeFilter.FILTER_REJECT;
+        const style = tag !== 'BODY' && tag !== 'HTML' ? window.getComputedStyle(el) : null;
+        if (style && style.display === 'none') return NodeFilter.FILTER_REJECT;
         return NodeFilter.FILTER_ACCEPT;
       },
     },
@@ -151,12 +152,12 @@ function findTransactionScope(): Element | null {
 
   while (walker.nextNode()) {
     const node = walker.currentNode as Text;
-    if (!node.textContent) continue;
+    if (!node.textContent || node.textContent.length < 5) continue;
     if (AMOUNT_PATTERN.test(node.textContent)) {
       let el: Element | null = node.parentElement;
+      const CONTAINER_TAGS = new Set(['TD', 'DIV', 'SECTION', 'ARTICLE', 'LI', 'MAIN', 'TABLE', 'FORM']);
       while (el && el !== document.body) {
-        const tag = el.tagName;
-        if (tag === 'TD' || tag === 'DIV' || tag === 'SECTION' || tag === 'ARTICLE' || tag === 'LI' || tag === 'MAIN') {
+        if (CONTAINER_TAGS.has(el.tagName)) {
           return el;
         }
         el = el.parentElement;
