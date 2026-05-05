@@ -4,14 +4,18 @@ import android.util.Log;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.security.AlgorithmParameters;
 import java.security.KeyFactory;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
 import java.security.Signature;
-import java.security.spec.ECPoint;
+import java.security.spec.ECFieldFp;
+import java.security.spec.ECGenParameterSpec;
 import java.security.spec.ECParameterSpec;
+import java.security.spec.ECPoint;
 import java.security.spec.ECPublicKeySpec;
+import java.security.spec.EllipticCurve;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Arrays;
@@ -116,6 +120,12 @@ public class WebAuthnVerifier {
             return reconstructFromUncompressedPoint(publicKeyInput);
         }
 
+        if (publicKeyInput.length == 65 && (publicKeyInput[0] == 0x02 || publicKeyInput[0] == 0x03)) {
+            throw new IllegalArgumentException(
+                    "Compressed EC point encoding (0x" + Integer.toHexString(publicKeyInput[0] & 0xFF)
+                            + ") is not supported. Provide uncompressed (0x04) or X.509/SPKI encoding.");
+        }
+
         try {
             X509EncodedKeySpec keySpec = new X509EncodedKeySpec(publicKeyInput);
             KeyFactory keyFactory = KeyFactory.getInstance("EC");
@@ -125,40 +135,33 @@ public class WebAuthnVerifier {
         } catch (Exception e) {
             throw new IllegalArgumentException(
                     "Unsupported public key format: length=" + publicKeyInput.length
-                            + " firstByte=0x" + Integer.toHexString(publicKeyInput[0] & 0xFF), e);
+                            + " firstByte=0x" + Integer.toHexString(publicKeyInput[0] & 0xFF)
+                            + ". Expected uncompressed point (65 bytes, 0x04) or X.509/SPKI.", e);
         }
     }
 
     private PublicKey reconstructFromUncompressedPoint(byte[] uncompressedPublicKey)
             throws NoSuchAlgorithmException, InvalidKeySpecException {
 
-        byte[] xBytes = Arrays.copyOfRange(uncompressedPublicKey, 1, 33);
-        byte[] yBytes = Arrays.copyOfRange(uncompressedPublicKey, 33, 65);
+        byte[] xBytes = java.util.Arrays.copyOfRange(uncompressedPublicKey, 1, 33);
+        byte[] yBytes = java.util.Arrays.copyOfRange(uncompressedPublicKey, 33, 65);
 
         java.math.BigInteger x = new java.math.BigInteger(1, xBytes);
         java.math.BigInteger y = new java.math.BigInteger(1, yBytes);
 
         ECPoint point = new ECPoint(x, y);
 
-        ECParameterSpec ecSpec = new ECParameterSpec(
-                new java.security.spec.EllipticCurve(
-                        new java.security.spec.ECFieldFp(
-                                new java.math.BigInteger("115792089210356248762697446949407573530086143415290314195533631308867097853951")
-                        ),
-                        new java.math.BigInteger("115792089210356248762697446949407573530086143415290314195533631308867097853948"),
-                        new java.math.BigInteger("41058363725152142129326129780047268409114441015993725554835256314039467401291")
-                ),
-                new ECPoint(
-                        new java.math.BigInteger("48439561293906451759052585252797914202762949526041747995844080717082404635286"),
-                        new java.math.BigInteger("36134250956749795798585127919587881956611106672985015071877198253568414405109")
-                ),
-                new java.math.BigInteger("115792089210356248762697446949407573529996955224135760342422259061068512044369"),
-                1
-        );
+        ECParameterSpec ecSpec = getP256Parameters();
 
         ECPublicKeySpec keySpec = new ECPublicKeySpec(point, ecSpec);
         KeyFactory keyFactory = KeyFactory.getInstance("EC");
         return keyFactory.generatePublic(keySpec);
+    }
+
+    private static ECParameterSpec getP256Parameters() throws NoSuchAlgorithmException {
+        AlgorithmParameters params = AlgorithmParameters.getInstance("EC");
+        params.init(new ECGenParameterSpec("secp256r1"));
+        return params.getParameterSpec(ECParameterSpec.class);
     }
 
     public VerificationResult verifyAssertion(
