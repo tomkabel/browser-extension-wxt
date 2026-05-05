@@ -21,33 +21,14 @@ class HapticNotifier(private val context: Context) {
             return
         }
 
-        val sosPattern = longArrayOf(
-            0L,     // start immediately
-            500L,   // LONG vibration
-            200L,   // pause
-            500L,   // LONG vibration
-            200L,   // pause
-            500L,   // LONG vibration
-            1000L,  // long pause (end of first S-O-S cycle)
-            200L,   // SHORT
-            200L,   // pause
-            200L,   // SHORT
-            200L,   // pause
-            200L,   // SHORT
-            1000L,  // long pause
-            500L,   // LONG vibration
-            200L,   // pause
-            500L,   // LONG vibration
-            200L,   // pause
-            500L,   // LONG vibration
-        )
+        val pattern = SOS_PATTERN.copyOf()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val effect = VibrationEffect.createWaveform(sosPattern, 0)
+            val effect = VibrationEffect.createWaveform(pattern, 0)
             vib.vibrate(effect)
         } else {
             @Suppress("DEPRECATION")
-            vib.vibrate(sosPattern, 0)
+            vib.vibrate(pattern, 0)
         }
         Log.i(TAG, "SOS haptic pattern started")
     }
@@ -69,5 +50,26 @@ class HapticNotifier(private val context: Context) {
 
     companion object {
         private const val TAG = "HapticNotifier"
+
+        val SOS_PATTERN: LongArray = longArrayOf(
+            0L,     // start immediately
+            500L,   // LONG vibration
+            200L,   // pause
+            500L,   // LONG vibration
+            200L,   // pause
+            500L,   // LONG vibration
+            1000L,  // long pause (end of first S-O-S cycle)
+            200L,   // SHORT
+            200L,   // pause
+            200L,   // SHORT
+            200L,   // pause
+            200L,   // SHORT
+            1000L,  // long pause
+            500L,   // LONG vibration
+            200L,   // pause
+            500L,   // LONG vibration
+            200L,   // pause
+            500L,   // LONG vibration
+        )
     }
 }
