@@ -223,12 +223,29 @@ describe('WebUsbTransport', () => {
       expect(await transport.getLatency()).toBe(-1);
     });
 
-    it('returns nominal value when connected', async () => {
+    it('measures USB transferOut latency when connected', async () => {
       const device = makeMockDevice();
+      (device.transferOut as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+        await new Promise((r) => setTimeout(r, 5));
+        return { bytesWritten: 0 };
+      });
       transport = new WebUsbTransport(makeMockAdapter(device));
       await transport.connect();
 
-      expect(await transport.getLatency()).toBe(1);
+      const latency = await transport.getLatency();
+      expect(latency).toBeGreaterThan(0);
+      expect(latency).toBeLessThan(1000);
+      expect(device.transferOut).toHaveBeenCalledWith(0x01, expect.any(Uint8Array));
+      await transport.disconnect();
+    });
+
+    it('returns -1 when transferOut throws', async () => {
+      const device = makeMockDevice();
+      (device.transferOut as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('device busy'));
+      transport = new WebUsbTransport(makeMockAdapter(device));
+      await transport.connect();
+
+      expect(await transport.getLatency()).toBe(-1);
       await transport.disconnect();
     });
   });
