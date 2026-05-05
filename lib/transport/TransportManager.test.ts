@@ -8,17 +8,20 @@ vi.mock('wxt/browser', () => ({
   },
 }));
 
-vi.mock('~/lib/retry', () => ({
-  withRetry: vi.fn(async (fn: () => Promise<unknown>) => {
-    try {
-      const data = await fn();
-      return { success: true, data, attempts: 1, totalTimeMs: 0 };
-    } catch (err) {
-      return { success: false, error: String(err), attempts: 1, totalTimeMs: 0 };
-    }
-  }),
-  isRetryableError: vi.fn(() => false),
-}));
+vi.mock('~/lib/retry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('~/lib/retry')>();
+  return {
+    ...actual,
+    withRetry: vi.fn(async (fn: () => Promise<unknown>) => {
+      try {
+        const data = await fn();
+        return { success: true, data, attempts: 1, totalTimeMs: 0 };
+      } catch (err) {
+        return { success: false, error: String(err), attempts: 1, totalTimeMs: 0 };
+      }
+    }),
+  };
+});
 
 const mockUsbConnect = vi.fn().mockRejectedValue(new Error('USB not available'));
 const mockUsbCheckAvailability = vi.fn().mockResolvedValue(false);
@@ -93,6 +96,29 @@ describe('TransportManager', () => {
       const manager = new TransportManager();
       await expect(manager.selectTransport()).rejects.toThrow('No transport available');
     });
+
+    it('deduplicates concurrent selectTransport calls', async () => {
+      const manager = new TransportManager();
+      const [first, second, third] = await Promise.all([
+        manager.selectTransport(),
+        manager.selectTransport(),
+        manager.selectTransport(),
+      ]);
+      expect(first).toBe(second);
+      expect(second).toBe(third);
+    });
+
+    it('allows retry after failed selectTransport', async () => {
+      mockWebRtcConnect
+        .mockRejectedValueOnce(new Error('WebRTC down'))
+        .mockResolvedValueOnce(undefined);
+
+      const manager = new TransportManager();
+      await expect(manager.selectTransport()).rejects.toThrow('No transport available');
+
+      const transport = await manager.selectTransport();
+      expect(transport.type).toBe('webrtc');
+    });
   });
 
   describe('monitorQuality', () => {
@@ -122,6 +148,36 @@ describe('TransportManager', () => {
       const result = await manager.monitorQuality(transport);
       expect(result.healthy).toBe(false);
       expect(result.latencyMs).toBe(-1);
+    });
+  });
+
+  describe('retry integration', () => {
+    it('delegates WebRTC connection retries to withRetry with correct options', async () => {
+      const { withRetry, isRetryableError } = await import('~/lib/retry');
+      const manager = new TransportManager();
+      await manager.selectTransport();
+
+      expect(withRetry).toHaveBeenCalledWith(
+        expect.any(Function),
+        expect.objectContaining({
+          maxAttempts: 3,
+          shouldRetry: isRetryableError,
+        }),
+      );
+    });
+
+    it('verifies isRetryableError accepts AbortError and rejects TypeError', async () => {
+      const { isRetryableError } = await import('~/lib/retry');
+      const abortError = new Error('aborted');
+      abortError.name = 'AbortError';
+      expect(isRetryableError(abortError)).toBe(true);
+      expect(isRetryableError(new TypeError('Failed to fetch'))).toBe(false);
+      expect(isRetryableError(Object.assign(new Error('server error'), { status: 503 }))).toBe(
+        true,
+      );
+      expect(isRetryableError(Object.assign(new Error('bad request'), { status: 400 }))).toBe(
+        false,
+      );
     });
   });
 });
