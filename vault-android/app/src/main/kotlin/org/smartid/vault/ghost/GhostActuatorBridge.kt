@@ -75,6 +75,16 @@ object GhostActuatorBridge {
         return true
     }
 
+    fun setAwaitingForeground(awaiting: Boolean): Boolean {
+        val svc = serviceRef?.get()
+        if (svc == null) {
+            logUnbound("setAwaitingForeground")
+            return false
+        }
+        svc.setAwaitingForeground(awaiting)
+        return true
+    }
+
     private fun logUnbound(method: String) {
         if (!unboundNotified) {
             unboundNotified = true
