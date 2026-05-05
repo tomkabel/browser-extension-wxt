@@ -15,6 +15,28 @@ vi.mock('./messageHandlers', () => ({
   initializeTransportManager: mockInitializeTransportManager,
 }));
 
+const mockAddDevice = vi.fn().mockResolvedValue(undefined);
+const mockSetActiveDevice = vi.fn().mockResolvedValue(undefined);
+const mockCanAddDevice = vi.fn().mockResolvedValue(true);
+const mockGetDeviceCount = vi.fn().mockResolvedValue(0);
+const mockResolveDeviceName = vi.fn().mockResolvedValue('Phone 1');
+
+vi.mock('./deviceRegistry', () => ({
+  addDevice: (...args: unknown[]) => mockAddDevice(...args),
+  setActiveDevice: (...args: unknown[]) => mockSetActiveDevice(...args),
+  canAddDevice: () => mockCanAddDevice(),
+  getDeviceCount: () => mockGetDeviceCount(),
+  resolveDeviceName: () => mockResolveDeviceName(),
+}));
+
+const mockCompletePairing = vi.fn().mockResolvedValue(undefined);
+const mockClearPairing = vi.fn().mockResolvedValue(undefined);
+
+vi.mock('./pairingService', () => ({
+  completePairing: (...args: unknown[]) => mockCompletePairing(...args),
+  clearPairing: (...args: unknown[]) => mockClearPairing(...args),
+}));
+
 beforeEach(() => {
   fakeBrowser.reset();
   vi.clearAllMocks();
@@ -64,6 +86,23 @@ describe('transmitCredentialToAndroid', () => {
 
     const result = await transmitCredentialToAndroid('test-id', new Uint8Array([1, 2, 3]));
 
+    expect(result).toBe(false);
+  });
+});
+
+describe('confirmSasMatch - device registration', () => {
+  it('returns false when no pending remote key exists', async () => {
+    const { confirmSasMatch } = await import('./pairingCoordinator');
+    const result = await confirmSasMatch();
+    expect(result).toBe(false);
+  });
+
+  it('returns false when device limit is reached', async () => {
+    mockCanAddDevice.mockResolvedValue(false);
+
+    const { confirmSasMatch } = await import('./pairingCoordinator');
+
+    const result = await confirmSasMatch();
     expect(result).toBe(false);
   });
 });
