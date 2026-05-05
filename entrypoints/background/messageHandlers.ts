@@ -106,11 +106,11 @@ function validateQesPayload(payload: unknown): { valid: boolean; state?: string;
     return { valid: false, error: 'invalid_payload: state must be a valid QesState' };
   }
   if (p.sessionId != null && typeof p.sessionId !== 'string') return { valid: false, error: 'invalid_payload: sessionId must be string' };
-  if (p.countdownSeconds != null && typeof p.countdownSeconds !== 'number') return { valid: false, error: 'invalid_payload: countdownSeconds must be number' };
+  if (p.countdownSeconds != null && (typeof p.countdownSeconds !== 'number' || !Number.isFinite(p.countdownSeconds) || p.countdownSeconds < 0)) return { valid: false, error: 'invalid_payload: countdownSeconds must be a finite non-negative number' };
   if (p.result != null && typeof p.result !== 'string') return { valid: false, error: 'invalid_payload: result must be string' };
   if (p.interruptType != null && typeof p.interruptType !== 'string') return { valid: false, error: 'invalid_payload: interruptType must be string' };
   if (p.auditEntry != null && typeof p.auditEntry !== 'string') return { valid: false, error: 'invalid_payload: auditEntry must be string' };
-  if (p.timestamp != null && typeof p.timestamp !== 'number') return { valid: false, error: 'invalid_payload: timestamp must be number' };
+  if (p.timestamp != null && (typeof p.timestamp !== 'number' || !Number.isFinite(p.timestamp) || p.timestamp < 0)) return { valid: false, error: 'invalid_payload: timestamp must be a finite non-negative number' };
   return { valid: true, state: p.state };
 }
 
@@ -965,6 +965,10 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
 
   'qes-arm': async (payload) => {
     const data = payload as { sessionId: string; transactionHash: string; zkTlsProofHash: string; webauthnAssertionHash: string };
+    if (!data.sessionId || typeof data.sessionId !== 'string') return { success: false, error: 'Invalid payload: missing or invalid sessionId' };
+    if (!data.transactionHash || typeof data.transactionHash !== 'string') return { success: false, error: 'Invalid payload: missing or invalid transactionHash' };
+    if (!data.zkTlsProofHash || typeof data.zkTlsProofHash !== 'string') return { success: false, error: 'Invalid payload: missing or invalid zkTlsProofHash' };
+    if (!data.webauthnAssertionHash || typeof data.webauthnAssertionHash !== 'string') return { success: false, error: 'Invalid payload: missing or invalid webauthnAssertionHash' };
     try {
       await initializeTransportManager();
       const tm = getTransportManager();
