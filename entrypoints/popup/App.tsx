@@ -6,6 +6,7 @@ import { ErrorBoundary } from './ErrorBoundary';
 import { AttestationStatus } from './panels/AttestationStatus';
 import { DomainPermissionPrompt } from './panels/DomainPermissionPrompt';
 import { SettingsPanel } from './panels/SettingsPanel';
+import { QesStatusPanel } from './panels/QesStatusPanel';
 
 const PairingPanel = lazy(() =>
   import('./panels/PairingPanel').then((m) => ({ default: m.PairingPanel })),
@@ -197,6 +198,9 @@ function PopupApp() {
             </ErrorBoundary>
             <ErrorBoundary>
               <PanelRouter />
+            </ErrorBoundary>
+            <ErrorBoundary>
+              <QesStatusPanel />
             </ErrorBoundary>
             <ErrorBoundary>
               <AttestationStatus />

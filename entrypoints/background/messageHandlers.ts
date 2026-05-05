@@ -82,6 +82,38 @@ interface MessageResponse {
   error?: string;
 }
 
+const TIMEOUT_MS = 10_000;
+
+async function timedTransportSend(tm: TransportManager, message: Uint8Array, label: string): Promise<MessageResponse> {
+  try {
+    await withTimeout(tm.send(message), TIMEOUT_MS, `${label} transport send timed out`);
+    return { success: true };
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : `${label} failed`;
+    if (errorMessage.includes('timed out')) {
+      log.warn(`${label} timed out`);
+    }
+    return { success: false, error: errorMessage };
+  }
+}
+
+const VALID_QES_STATES = new Set(['idle', 'armed', 'waiting', 'executing', 'completed', 'cancelled', 'timeout']);
+
+function validateQesPayload(payload: unknown): { valid: boolean; state?: string; error?: string } {
+  if (!payload || typeof payload !== 'object') return { valid: false, error: 'invalid_payload' };
+  const p = payload as Record<string, unknown>;
+  if (typeof p.state !== 'string' || !VALID_QES_STATES.has(p.state)) {
+    return { valid: false, error: 'invalid_payload: state must be a valid QesState' };
+  }
+  if (p.sessionId != null && typeof p.sessionId !== 'string') return { valid: false, error: 'invalid_payload: sessionId must be string' };
+  if (p.countdownSeconds != null && (typeof p.countdownSeconds !== 'number' || !Number.isFinite(p.countdownSeconds) || p.countdownSeconds < 0)) return { valid: false, error: 'invalid_payload: countdownSeconds must be a finite non-negative number' };
+  if (p.result != null && typeof p.result !== 'string') return { valid: false, error: 'invalid_payload: result must be string' };
+  if (p.interruptType != null && typeof p.interruptType !== 'string') return { valid: false, error: 'invalid_payload: interruptType must be string' };
+  if (p.auditEntry != null && typeof p.auditEntry !== 'string') return { valid: false, error: 'invalid_payload: auditEntry must be string' };
+  if (p.timestamp != null && (typeof p.timestamp !== 'number' || !Number.isFinite(p.timestamp) || p.timestamp < 0)) return { valid: false, error: 'invalid_payload: timestamp must be a finite non-negative number' };
+  return { valid: true, state: p.state };
+}
+
 const handlers: Partial<Record<MessageType, MessageHandler>> = {
   'tab-domain-changed': async (payload, sender) => {
     const { url } = payload as { domain: string; url: string };
@@ -902,6 +934,71 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
         success: false,
         error: err instanceof Error ? err.message : 'Attestation delivery failed',
       };
+    }
+  },
+
+  'qes-status-changed': async (payload) => {
+    const validation = validateQesPayload(payload);
+    if (!validation.valid) {
+      log.warn('qes-status-changed rejected:', validation.error);
+      return { success: false, error: validation.error };
+    }
+    const data = payload as { state: string; sessionId?: string; countdownSeconds?: number; result?: string; interruptType?: string; timestamp?: number; auditEntry?: string };
+    const qesData = {
+      state: data.state,
+      sessionId: data.sessionId,
+      countdownSeconds: data.countdownSeconds,
+      result: data.result,
+      interruptType: data.interruptType,
+      timestamp: data.timestamp,
+      auditEntry: data.auditEntry,
+      _updated: Date.now(),
+    };
+    await browser.storage.session.set({ 'qes:status': qesData });
+    return { success: true, data: qesData };
+  },
+
+  'get-qes-status': async () => {
+    const result = await browser.storage.session.get('qes:status');
+    return { success: true, data: result['qes:status'] ?? null };
+  },
+
+  'qes-arm': async (payload) => {
+    const data = payload as { sessionId: string; transactionHash: string; zkTlsProofHash: string; webauthnAssertionHash: string };
+    if (!data.sessionId || typeof data.sessionId !== 'string') return { success: false, error: 'Invalid payload: missing or invalid sessionId' };
+    if (!data.transactionHash || typeof data.transactionHash !== 'string') return { success: false, error: 'Invalid payload: missing or invalid transactionHash' };
+    if (!data.zkTlsProofHash || typeof data.zkTlsProofHash !== 'string') return { success: false, error: 'Invalid payload: missing or invalid zkTlsProofHash' };
+    if (!data.webauthnAssertionHash || typeof data.webauthnAssertionHash !== 'string') return { success: false, error: 'Invalid payload: missing or invalid webauthnAssertionHash' };
+    try {
+      await initializeTransportManager();
+      const tm = getTransportManager();
+      if (!tm) {
+        return { success: false, error: 'No transport available' };
+      }
+      const message = new TextEncoder().encode(JSON.stringify({
+        type: 'qes-arm',
+        sessionId: data.sessionId,
+        transactionHash: data.transactionHash,
+        zkTlsProofHash: data.zkTlsProofHash,
+        webauthnAssertionHash: data.webauthnAssertionHash,
+      }));
+      return timedTransportSend(tm, message, 'QES arm');
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : 'Failed to arm QES' };
+    }
+  },
+
+  'qes-cancel': async () => {
+    try {
+      await initializeTransportManager();
+      const tm = getTransportManager();
+      if (!tm) {
+        return { success: false, error: 'No transport available' };
+      }
+      const message = new TextEncoder().encode(JSON.stringify({ type: 'qes-cancel' }));
+      return timedTransportSend(tm, message, 'QES cancel');
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : 'Failed to cancel QES' };
     }
   },
 };

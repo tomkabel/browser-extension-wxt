@@ -35,11 +35,11 @@ V6's Ghost Actuator solves this with "Blind Actuation": instead of interacting w
 ### Modified Capabilities
 
 - Existing `a11y-bridge` accessibility service: adds ghost actuation alongside (or replacing) the existing semantic node interaction mode
-- `android-companion-app`: The actuation module switches from ADB-based `input tap` to native `dispatchGesture` for Smart-ID interaction
+- `react-native-companion-app`: The actuation module is exposed to React Native JS via `GhostActuatorBridgeModule.kt` — a thin RN Native Module wrapping `GhostActuatorService.kt`; JS calls `holdSequence()`/`executeSequence()` via the bridge, the bridge sends intents to the service
 
 ## Impact
 
-- **Android Vault app**: `GhostActuatorService.kt` — new AccessibilityService binding. `GestureBuilder.kt` — stroke description construction. `PinGridAnalyzer.kt` — layout extraction.
+- **Android Vault app**: `GhostActuatorService.kt` — existing AccessibilityService binding (unchanged). `GhostActuatorBridgeModule.kt` — NEW RN Native Module wrapping the service for JS access. `GestureBuilder.kt` — stroke description construction. `PinGridAnalyzer.kt` — layout extraction.
 - **AndroidManifest.xml**: New `<service>` declaration for `GhostActuatorService` with `BIND_ACCESSIBILITY_SERVICE` permission. Must be separately enabled by the user in Settings.
 - **Smart-ID app specific logic**: The PIN grid analyzer must handle Smart-ID app version differences. Grid position may shift between app versions; the analyzer should use resource IDs and content descriptions as anchors.
 - **Fallback**: If `dispatchGesture()` fails or the Smart-ID app changes its UI layout, fall back to the WebRTC-based manual phone interaction (user picks up the phone and enters PIN manually).
@@ -47,10 +47,21 @@ V6's Ghost Actuator solves this with "Blind Actuation": instead of interacting w
 
 ## V6 Alignment
 
-PHASE 2 — Core V6 capability. This is the Layer 4 execution mechanism that transforms mathematically verified intent (zkTLS + WebAuthn) into physical action on the Smart-ID app, without ever handling plaintext secrets. Completes the "Architecturally Eliminated" chain for memory dump and IPC interception threats.
+PHASE 1 + PHASE 2A (DUAL-PHASE) — The GhostActuator Kotlin service is the same code in both phases, but its coordinate source changes:
+- **Phase 1**: Coordinates come from the React Native CommandServer (PIN decrypted in JS, passed via RN Native Module bridge). This is the MVP path — the PIN enters JS memory, but the GhostActuator's `dispatchGesture()` ensures the taps reach FLAG_SECURE windows.
+- **Phase 2A**: Coordinates come from the NDK enclave (PIN decrypted in `mlock`'d C++ memory, never enters JVM or JS heap). This achieves the "Architecturally Eliminated" status for memory dump threats.
+
+The service itself (`GhostActuatorService.kt`, `GhostActuatorBridge`, `GestureOptions`, `execution confirmation`, `error recovery`) is identical. Only the origin of the coordinate array changes between phases.
 
 ## Dependencies
 
-- Blocked on: `ndk-enclave-pin-vault` (provides the coordinate inputs)
-- Builds on: `usb-aoa-transport-proxy` (completed — delivers the verified payload that authorizes actuation over AOA 2.0 or WebRTC fallback)
+**Phase 1 dependencies (coordinate source = React Native JS bridge):**
+- Builds on: `react-native-companion-app` (provides the RN Native Module bridge that JS uses to call `holdSequence()`/`executeSequence()` on the GhostActuatorService)
+- Not blocked — coordinate inputs come from JS (RN CommandServer decrypts PIN and passes coordinates). The `GhostActuatorService.kt` is fully functional without the NDK enclave.
+
+**Phase 2A dependencies (coordinate source = NDK enclave):**
+- Blocked on: `ndk-enclave-pin-vault` (provides coordinates directly from mlocked C++ memory, bypassing JS heap entirely)
+- Blocked on: `native-host-quality-gate` (delivers the verified payload that authorizes actuation over AOA 2.0 or WebRTC fallback)
 - Related: `eidas-qes-hardware-gate` (extends Ghost Actuator with hardware interrupt suspension)
+
+**The GhostActuator Kotlin code is identical in both phases** — it receives `float[] coordinates` either way. Only the origin of the coordinates changes: JS decrypted PIN in Phase 1, C++ enclave in Phase 2A.

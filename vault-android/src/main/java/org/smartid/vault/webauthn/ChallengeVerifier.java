@@ -30,7 +30,10 @@ public class ChallengeVerifier {
     private final Map<String, Long> recentNonces;
 
     public ChallengeVerifier() {
-        this.recentNonces = new LinkedHashMap<String, Long>(16, 0.75f, true) {
+        // accessOrder=false: insertion-ordered LRU. We manually manage eviction via
+        // removeEldestEntry. Using accessOrder=true would move entries to MRU on
+        // containsKey() calls during replay detection, defeating the LRU eviction policy.
+        this.recentNonces = new LinkedHashMap<String, Long>(16, 0.75f, false) {
             @Override
             protected boolean removeEldestEntry(Map.Entry<String, Long> eldest) {
                 return size() > MAX_RECENT_NONCES;

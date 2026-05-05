@@ -1,25 +1,38 @@
-node_modules/
-dist/
-.output/
-.wxt/
-coverage/
-.open-next/
-*.pem
-*.db
+
+# Kilo AI agent local configuration
+# Native host build outputs and cross-compilation dependencies
 *.apk
+*.db
 *.key
-credentials.*
+*.pem
+*.tsbuildinfo
 .env
 .env.local
 .env.production
-signaling-server/node_modules/
-signaling-server/mydatabase.db
-*.tsbuildinfo
-
-# Native host build outputs and cross-compilation dependencies
+.kilo/
+.open-next/
+.output/
+.wxt/
 apps/native-host/build/
 apps/native-host/deps/
 apps/native-host/dist/
+apps/native-host/shim
+coverage/
+credentials.*
+dist/
+node_modules/
+signaling-server/mydatabase.db
+signaling-server/node_modules/
 
-# Kilo AI agent local configuration
-.kilo/
+# Android Gradle build outputs
+vault-android/.gradle/
+vault-android/build/
+vault-android/app/build/
+apps/android/.gradle/
+apps/android/build/
+apps/android/app/build/
+
+# React Native
+vault-android-rn/android/.gradle/
+vault-android-rn/android/app/build/
+vault-android-rn/node_modules/

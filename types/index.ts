@@ -105,7 +105,11 @@ export type MessageType =
   | 'get-devices'
   | 'switch-device'
   | 'revoke-device'
-  | 'get-active-device-id';
+  | 'get-active-device-id'
+  | 'qes-status-changed'
+  | 'get-qes-status'
+  | 'qes-arm'
+  | 'qes-cancel';
 
 export interface ExtensionMessage<T = unknown> {
   type: MessageType;
@@ -230,4 +234,16 @@ export interface PhaseGate {
   feature: string;
   minimumPhase: MigrationPhase;
   description: string;
+}
+
+export type QesState = 'idle' | 'armed' | 'waiting' | 'executing' | 'completed' | 'cancelled' | 'timeout';
+
+export interface QesStatus {
+  state: QesState;
+  sessionId?: string;
+  countdownSeconds?: number;
+  result?: string;
+  interruptType?: string;
+  timestamp?: number;
+  auditEntry?: string;
 }

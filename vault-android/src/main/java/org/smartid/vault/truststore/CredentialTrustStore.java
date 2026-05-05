@@ -13,7 +13,12 @@ import java.util.Set;
  * Persistent trust-store for WebAuthn passkey public keys.
  *
  * Stores credential public keys provisioned during Phase 0 pairing.
- * Uses Android SharedPreferences backed by EncryptedSharedPreferences for storage.
+ * Uses Android SharedPreferences for storage.
+ *
+ * <p><b>Security note</b>: This stores <em>public</em> keys only, which are not secret.
+ * The plaintext SharedPreferences storage is intentional — public key material does not
+ * require encryption at rest. If secret material must be stored, use
+ * {@code EncryptedSharedPreferences} with a {@code MasterKey} instead.</p>
  */
 public class CredentialTrustStore {
     private static final String TAG = "CredentialTrustStore";

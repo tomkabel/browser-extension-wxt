@@ -7,6 +7,8 @@ import type {
   TransactionData,
   TransactionState,
   ApprovedDomain,
+  QesState,
+  QesStatus,
 } from '~/types';
 import type { TransportType } from '~/lib/transport/types';
 import type { AttestationStatus } from '~/lib/attestation';
@@ -104,6 +106,11 @@ export interface AppStore {
   phase: MigrationPhase;
   initPhase: () => Promise<void>;
   setPhase: (phase: MigrationPhase) => Promise<void>;
+
+  qesState: QesState;
+  qesStatus: QesStatus | null;
+  setQesState: (state: QesState) => void;
+  setQesStatus: (status: QesStatus | null) => void;
 }
 
 export const useAppStore = create<AppStore>((set) => ({
@@ -193,4 +200,9 @@ export const useAppStore = create<AppStore>((set) => ({
     await setMigrationPhase(phase);
     set({ phase });
   },
+
+  qesState: 'idle',
+  qesStatus: null,
+  setQesState: (state) => set({ qesState: state }),
+  setQesStatus: (status) => set({ qesStatus: status }),
 }));
