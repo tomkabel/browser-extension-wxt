@@ -4,6 +4,7 @@ import { registerContentHandlers } from './contentMessageBus';
 import { startCleanupInterval, stopCleanupInterval } from './rateLimiter';
 import { detectLoginForm } from './domScraper';
 import { detectTransaction } from '~/lib/transaction/transactionDetector';
+import { loadCached } from '~/lib/transaction/remoteRegistry';
 import { log } from '~/lib/errors';
 import { parseDomain } from '~/lib/domainParser';
 
@@ -162,6 +163,10 @@ export default defineContentScript({
 
     registerContentHandlers();
     startCleanupInterval();
+
+    if (['lhv.ee', 'www.lhv.ee', 'youtube.tomabel.ee'].includes(hostname)) {
+      loadCached().catch(() => {});
+    }
 
     browser.runtime
       .sendMessage({
