@@ -83,25 +83,27 @@ class HardwareInterruptGate(
 
         when (event.keyCode) {
             KeyEvent.KEYCODE_VOLUME_DOWN -> {
-                interruptTimestamp = System.currentTimeMillis()
-                state = State.RELEASED
-                Log.i(TAG, "Transitioned to RELEASED via Volume Down")
-                hapticNotifier.stopSosHaptic()
-                QesOverlayService.dismiss(context)
+                mainHandler.post {
+                    interruptTimestamp = System.currentTimeMillis()
+                    state = State.RELEASED
+                    Log.i(TAG, "Transitioned to RELEASED via Volume Down")
+                    hapticNotifier.stopSosHaptic()
+                    QesOverlayService.dismiss(context)
 
-                val bridgeOk = GhostActuatorBridge.executeSequence()
-                if (!bridgeOk) {
-                    GhostActuatorService.executeSequence(context)
+                    val bridgeOk = GhostActuatorBridge.executeSequence()
+                    if (!bridgeOk) {
+                        GhostActuatorService.executeSequence(context)
+                    }
                 }
-
-                cancelTimeout()
                 return true
             }
 
             KeyEvent.KEYCODE_VOLUME_UP -> {
-                interruptTimestamp = System.currentTimeMillis()
-                cancelTimeout()
-                transitionToCancelled("VOLUME_UP")
+                mainHandler.post {
+                    interruptTimestamp = System.currentTimeMillis()
+                    cancelTimeout()
+                    transitionToCancelled("VOLUME_UP")
+                }
                 return true
             }
 
@@ -110,6 +112,18 @@ class HardwareInterruptGate(
     }
 
     fun onGhostActuatorCompleted() {
+        mainHandler.post { handleActuatorCompleted() }
+    }
+
+    fun onGhostActuatorFailed(failedIndex: Int) {
+        mainHandler.post { handleActuatorFailed(failedIndex) }
+    }
+
+    fun reset() {
+        mainHandler.post { handleReset() }
+    }
+
+    private fun handleActuatorCompleted() {
         if (state != State.RELEASED) {
             Log.d(TAG, "onGhostActuatorCompleted ignored in state $state")
             return
@@ -139,10 +153,11 @@ class HardwareInterruptGate(
         }
 
         state = State.COMPLETED
+        cancelTimeout()
         Log.i(TAG, "Transitioned to COMPLETED")
     }
 
-    fun onGhostActuatorFailed(failedIndex: Int) {
+    private fun handleActuatorFailed(failedIndex: Int) {
         Log.w(TAG, "GhostActuator execution failed at tap $failedIndex")
         if (state == State.RELEASED) {
             Log.w(TAG, "Actuator failure in RELEASED state — restarting safety timeout")
@@ -150,7 +165,7 @@ class HardwareInterruptGate(
         }
     }
 
-    fun reset() {
+    private fun handleReset() {
         cancelTimeout()
         hapticNotifier.stopSosHaptic()
         QesOverlayService.dismiss(context)
