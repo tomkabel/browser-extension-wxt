@@ -47,6 +47,10 @@ class PinGridAnalyzer(private val service: AccessibilityService) {
     }
 
     fun analyzeWithFallback(): GridInfo? {
+        val root = service.rootInActiveWindow
+        val isSmartIdForeground = root?.packageName in smartIdPackages
+        root?.recycle()
+        if (!isSmartIdForeground) return null
         return analyze() ?: buildHardcodedGrid()
     }
 
@@ -114,7 +118,10 @@ class PinGridAnalyzer(private val service: AccessibilityService) {
 
         for (child in childrenToVisit) {
             val result = findNodeByResourceIdPrefix(child, prefix)
-            if (result != null) return result
+            if (result != null) {
+                childrenToVisit.forEach { c -> if (c != child) c.recycle() }
+                return result
+            }
             child.recycle()
         }
         return null
@@ -176,16 +183,14 @@ class PinGridAnalyzer(private val service: AccessibilityService) {
 
         val colWidth = gridWidth / knownLayout.columns
         val rowHeight = gridHeight / knownLayout.rows
-        val marginX = colWidth * knownLayout.buttonMarginFraction
-        val marginY = rowHeight * knownLayout.buttonMarginFraction
 
         val centers = mutableListOf<Pair<Float, Float>>()
         for (row in 0 until knownLayout.rows) {
             for (col in 0 until knownLayout.columns) {
                 val index = row * knownLayout.columns + col
                 if (index >= 10) break
-                val cx = gridLeft + col * colWidth + colWidth / 2f + marginX
-                val cy = gridTop + row * rowHeight + rowHeight / 2f + marginY
+                val cx = gridLeft + col * colWidth + colWidth / 2f
+                val cy = gridTop + row * rowHeight + rowHeight / 2f
                 centers.add(Pair(cx, cy))
             }
         }
@@ -225,8 +230,4 @@ class PinGridAnalyzer(private val service: AccessibilityService) {
             topOffsetFraction = 0.35f, buttonMarginFraction = 0.05f,
         ),
     )
-
-    companion object {
-        private const val SMART_ID_PACKAGE = "ee.sk.smartid"
-    }
 }
