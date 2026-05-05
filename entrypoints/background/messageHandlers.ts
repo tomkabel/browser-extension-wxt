@@ -707,6 +707,8 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
         return { success: false, error: 'Device not found' };
       }
 
+      const previousDeviceId = await getActiveDeviceId();
+
       if (transportManager) {
         try {
           await transportManager.destroy();
@@ -725,6 +727,13 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
           log.info('[switch-device] Transport reinitialized for device:', deviceId);
         } catch (err) {
           log.error('[switch-device] Failed to reinitialize transport:', err);
+          if (previousDeviceId && previousDeviceId !== deviceId) {
+            try {
+              await setActiveDevice(previousDeviceId);
+            } catch (restoreErr) {
+              log.error('[switch-device] Failed to restore previous active device:', restoreErr);
+            }
+          }
           return { success: false, error: 'Device switched but transport reconnection failed' };
         }
       }
@@ -741,7 +750,20 @@ const handlers: Partial<Record<MessageType, MessageHandler>> = {
   'revoke-device': async (payload) => {
     const { deviceId } = payload as { deviceId: string };
     try {
+      const activeId = await getActiveDeviceId();
       await revokeDevice(deviceId);
+
+      if (deviceId === activeId && transportManager) {
+        log.info('[revoke-device] Revoked device was active, tearing down transport');
+        try {
+          await transportManager.destroy();
+        } catch {
+          log.warn('[revoke-device] Error destroying transport for revoked device');
+        }
+        transportManager = null;
+        transportManagerInitPromise = null;
+      }
+
       return { success: true, data: { deviceId } };
     } catch (err) {
       return {
