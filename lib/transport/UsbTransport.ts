@@ -123,6 +123,7 @@ export class UsbTransport implements Transport {
 
   async checkAvailability(): Promise<boolean> {
     if (this.device) return true;
+
     try {
       const devices = await navigator.usb.getDevices();
       for (const d of devices) {
@@ -131,6 +132,16 @@ export class UsbTransport implements Transport {
     } catch {
       // WebUSB not supported
     }
+
+    try {
+      const stored = await browser.storage.local.get('mockNativeHostManifest');
+      if (stored.mockNativeHostManifest) {
+        return true;
+      }
+    } catch {
+      // storage not available
+    }
+
     return false;
   }
 

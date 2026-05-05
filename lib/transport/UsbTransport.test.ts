@@ -6,6 +6,11 @@ vi.mock('wxt/browser', () => ({
       sendMessage: vi.fn(),
       connectNative: vi.fn(),
     },
+    storage: {
+      local: {
+        get: vi.fn().mockResolvedValue({}),
+      },
+    },
   },
 }));
 
@@ -66,9 +71,18 @@ describe('UsbTransport', () => {
   });
 
   describe('checkAvailability', () => {
-    it('returns false when no WebUSB device enumerated', async () => {
+    it('returns false when no WebUSB device and no mock flag', async () => {
       const available = await transport.checkAvailability();
       expect(available).toBe(false);
+    });
+
+    it('returns true when mockNativeHostManifest is set in storage', async () => {
+      (browser.storage.local.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+        mockNativeHostManifest: '/tmp/mock_host.json',
+      });
+
+      const available = await transport.checkAvailability();
+      expect(available).toBe(true);
     });
   });
 
