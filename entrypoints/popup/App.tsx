@@ -17,6 +17,9 @@ const TransactionPanel = lazy(() =>
 const CredentialPanel = lazy(() =>
   import('./panels/CredentialPanel').then((m) => ({ default: m.CredentialPanel })),
 );
+const DeviceListPanel = lazy(() =>
+  import('./panels/DeviceListPanel').then((m) => ({ default: m.DeviceListPanel })),
+);
 
 function LoadingFallback() {
   return <div className="animate-pulse h-8 bg-gray-200 rounded"></div>;
@@ -79,6 +82,8 @@ function PanelRouter() {
 function PopupApp() {
   const showSettings = useAppStore((s) => s.showSettings);
   const setShowSettings = useAppStore((s) => s.setShowSettings);
+  const showDevices = useAppStore((s) => s.showDevices);
+  const setShowDevices = useAppStore((s) => s.setShowDevices);
   const setPendingDomains = useAppStore((s) => s.setPendingDomains);
 
   useEffect(() => {
@@ -116,6 +121,22 @@ function PopupApp() {
         <button
           type="button"
           className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+          onClick={() => setShowDevices(!showDevices)}
+          title="Devices"
+          aria-label="Devices"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"
+            />
+          </svg>
+        </button>
+        <button
+          type="button"
+          className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
           onClick={() => setShowSettings(!showSettings)}
           title="Settings"
           aria-label="Settings"
@@ -141,6 +162,12 @@ function PopupApp() {
         {showSettings ? (
           <ErrorBoundary>
             <SettingsPanel />
+          </ErrorBoundary>
+        ) : showDevices ? (
+          <ErrorBoundary>
+            <Suspense fallback={<LoadingFallback />}>
+              <DeviceListPanel />
+            </Suspense>
           </ErrorBoundary>
         ) : (
           <>
